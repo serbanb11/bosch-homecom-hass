@@ -1,0 +1,1 @@
+DOMAIN = "bosch_homecom"
