@@ -1,7 +1,6 @@
 """Component configuration flow."""
 
 import logging
-import ssl
 from typing import Any, Optional
 
 import voluptuous as vol
@@ -23,24 +22,16 @@ async def validate_auth(code: str, hass: core.HomeAssistant) -> None:
     """Validates singlekey-id code."""
     session = async_get_clientsession(hass)
     headers = {"Content-Type": "application/x-www-form-urlencoded"}  # Set content type
-    proxy = "http://192.168.44.24:8080"
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     try:
         async with session.post(
             OATUH_DOMAIN + OATUH_ENDPOINT,
             data="code=" + code + "&" + OATUH_PARAMS,
             headers=headers,
-            proxy=proxy,
-            ssl=ssl_context,
         ) as response:
             # Ensure the request was successful
-            print("Status:", response.status)
             if response.status == 200:
                 try:
                     response_json = await response.json()
-                    print("Content:", response_json)
                     return response_json
                 except ValueError:
                     _LOGGER.error(f"Response is not JSON")

@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import ssl
 
 from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -24,11 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def get_token(config: list, session: ClientSession) -> None:
-    """Get firmware."""
-    proxy = "http://192.168.44.24:8080"
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
+    """Get token using refresh_token."""
     code = config["refresh_token"]
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     try:
@@ -36,15 +31,11 @@ async def get_token(config: list, session: ClientSession) -> None:
             OATUH_DOMAIN + OATUH_ENDPOINT,
             data="refresh_token=" + code + "&" + OATUH_PARAMS_REFRESH,
             headers=headers,
-            proxy=proxy,
-            ssl=ssl_context,
         ) as response:
             # Ensure the request was successful
-            print("Status:", response.status)
             if response.status == 200:
                 try:
                     response_json = await response.json()
-                    print("Content:", response_json)
                     return response_json
                 except ValueError:
                     _LOGGER.error("Response is not JSON")
@@ -57,10 +48,6 @@ async def get_token(config: list, session: ClientSession) -> None:
 
 async def get_devices(hass: core.HomeAssistant, config: list) -> None:
     """Get devices."""
-    proxy = "http://192.168.44.24:8080"
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
     session = async_get_clientsession(hass)
     headers = {
         "Authorization": f"Bearer {config['access_token']}"  # Set Bearer token
@@ -69,15 +56,11 @@ async def get_devices(hass: core.HomeAssistant, config: list) -> None:
         async with session.get(
             BOSCHCOM_DOMAIN + BOSCHCOM_ENDPOINT_GATEWAYS,
             headers=headers,
-            proxy=proxy,
-            ssl=ssl_context,
         ) as response:
             # Ensure the request was successful
-            print("Status:", response.status)
             if response.status == 200:
                 try:
                     response_json = await response.json()
-                    print("Content:", response_json)
                     return response_json
                 except ValueError:
                     _LOGGER.error(f"Response is not JSON")

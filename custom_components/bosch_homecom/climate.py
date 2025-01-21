@@ -2,7 +2,6 @@
 
 from datetime import timedelta
 import logging
-import ssl
 from typing import Any
 
 import voluptuous as vol
@@ -134,10 +133,6 @@ class BoschComClimate(ClimateEntity):
 
     async def async_turn_on(self) -> None:
         """Turn on."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -150,12 +145,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + BOSCHCOM_ENDPOINT_CONTROL,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json={"value": "on"},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -175,10 +167,6 @@ class BoschComClimate(ClimateEntity):
 
     async def async_turn_off(self) -> None:
         """Turn off."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -191,12 +179,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + BOSCHCOM_ENDPOINT_CONTROL,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json={"value": "off"},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -219,10 +204,6 @@ class BoschComClimate(ClimateEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -235,12 +216,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + BOSCHCOM_ENDPOINT_TEMP,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json={"value": temperature},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -286,10 +264,6 @@ class BoschComClimate(ClimateEntity):
         if ac_control["value"] == "off":
             await self.async_turn_on()
 
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -302,12 +276,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + BOSCHCOM_ENDPOINT_MODE,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -327,10 +298,6 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode) -> None:
         """Set preset mode."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -364,12 +331,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + ENDPOINT,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -389,10 +353,6 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_fan_mode(self, fan_mode) -> None:
         """Set new target fan mode."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -417,12 +377,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + BOSCHCOM_ENDPOINT_FAN_SPEED,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -442,10 +399,6 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_swing_mode(self, swing_mode) -> None:
         """Set new target fan mode."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -464,12 +417,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + BOSCHCOM_ENDPOINT_AIRFLOW_VERTICAL,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -489,10 +439,6 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_swing_horizontal_mode(self, swing_mode) -> None:
         """Set new target fan mode."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -511,12 +457,9 @@ class BoschComClimate(ClimateEntity):
                 + self._attr_unique_id
                 + BOSCHCOM_ENDPOINT_AIRFLOW_HORIZONTAL,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:

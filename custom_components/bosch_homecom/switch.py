@@ -71,10 +71,6 @@ class BoschComSwitchAirPurification(SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Set the option."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self._coordinator.token}",
@@ -87,12 +83,9 @@ class BoschComSwitchAirPurification(SwitchEntity):
                 + self._coordinator.data.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_PLASMACLUSTER,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json={"value": "off"},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -111,10 +104,6 @@ class BoschComSwitchAirPurification(SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Set the option."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self._coordinator.token}",
@@ -127,12 +116,9 @@ class BoschComSwitchAirPurification(SwitchEntity):
                 + self._coordinator.data.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_PLASMACLUSTER,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json={"value": "on"},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:

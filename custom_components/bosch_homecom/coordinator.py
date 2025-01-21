@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
-import ssl
 
 from aiohttp import ClientResponseError, ClientSession
 
@@ -48,10 +47,6 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
 
     async def get_token(self) -> None:
         """Get firmware."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         try:
@@ -59,15 +54,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 OATUH_DOMAIN + OATUH_ENDPOINT,
                 data="refresh_token=" + self.refresh_token + "&" + OATUH_PARAMS_REFRESH,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        print("Content:", response_json)
                         # Update the config entry.
                         self.token = response_json["access_token"]
                         self.refresh_token = response_json["refresh_token"]
@@ -85,10 +76,6 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
 
     async def get_firmware(self, session: ClientSession) -> None:
         """Get firmware."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         headers = {
             "Authorization": f"Bearer {self.token}"  # Set Bearer token
         }
@@ -99,15 +86,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 + self.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_FIRMWARE,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        print("Content:", response_json)
                         return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
@@ -128,10 +111,6 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
 
     async def get_notifications(self, session: ClientSession) -> None:
         """Get notifications."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         headers = {
             "Authorization": f"Bearer {self.token}"  # Set Bearer token
         }
@@ -142,15 +121,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 + self.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_NOTIFICATIONS,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        print("Content:", response_json)
                         return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
@@ -162,10 +137,6 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
 
     async def get_stardard(self, session: ClientSession) -> None:
         """Get stardard functions."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         headers = {
             "Authorization": f"Bearer {self.token}"  # Set Bearer token
         }
@@ -176,15 +147,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 + self.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_STANDARD,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        print("Content:", response_json)
                         return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
@@ -205,10 +172,6 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
 
     async def get_advanced(self, session: ClientSession) -> None:
         """Get advanced funtcions."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         headers = {
             "Authorization": f"Bearer {self.token}"  # Set Bearer token
         }
@@ -219,15 +182,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 + self.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_ADVANCED,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        print("Content:", response_json)
                         return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")

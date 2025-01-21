@@ -80,10 +80,6 @@ class BoschComSelectAirflowHorizontal(SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self._coordinator.token}",
@@ -96,12 +92,9 @@ class BoschComSelectAirflowHorizontal(SelectEntity):
                 + self._coordinator.data.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_AIRFLOW_HORIZONTAL,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json={"value": option},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -182,10 +175,6 @@ class BoschComSelectAirflowVertical(SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
-        proxy = "http://192.168.44.24:8080"
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self._coordinator.token}",
@@ -198,12 +187,9 @@ class BoschComSelectAirflowVertical(SelectEntity):
                 + self._coordinator.data.device["deviceId"]
                 + BOSCHCOM_ENDPOINT_AIRFLOW_VERTICAL,
                 headers=headers,
-                proxy=proxy,
-                ssl=ssl_context,
                 json={"value": option},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
