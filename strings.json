@@ -1,0 +1,16 @@
+{
+    "config": {
+        "error": {
+            "auth": "The auth token provided is not valid."
+        },
+        "step": {
+            "user": {
+                "data": {
+                "code": "SingleKey ID code"
+                },
+                "description": "Enter your SingleKey ID code",
+                "title": "Authentication"
+            }
+        }
+    }
+}
