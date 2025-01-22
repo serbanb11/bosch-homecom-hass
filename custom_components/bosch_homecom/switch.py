@@ -1,7 +1,6 @@
 """Bosch HomeCom Custom Component."""
 
 import logging
-import ssl
 from typing import Any
 
 from homeassistant import config_entries, core
@@ -58,10 +57,7 @@ class BoschComSwitchAirPurification(SwitchEntity):
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
         return DeviceInfo(
-            identifiers={
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self._coordinator.device["deviceId"])
-            },
+            identifiers={(DOMAIN, self._coordinator.device["deviceId"])},
         )
 
     @property
@@ -119,6 +115,7 @@ class BoschComSwitchAirPurification(SwitchEntity):
                 json={"value": "on"},
             ) as response:
                 # Ensure the request was successful
+                print("Status:", response.status)
                 if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
@@ -146,4 +143,6 @@ class BoschComSwitchAirPurification(SwitchEntity):
             ),
             None,
         )
-        return True if airPurificationMode["value"] == "on" else False
+        if airPurificationMode["value"] == "on":
+            return True
+        return False

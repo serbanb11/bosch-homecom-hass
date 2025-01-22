@@ -3,45 +3,64 @@
 import asyncio
 import logging
 
-from homeassistant import config_entries, core
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers import device_registry as dr
 from aiohttp import ClientSession
-from homeassistant.const import Platform
 
-from .const import *
+from homeassistant import config_entries, core
+from homeassistant.const import Platform
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .const import (
+    BOSCHCOM_DOMAIN,
+    BOSCHCOM_ENDPOINT_GATEWAYS,
+    DOMAIN,
+    OAUTH_DOMAIN,
+    OAUTH_ENDPOINT,
+    OAUTH_PARAMS_REFRESH,
+)
 from .coordinator import BoschComModuleCoordinator
+from .config_flow import do_auth, validate_auth
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
     Platform.SELECT,
-    Platform.TEXT,
     Platform.SWITCH,
+    Platform.TEXT,
 ]
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def get_token(config: list, session: ClientSession) -> None:
-    """Get token using refresh_token."""
+async def get_token(
+    hass: core.HomeAssistant, config: list, session: ClientSession
+) -> None:
+    """Get firmware."""
     code = config["refresh_token"]
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     try:
         async with session.post(
-            OATUH_DOMAIN + OATUH_ENDPOINT,
-            data="refresh_token=" + code + "&" + OATUH_PARAMS_REFRESH,
+            OAUTH_DOMAIN + OAUTH_ENDPOINT,
+            data="refresh_token=" + code + "&" + OAUTH_PARAMS_REFRESH,
             headers=headers,
         ) as response:
             # Ensure the request was successful
             if response.status == 200:
                 try:
                     response_json = await response.json()
-                    return response_json
                 except ValueError:
                     _LOGGER.error("Response is not JSON")
+                return response_json
             else:
-                _LOGGER.error(f"{response.url} returned {response.status}")
-                return
+                try:
+                    code = await do_auth(config, hass)
+                    if code is not None:
+                        return await validate_auth(code, hass)
+                    _LOGGER.error("Login error")
+                    return
+                except ValueError:
+                    _LOGGER.error(f"{response.url} returned {response.status}")
+            _LOGGER.error(f"{response.url} returned {response.status}")
+            return None
     except ValueError:
         _LOGGER.error(f"{response.url} exception")
 
@@ -61,23 +80,24 @@ async def get_devices(hass: core.HomeAssistant, config: list) -> None:
             if response.status == 200:
                 try:
                     response_json = await response.json()
-                    return response_json
                 except ValueError:
-                    _LOGGER.error(f"Response is not JSON")
-            elif response.status == 401:
+                    _LOGGER.error("Response is not JSON")
+                    return None
+                return response_json
+            if response.status == 401:
                 try:
-                    response_json = await get_token(config, session)
+                    response_json = await get_token(hass, config, session)
                     for entry in hass.config_entries.async_entries(DOMAIN):
                         hass.config_entries.async_update_entry(
-                            entry, data=response_json
+                            entry, data=config | response_json
                         )
 
                     return await get_devices(hass, response_json)
                 except ValueError:
-                    _LOGGER.error(f"Response is not JSON")
+                    _LOGGER.error("Response is not JSON")
             else:
                 _LOGGER.error(f"{response.url} returned {response.status}")
-                return
+                return None
     except ValueError:
         _LOGGER.error(f"{response.url} exception")
 

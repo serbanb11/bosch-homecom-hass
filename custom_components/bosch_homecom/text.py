@@ -25,7 +25,7 @@ async def async_setup_entry(
 
 
 class BoschComSensorNotifications(SensorEntity):
-    """Representation of a BoschCom sensor."""
+    """Representation of BoschCom mptofocatopm text."""
 
     _attr_should_poll = True
 
@@ -34,6 +34,7 @@ class BoschComSensorNotifications(SensorEntity):
         coordinator: BoschComModuleCoordinator,
         entry: config_entries.ConfigEntry,
     ) -> None:
+        """Initialize text entity."""
         super().__init__()
         self._coordinator = coordinator
         self._attr_unique_id = coordinator.data.device["deviceId"] + "_notifications"
@@ -52,10 +53,7 @@ class BoschComSensorNotifications(SensorEntity):
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
         return DeviceInfo(
-            identifiers={
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self._coordinator.device["deviceId"])
-            },
+            identifiers={(DOMAIN, self._coordinator.device["deviceId"])},
         )
 
     async def async_set_value(self, value: str) -> None:

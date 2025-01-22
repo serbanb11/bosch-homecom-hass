@@ -1,19 +1,23 @@
 DOMAIN = "bosch_homecom"
-OATUH_DOMAIN = "https://singlekey-id.com"
-OATUH_ENDPOINT = "/auth/connect/token"
-OATUH_PARAMS = "grant_type=authorization_code&redirect_uri=com.bosch.tt.dashtt.pointt%3A%2F%2Fapp%2Flogin&code_verifier=ll9Q9YRhPBUi6vkM2yTk0gU-D0j7X5RWvYrFcBLF_hYvK8XLB5p_UJ5juSKr5t_YhN2kPDGB6H5aZ8qw25BqLg&client_id=762162C0-FA2D-4540-AE66-6489F189FADC"
-OATUH_PARAMS_REFRESH = (
+OAUTH_DOMAIN = "https://singlekey-id.com"
+OAUTH_LOGIN = "/auth/connect/authorize?redirect_uri=com.bosch.tt.dashtt.pointt%3A%2F%2Fapp%2Flogin&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&state=660XJ16mvFqpwtSOJcSY4w&nonce=cu8Q54Buzbpso5V3Dl2LPQ&scope=openid%20email%20profile%20offline_access%20pointt.gateway.claiming%20pointt.gateway.removal%20pointt.gateway.list%20pointt.gateway.users%20pointt.gateway.resource.dashapp%20pointt.castt.flow.token-exchange%20bacon%20hcc.tariff.read&code_challenge=pRT796riEu8odUbK29aMnizNDO4UoBeMFzmlz73mBBs&code_challenge_method=S256&style_id=tt_bsch"
+OAUTH_ENDPOINT = "/auth/connect/token"
+OAUTH_PARAMS = "grant_type=authorization_code&redirect_uri=com.bosch.tt.dashtt.pointt%3A%2F%2Fapp%2Flogin&code_verifier=ll9Q9YRhPBUi6vkM2yTk0gU-D0j7X5RWvYrFcBLF_hYvK8XLB5p_UJ5juSKr5t_YhN2kPDGB6H5aZ8qw25BqLg&client_id=762162C0-FA2D-4540-AE66-6489F189FADC"
+OAUTH_PARAMS_REFRESH = (
     "grant_type=refresh_token&client_id=762162C0-FA2D-4540-AE66-6489F189FADC"
 )
-BOSCHCOM_COMPONENTS = [
-    "sensor",
-]
+
 BOSCHCOM_DOMAIN = "https://pointt-api.bosch-thermotechnology.com"
 BOSCHCOM_ENDPOINT_GATEWAYS = "/pointt-api/api/v1/gateways/"
 BOSCHCOM_ENDPOINT_FIRMWARE = "/resource/gateway/versionFirmware"
 BOSCHCOM_ENDPOINT_NOTIFICATIONS = "/resource/notifications"
 BOSCHCOM_ENDPOINT_STANDARD = "/resource/airConditioning/standardFunctions"
 BOSCHCOM_ENDPOINT_ADVANCED = "/resource/airConditioning/advancedFunctions"
+BOSCHCOM_ENDPOINT_SWITCH = "/resource/airConditioning/switchPrograms/list"
+BOSCHCOM_ENDPOINT_SWITCH_ENABLE = "/resource/airConditioning/switchPrograms/enabled"
+BOSCHCOM_ENDPOINT_SWITCH_PROGRAM = (
+    "/resource/airConditioning/switchPrograms/activeProgram"
+)
 BOSCHCOM_ENDPOINT_TEMP = "/resource/airConditioning/temperatureSetpoint"
 BOSCHCOM_ENDPOINT_MODE = "/resource/airConditioning/operationMode"
 BOSCHCOM_ENDPOINT_CONTROL = "/resource/airConditioning/acControl"

@@ -9,11 +9,22 @@ import logging
 from aiohttp import ClientResponseError, ClientSession
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import *
+from .config_flow import do_auth, validate_auth
+from .const import (
+    BOSCHCOM_DOMAIN,
+    BOSCHCOM_ENDPOINT_ADVANCED,
+    BOSCHCOM_ENDPOINT_FIRMWARE,
+    BOSCHCOM_ENDPOINT_GATEWAYS,
+    BOSCHCOM_ENDPOINT_NOTIFICATIONS,
+    BOSCHCOM_ENDPOINT_STANDARD,
+    BOSCHCOM_ENDPOINT_SWITCH,
+    OAUTH_DOMAIN,
+    OAUTH_ENDPOINT,
+    OAUTH_PARAMS_REFRESH,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +38,7 @@ class BoschComModuleData:
     notifications: list
     stardard_functions: list
     advanced_functions: list
+    switch_programs: list
 
 
 class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
@@ -41,6 +53,7 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
             update_interval=timedelta(seconds=30),
         )
         self.device = device
+        self.config = config
         self.token = config["access_token"]
         self.refresh_token = config["refresh_token"]
         self.count = 0
@@ -51,8 +64,8 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         try:
             async with session.post(
-                OATUH_DOMAIN + OATUH_ENDPOINT,
-                data="refresh_token=" + self.refresh_token + "&" + OATUH_PARAMS_REFRESH,
+                OAUTH_DOMAIN + OAUTH_ENDPOINT,
+                data="refresh_token=" + self.refresh_token + "&" + OAUTH_PARAMS_REFRESH,
                 headers=headers,
             ) as response:
                 # Ensure the request was successful
@@ -62,14 +75,20 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                         # Update the config entry.
                         self.token = response_json["access_token"]
                         self.refresh_token = response_json["refresh_token"]
-                        for entry in self.hass.config_entries.async_entries(DOMAIN):
-                            self.hass.config_entries.async_update_entry(
-                                entry, data=response_json
-                            )
                     except ValueError:
-                        _LOGGER.error("Response is not JSON")
+                        _LOGGER.error(f"{response.url} returned not json")
                 else:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
+                    try:
+                        code = await do_auth(self.config, self.hass)
+                        if code is not None:
+                            reponse = await validate_auth(code, self.hass)
+                            self.token = reponse["access_token"]
+                            self.refresh_token = reponse["refresh_token"]
+                        else:
+                            _LOGGER.error("Login error")
+                            return
+                    except ValueError:
+                        _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
@@ -91,11 +110,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
+                    return response_json
                 # Refresh token
-                elif response.status == 401:
+                if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
                         await self.get_token()
@@ -105,7 +124,7 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                         self.get_firmware(session)
                 else:
                     _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
+                    return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
@@ -126,12 +145,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
-                else:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
+                    return response_json
+                _LOGGER.error(f"{response.url} returned {response.status}")
+                return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
@@ -152,11 +170,11 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
+                    return response_json
                 # Refresh token
-                elif response.status == 401:
+                if response.status == 401:
                     errors: dict[str, str] = {}
                     try:
                         await self.get_token()
@@ -166,7 +184,7 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                         self.get_firmware(session)
                 else:
                     _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
+                    return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
@@ -187,12 +205,46 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                 if response.status == 200:
                     try:
                         response_json = await response.json()
-                        return response_json
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
+                    return response_json
+                _LOGGER.error(f"{response.url} returned {response.status}")
+                return
+        except ValueError:
+            _LOGGER.error(f"{response.url} exception")
+
+    async def get_switch(self, session: ClientSession) -> None:
+        """Get switch programs."""
+        headers = {
+            "Authorization": f"Bearer {self.token}"  # Set Bearer token
+        }
+        try:
+            async with session.get(
+                BOSCHCOM_DOMAIN
+                + BOSCHCOM_ENDPOINT_GATEWAYS
+                + self.device["deviceId"]
+                + BOSCHCOM_ENDPOINT_SWITCH,
+                headers=headers,
+            ) as response:
+                # Ensure the request was successful
+                if response.status == 200:
+                    try:
+                        response_json = await response.json()
+                    except ValueError:
+                        _LOGGER.error("Response is not JSON")
+                    return response_json
+                # Refresh token
+                if response.status == 401:
+                    errors: dict[str, str] = {}
+                    try:
+                        await self.get_token()
+                    except ValueError:
+                        errors["base"] = "auth"
+                    if not errors:
+                        self.get_firmware(session)
                 else:
                     _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
+                    return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
@@ -209,11 +261,8 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
             self.count = (self.count + 1) % 72
             stardard_functions = await self.get_stardard(session)
             advanced_functions = await self.get_advanced(session)
+            switch_programs = await self.get_switch(session)
         except ClientResponseError as error:
-            if error.status == 401:
-                # Trigger a reauthentication if the data update fails due to
-                # bad authentication.
-                raise ConfigEntryAuthFailed from error
             raise UpdateFailed(error) from error
 
         return BoschComModuleData(
@@ -222,4 +271,5 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
             notifications=notifications.get("values", []),
             stardard_functions=stardard_functions["references"],
             advanced_functions=advanced_functions["references"],
+            switch_programs=switch_programs["references"],
         )

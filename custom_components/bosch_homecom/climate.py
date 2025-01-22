@@ -94,6 +94,7 @@ class BoschComClimate(ClimateEntity):
         self,
         coordinator: BoschComModuleCoordinator,
     ) -> None:
+        """Initialize climate entity."""
         super().__init__()
         self._attr_name = (
             "Bosch_"
@@ -118,10 +119,7 @@ class BoschComClimate(ClimateEntity):
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
         return DeviceInfo(
-            identifiers={
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.unique_id)
-            },
+            identifiers={(DOMAIN, self.unique_id)},
             name=self.name,
         )
 
@@ -498,7 +496,7 @@ class BoschComClimate(ClimateEntity):
                             self._attr_hvac_mode = HVACMode.FAN_ONLY
                 case "acControl":
                     if ref["value"] == "off":
-                        self._attr_swing_horizontal_mode = HVACMode.OFF
+                        self._attr_hvac_mode = HVACMode.OFF
                 case "fanSpeed":
                     match ref["value"]:
                         case "auto":

@@ -1,43 +1,120 @@
 """Component configuration flow."""
 
 import logging
-from typing import Any, Optional
+import re
+from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import voluptuous as vol
 
-from homeassistant import config_entries, core
+from homeassistant import core
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_CODE
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
-from .const import *
+from .const import DOMAIN, OAUTH_DOMAIN, OAUTH_ENDPOINT, OAUTH_LOGIN, OAUTH_PARAMS
 
 _LOGGER = logging.getLogger(__name__)
 
-AUTH_SCHEMA = vol.Schema({vol.Required(CONF_CODE): cv.string})
+AUTH_SCHEMA = vol.Schema(
+    {vol.Required(CONF_USERNAME): cv.string, vol.Required(CONF_PASSWORD): cv.string}
+)
+
+
+async def do_auth(user_input: dict[str, Any], hass: core.HomeAssistant) -> str:
+    """Singlekey-id login - get code."""
+    session = async_get_clientsession(hass)
+    session.cookie_jar.clear_domain(OAUTH_DOMAIN[8:])
+    try:
+        # GET login CSRF token
+        async with session.get(
+            OAUTH_DOMAIN + OAUTH_LOGIN,
+            allow_redirects=True,
+        ) as response:
+            login_data = await response.text()
+
+            # Extract __RequestVerificationToken value
+            token_match = re.search(
+                r'<input[^>]*name="__RequestVerificationToken"[^>]*value="([^"]+)"',
+                login_data,
+            )
+            if token_match:
+                request_verification_token = token_match.group(1)
+            else:
+                _LOGGER.error("Login failed")
+                return None
+
+        # POST username
+        user_payload = {
+            "UserIdentifierInput.EmailInput.StringValue": user_input[CONF_USERNAME],
+            "__RequestVerificationToken": request_verification_token,
+        }
+        async with session.post(
+            str(response.url), data=user_payload
+        ) as response_username:
+            user_data = await response_username.text()
+
+            token_match = re.search(
+                r'<input[^>]*name="__RequestVerificationToken"[^>]*value="([^"]+)"',
+                user_data,
+            )
+            if token_match:
+                request_verification_token = token_match.group(1)
+            else:
+                _LOGGER.error("Login failed")
+                return None
+
+        # POST password
+        pass_payload = {
+            "Password": user_input[CONF_PASSWORD],
+            "__RequestVerificationToken": request_verification_token,
+        }
+        async with session.post(
+            str(response_username.url),
+            data=pass_payload,
+            allow_redirects=False,
+        ) as response_pass:
+            location_header = response_pass.headers.get("Location")
+
+        # First redirect
+        async with session.get(
+            response_pass.url.scheme + "://" + response_pass.host + location_header,
+            allow_redirects=False,
+        ) as respose_redirect:
+            # Get and parse the Location header from the response
+            location_header = respose_redirect.headers.get("Location")
+            if location_header:
+                location_query_params = parse_qs(urlparse(location_header).query)
+                if "code" in location_query_params:
+                    return location_query_params["code"][0]
+                _LOGGER.error("Login failed")
+                return None
+            _LOGGER.error("Login failed")
+            return None
+    except ValueError:
+        _LOGGER.error(f"{response.url} exception")
 
 
 async def validate_auth(code: str, hass: core.HomeAssistant) -> None:
-    """Validates singlekey-id code."""
+    """Get access and refresh token from singlekey-id."""
     session = async_get_clientsession(hass)
     headers = {"Content-Type": "application/x-www-form-urlencoded"}  # Set content type
     try:
         async with session.post(
-            OATUH_DOMAIN + OATUH_ENDPOINT,
-            data="code=" + code + "&" + OATUH_PARAMS,
+            OAUTH_DOMAIN + OAUTH_ENDPOINT,
+            data="code=" + code + "&" + OAUTH_PARAMS,
             headers=headers,
         ) as response:
             # Ensure the request was successful
             if response.status == 200:
                 try:
                     response_json = await response.json()
-                    return response_json
                 except ValueError:
                     _LOGGER.error(f"Response is not JSON")
-            else:
-                _LOGGER.error(f"{response.url} returned {response.status}")
-                return
+                return response_json
+            _LOGGER.error(f"{response.url} returned {response.status}")
+            return None
     except ValueError:
         _LOGGER.error(f"{response.url} exception")
 
@@ -52,30 +129,43 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                reponse = await validate_auth(user_input[CONF_CODE], self.hass)
+                code = await do_auth(user_input, self.hass)
+                if code is not None:
+                    reponse = await validate_auth(code, self.hass)
+                else:
+                    _LOGGER.error("Login failed")
+                    return None
             except ValueError:
                 errors["base"] = "auth"
             if not errors:
                 # User is done, create the config entry.
-                return self.async_create_entry(title="Bosch HomeCom", data=reponse)
+                return self.async_create_entry(
+                    title="Bosch HomeCom", data=user_input | reponse
+                )
 
         return self.async_show_form(
             step_id="user", data_schema=AUTH_SCHEMA, errors=errors
         )
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
-        """Invoked when a user initiates a flow via the user interface."""
+        """Invoked when a user initiates a reconfigure flow via the user interface."""
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                reponse = await validate_auth(user_input[CONF_CODE], self.hass)
+                code = await do_auth(user_input, self.hass)
+                if code is not None:
+                    reponse = await validate_auth(code, self.hass)
+                else:
+                    _LOGGER.error("Login failed")
+                    return None
+
             except ValueError:
                 errors["base"] = "auth"
             if not errors:
                 # Input is valid, set data.
                 return self.async_update_reload_and_abort(
                     self._get_reconfigure_entry(),
-                    data_updates=reponse,
+                    data_updates=user_input | reponse,
                 )
 
         return self.async_show_form(
