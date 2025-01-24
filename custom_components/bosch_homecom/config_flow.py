@@ -42,7 +42,9 @@ def check_jwt(token: str) -> bool:
         _LOGGER.error("Invalid token.")
 
 
-async def get_token(hass: core.HomeAssistant, refresh_token: str) -> None:
+async def get_token(
+    hass: core.HomeAssistant, refresh_token: str, entry_id: str
+) -> None:
     """Get firmware."""
 
     session = async_get_clientsession(hass)
@@ -65,7 +67,8 @@ async def get_token(hass: core.HomeAssistant, refresh_token: str) -> None:
         _LOGGER.error(f"{response.url} exception")
 
     try:
-        code = await do_auth(hass.config, hass)
+        config = hass.data[DOMAIN][entry_id]
+        code = await do_auth(config, hass)
         if code is not None:
             return await validate_auth(code, hass)
         _LOGGER.error("Authentication error")

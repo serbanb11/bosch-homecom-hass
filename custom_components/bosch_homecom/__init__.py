@@ -59,7 +59,7 @@ async def async_setup_entry(
 
     token = config["access_token"]
     if not check_jwt(token):
-        response_json = await get_token(hass, config["refresh_token"])
+        response_json = await get_token(hass, config["refresh_token"], entry.entry_id)
         hass.config_entries.async_update_entry(entry, data=config | response_json)
 
     coordinators: list[BoschComModuleCoordinator] = [

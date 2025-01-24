@@ -131,14 +131,14 @@ class BoschComClimate(ClimateEntity):
     async def async_turn_on(self) -> None:
         """Turn on."""
         try:
-            self.async_set_hvac_mode(HVACMode.AUTO)
+            await self.async_set_hvac_mode(HVACMode.AUTO)
         except ValueError:
             _LOGGER.error("Turn on exception")
 
     async def async_turn_off(self) -> None:
         """Turn off."""
         try:
-            self.async_set_hvac_mode(HVACMode.OFF)
+            await self.async_set_hvac_mode(HVACMode.OFF)
         except ValueError:
             _LOGGER.error("Turn on exception")
 

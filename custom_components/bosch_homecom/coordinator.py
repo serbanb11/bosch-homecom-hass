@@ -59,7 +59,9 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
     async def authentication(self) -> None:
         """Check if JWT is valid else try to refresh or reauth."""
         if not check_jwt(self.token):
-            response_json = await get_token(self.hass, self.refresh_token)
+            response_json = await get_token(
+                self.hass, self.refresh_token, self.entry_id
+            )
             self.token = response_json["access_token"]
             self.refresh_token = response_json["refresh_token"]
             for entry in self.hass.config_entries.async_entries(DOMAIN):
