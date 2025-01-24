@@ -1,10 +1,12 @@
 """Component configuration flow."""
 
+from datetime import UTC, datetime
 import logging
 import re
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+import jwt
 import voluptuous as vol
 
 from homeassistant import core
@@ -13,13 +15,62 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN, OAUTH_DOMAIN, OAUTH_ENDPOINT, OAUTH_LOGIN, OAUTH_PARAMS
+from .const import (
+    DOMAIN,
+    OAUTH_DOMAIN,
+    OAUTH_ENDPOINT,
+    OAUTH_LOGIN,
+    OAUTH_PARAMS,
+    OAUTH_PARAMS_REFRESH,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 AUTH_SCHEMA = vol.Schema(
     {vol.Required(CONF_USERNAME): cv.string, vol.Required(CONF_PASSWORD): cv.string}
 )
+
+
+def check_jwt(token: str) -> bool:
+    """Check if token is expired."""
+    try:
+        exp = jwt.decode(token, options={"verify_signature": False}).get("exp")
+        if datetime.now(UTC) >= datetime.fromtimestamp(exp, UTC):
+            return False
+        return True
+    except jwt.DecodeError:
+        _LOGGER.error("Invalid token.")
+
+
+async def get_token(hass: core.HomeAssistant, refresh_token: str) -> None:
+    """Get firmware."""
+
+    session = async_get_clientsession(hass)
+
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    try:
+        async with session.post(
+            OAUTH_DOMAIN + OAUTH_ENDPOINT,
+            data="refresh_token=" + refresh_token + "&" + OAUTH_PARAMS_REFRESH,
+            headers=headers,
+        ) as response:
+            # Ensure the request was successful
+            if response.status == 200:
+                try:
+                    response_json = await response.json()
+                except ValueError:
+                    _LOGGER.error("Response is not JSON")
+                return response_json
+    except ValueError:
+        _LOGGER.error(f"{response.url} exception")
+
+    try:
+        code = await do_auth(hass.config, hass)
+        if code is not None:
+            return await validate_auth(code, hass)
+        _LOGGER.error("Authentication error")
+    except ValueError:
+        _LOGGER.error(f"{response.url} exception")
 
 
 async def do_auth(user_input: dict[str, Any], hass: core.HomeAssistant) -> str:

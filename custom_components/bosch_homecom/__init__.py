@@ -3,23 +3,14 @@
 import asyncio
 import logging
 
-from aiohttp import ClientSession
-
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import (
-    BOSCHCOM_DOMAIN,
-    BOSCHCOM_ENDPOINT_GATEWAYS,
-    DOMAIN,
-    OAUTH_DOMAIN,
-    OAUTH_ENDPOINT,
-    OAUTH_PARAMS_REFRESH,
-)
+from .config_flow import check_jwt, get_token
+from .const import BOSCHCOM_DOMAIN, BOSCHCOM_ENDPOINT_GATEWAYS, DOMAIN
 from .coordinator import BoschComModuleCoordinator
-from .config_flow import do_auth, validate_auth
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
@@ -31,43 +22,10 @@ PLATFORMS: list[Platform] = [
 _LOGGER = logging.getLogger(__name__)
 
 
-async def get_token(
-    hass: core.HomeAssistant, config: list, session: ClientSession
-) -> None:
-    """Get firmware."""
-    code = config["refresh_token"]
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    try:
-        async with session.post(
-            OAUTH_DOMAIN + OAUTH_ENDPOINT,
-            data="refresh_token=" + code + "&" + OAUTH_PARAMS_REFRESH,
-            headers=headers,
-        ) as response:
-            # Ensure the request was successful
-            if response.status == 200:
-                try:
-                    response_json = await response.json()
-                except ValueError:
-                    _LOGGER.error("Response is not JSON")
-                return response_json
-            else:
-                try:
-                    code = await do_auth(config, hass)
-                    if code is not None:
-                        return await validate_auth(code, hass)
-                    _LOGGER.error("Login error")
-                    return
-                except ValueError:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-            _LOGGER.error(f"{response.url} returned {response.status}")
-            return None
-    except ValueError:
-        _LOGGER.error(f"{response.url} exception")
-
-
 async def get_devices(hass: core.HomeAssistant, config: list) -> None:
     """Get devices."""
     session = async_get_clientsession(hass)
+
     headers = {
         "Authorization": f"Bearer {config['access_token']}"  # Set Bearer token
     }
@@ -81,23 +39,11 @@ async def get_devices(hass: core.HomeAssistant, config: list) -> None:
                 try:
                     response_json = await response.json()
                 except ValueError:
-                    _LOGGER.error("Response is not JSON")
+                    _LOGGER.error("Authentication error")
                     return None
                 return response_json
-            if response.status == 401:
-                try:
-                    response_json = await get_token(hass, config, session)
-                    for entry in hass.config_entries.async_entries(DOMAIN):
-                        hass.config_entries.async_update_entry(
-                            entry, data=config | response_json
-                        )
-
-                    return await get_devices(hass, response_json)
-                except ValueError:
-                    _LOGGER.error("Response is not JSON")
-            else:
-                _LOGGER.error(f"{response.url} returned {response.status}")
-                return None
+            _LOGGER.error(f"{response.url} returned {response.status}")
+            return None
     except ValueError:
         _LOGGER.error(f"{response.url} exception")
 
@@ -110,10 +56,14 @@ async def async_setup_entry(
     hass_data = dict(entry.data)
     hass.data[DOMAIN][entry.entry_id] = hass_data
     config = hass.data[DOMAIN][entry.entry_id]
+
     token = config["access_token"]
+    if not check_jwt(token):
+        response_json = await get_token(hass, config["refresh_token"])
+        hass.config_entries.async_update_entry(entry, data=config | response_json)
 
     coordinators: list[BoschComModuleCoordinator] = [
-        BoschComModuleCoordinator(hass, device, config)
+        BoschComModuleCoordinator(hass, device, entry.entry_id)
         for device in await get_devices(hass, config)
     ]
 
@@ -138,7 +88,6 @@ async def async_setup_entry(
         )
 
     entry.runtime_data = coordinators
-    entry.token = token
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

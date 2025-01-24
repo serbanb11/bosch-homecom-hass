@@ -1,3 +1,5 @@
+"""Constants."""
+
 DOMAIN = "bosch_homecom"
 OAUTH_DOMAIN = "https://singlekey-id.com"
 OAUTH_LOGIN = "/auth/connect/authorize?redirect_uri=com.bosch.tt.dashtt.pointt%3A%2F%2Fapp%2Flogin&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&state=660XJ16mvFqpwtSOJcSY4w&nonce=cu8Q54Buzbpso5V3Dl2LPQ&scope=openid%20email%20profile%20offline_access%20pointt.gateway.claiming%20pointt.gateway.removal%20pointt.gateway.list%20pointt.gateway.users%20pointt.gateway.resource.dashapp%20pointt.castt.flow.token-exchange%20bacon%20hcc.tariff.read&code_challenge=pRT796riEu8odUbK29aMnizNDO4UoBeMFzmlz73mBBs&code_challenge_method=S256&style_id=tt_bsch"

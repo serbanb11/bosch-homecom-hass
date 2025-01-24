@@ -5,6 +5,7 @@ from typing import Any
 
 from homeassistant import config_entries, core
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -28,7 +29,7 @@ async def async_setup_entry(
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
     async_add_entities(
-        BoschComSwitchAirPurification(coordinator=coordinator, entry=config_entry)
+        BoschComSwitchAirPurification(coordinator=coordinator)
         for coordinator in coordinators
     )
 
@@ -39,7 +40,6 @@ class BoschComSwitchAirPurification(SwitchEntity):
     def __init__(
         self,
         coordinator: BoschComModuleCoordinator,
-        entry: config_entries.ConfigEntry,
     ) -> None:
         super().__init__()
         self._attr_unique_id = coordinator.data.device["deviceId"] + "_plasmacluster"
@@ -67,6 +67,7 @@ class BoschComSwitchAirPurification(SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Set the option."""
+        await self._coordinator.authentication()
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self._coordinator.token}",
@@ -82,24 +83,18 @@ class BoschComSwitchAirPurification(SwitchEntity):
                 json={"value": "off"},
             ) as response:
                 # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self._coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_turn_off()
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
         await self._coordinator.async_request_refresh()
+        self.is_on()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Set the option."""
+        await self._coordinator.authentication()
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self._coordinator.token}",
@@ -115,16 +110,7 @@ class BoschComSwitchAirPurification(SwitchEntity):
                 json={"value": "on"},
             ) as response:
                 # Ensure the request was successful
-                print("Status:", response.status)
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self._coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_turn_on()
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
@@ -134,7 +120,7 @@ class BoschComSwitchAirPurification(SwitchEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Gets all of the names of rooms that we are currently aware of."""
+        """Get air purification status."""
         airPurificationMode = next(
             (
                 ref
@@ -146,3 +132,19 @@ class BoschComSwitchAirPurification(SwitchEntity):
         if airPurificationMode["value"] == "on":
             return True
         return False
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        airPurificationMode = next(
+            (
+                ref
+                for ref in self._coordinator.data.advanced_functions
+                if "airPurificationMode" in ref["id"]
+            ),
+            None,
+        )
+        if airPurificationMode["value"] == "on":
+            self._attr_is_on = True
+        else:
+            self._attr_is_on = False

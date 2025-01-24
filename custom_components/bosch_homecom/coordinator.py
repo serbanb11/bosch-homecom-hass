@@ -1,7 +1,5 @@
 """Define an object to manage fetching BoschCom data."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
@@ -12,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .config_flow import do_auth, validate_auth
+from .config_flow import check_jwt, get_token
 from .const import (
     BOSCHCOM_DOMAIN,
     BOSCHCOM_ENDPOINT_ADVANCED,
@@ -21,9 +19,7 @@ from .const import (
     BOSCHCOM_ENDPOINT_NOTIFICATIONS,
     BOSCHCOM_ENDPOINT_STANDARD,
     BOSCHCOM_ENDPOINT_SWITCH,
-    OAUTH_DOMAIN,
-    OAUTH_ENDPOINT,
-    OAUTH_PARAMS_REFRESH,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,54 +40,32 @@ class BoschComModuleData:
 class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
     """A coordinator to manage the fetching of BoschCom data."""
 
-    def __init__(self, hass: HomeAssistant, device: list, config: list) -> None:
+    def __init__(self, hass: HomeAssistant, device: list, entry_id: str) -> None:
         """Initialize coordinator."""
         super().__init__(
             hass,
             logger=_LOGGER,
             name="BoschCom",
-            update_interval=timedelta(seconds=30),
+            update_interval=timedelta(minutes=5),
+            always_update=True,
         )
+        config = hass.data[DOMAIN][entry_id]
         self.device = device
-        self.config = config
         self.token = config["access_token"]
         self.refresh_token = config["refresh_token"]
+        self.entry_id = entry_id
         self.count = 0
 
-    async def get_token(self) -> None:
-        """Get firmware."""
-        session = async_get_clientsession(self.hass)
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        try:
-            async with session.post(
-                OAUTH_DOMAIN + OAUTH_ENDPOINT,
-                data="refresh_token=" + self.refresh_token + "&" + OAUTH_PARAMS_REFRESH,
-                headers=headers,
-            ) as response:
-                # Ensure the request was successful
-                if response.status == 200:
-                    try:
-                        response_json = await response.json()
-                        # Update the config entry.
-                        self.token = response_json["access_token"]
-                        self.refresh_token = response_json["refresh_token"]
-                    except ValueError:
-                        _LOGGER.error(f"{response.url} returned not json")
-                else:
-                    try:
-                        code = await do_auth(self.config, self.hass)
-                        if code is not None:
-                            reponse = await validate_auth(code, self.hass)
-                            self.token = reponse["access_token"]
-                            self.refresh_token = reponse["refresh_token"]
-                        else:
-                            _LOGGER.error("Login error")
-                            return
-                    except ValueError:
-                        _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+    async def authentication(self) -> None:
+        """Check if JWT is valid else try to refresh or reauth."""
+        if not check_jwt(self.token):
+            response_json = await get_token(self.hass, self.refresh_token)
+            self.token = response_json["access_token"]
+            self.refresh_token = response_json["refresh_token"]
+            for entry in self.hass.config_entries.async_entries(DOMAIN):
+                self.hass.config_entries.async_update_entry(
+                    entry, data=self.hass.data[DOMAIN][entry.entry_id] | response_json
+                )
 
     async def get_firmware(self, session: ClientSession) -> None:
         """Get firmware."""
@@ -113,18 +87,8 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
                     return response_json
-                # Refresh token
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.get_firmware(session)
-                else:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return None
+                _LOGGER.error(f"{response.url} returned {response.status}")
+                return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
@@ -155,6 +119,7 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
 
     async def get_stardard(self, session: ClientSession) -> None:
         """Get stardard functions."""
+
         headers = {
             "Authorization": f"Bearer {self.token}"  # Set Bearer token
         }
@@ -209,7 +174,7 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                         _LOGGER.error("Response is not JSON")
                     return response_json
                 _LOGGER.error(f"{response.url} returned {response.status}")
-                return
+                return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
@@ -233,42 +198,35 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
                     return response_json
-                # Refresh token
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.get_firmware(session)
-                else:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return None
+                _LOGGER.error(f"{response.url} returned {response.status}")
+                return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
     async def _async_update_data(self) -> BoschComModuleData:
         """Fetch data from the upstream API and pre-process into the right format."""
+        await self.authentication()
         session = async_get_clientsession(self.hass)
         try:
+            stardard_functions = await self.get_stardard(session)
+            advanced_functions = await self.get_advanced(session)
+            switch_programs = await self.get_switch(session)
             if self.count == 0:
                 firmware = await self.get_firmware(session)
+                firmware = firmware.get("value", [])
                 notifications = await self.get_notifications(session)
+                notifications = notifications.get("value", [])
             else:
                 firmware = {}
                 notifications = {}
             self.count = (self.count + 1) % 72
-            stardard_functions = await self.get_stardard(session)
-            advanced_functions = await self.get_advanced(session)
-            switch_programs = await self.get_switch(session)
         except ClientResponseError as error:
             raise UpdateFailed(error) from error
 
         return BoschComModuleData(
             device=self.device,
-            firmware=firmware.get("value", []),
-            notifications=notifications.get("values", []),
+            firmware=firmware,
+            notifications=notifications,
             stardard_functions=stardard_functions["references"],
             advanced_functions=advanced_functions["references"],
             switch_programs=switch_programs["references"],

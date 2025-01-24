@@ -1,9 +1,8 @@
 """Bosch HomeCom Custom Component."""
 
-from __future__ import annotations
-
 from homeassistant import config_entries, core
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -19,7 +18,7 @@ async def async_setup_entry(
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
     async_add_entities(
-        BoschComSensorNotifications(coordinator=coordinator, entry=config_entry)
+        BoschComSensorNotifications(coordinator=coordinator)
         for coordinator in coordinators
     )
 
@@ -32,7 +31,6 @@ class BoschComSensorNotifications(SensorEntity):
     def __init__(
         self,
         coordinator: BoschComModuleCoordinator,
-        entry: config_entries.ConfigEntry,
     ) -> None:
         """Initialize text entity."""
         super().__init__()
@@ -63,3 +61,7 @@ class BoschComSensorNotifications(SensorEntity):
     def native_value(self) -> str | None:
         """Return the value reported by the text."""
         return self._coordinator.data.notifications
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._attr_native_value = self._coordinator.data.notifications

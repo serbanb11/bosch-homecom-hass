@@ -127,81 +127,27 @@ class BoschComClimate(ClimateEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.set_attr()
-        super()._handle_coordinator_update()
 
     async def async_turn_on(self) -> None:
         """Turn on."""
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
         try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_CONTROL,
-                headers=headers,
-                json={"value": "on"},
-            ) as response:
-                # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_turn_on()
-                elif response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
+            self.async_set_hvac_mode(HVACMode.AUTO)
         except ValueError:
-            _LOGGER.error(f"{response.url} exception")
-
-        await self.coordinator.async_request_refresh()
-        self.set_attr()
+            _LOGGER.error("Turn on exception")
 
     async def async_turn_off(self) -> None:
         """Turn off."""
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
         try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_CONTROL,
-                headers=headers,
-                json={"value": "off"},
-            ) as response:
-                # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_turn_off()
-                elif response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
+            self.async_set_hvac_mode(HVACMode.OFF)
         except ValueError:
-            _LOGGER.error(f"{response.url} exception")
-
-        await self.coordinator.async_request_refresh()
-        self.set_attr()
+            _LOGGER.error("Turn on exception")
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
+        await self.coordinator.authentication()
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -217,15 +163,7 @@ class BoschComClimate(ClimateEntity):
                 json={"value": temperature},
             ) as response:
                 # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_set_temperature(ATTR_TEMPERATURE=temperature)
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
@@ -236,14 +174,33 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode) -> None:
         """Set new hvac mode."""
-        ac_control = next(
-            (
-                ref
-                for ref in self.coordinator.data.stardard_functions
-                if "acControl" in ref["id"]
-            ),
-            None,
-        )
+        await self.coordinator.authentication()
+        session = async_get_clientsession(self.hass)
+        headers = {
+            "Authorization": f"Bearer {self.coordinator.token}",
+            "Content-Type": "application/json; charset=UTF-8",
+        }
+        # Control
+        if hvac_mode == HVACMode.OFF:
+            payload = {"value": "off"}
+        else:
+            payload = {"value": "on"}
+        try:
+            async with session.put(
+                BOSCHCOM_DOMAIN
+                + BOSCHCOM_ENDPOINT_GATEWAYS
+                + self._attr_unique_id
+                + BOSCHCOM_ENDPOINT_CONTROL,
+                headers=headers,
+                json=payload,
+            ) as response:
+                # Ensure the request was successful
+                if response.status != 204:
+                    _LOGGER.error(f"{response.url} returned {response.status}")
+                    return
+        except ValueError:
+            _LOGGER.error(f"{response.url} exception")
+
         match hvac_mode:
             case HVACMode.AUTO:
                 payload = {"value": "auto"}
@@ -256,17 +213,10 @@ class BoschComClimate(ClimateEntity):
             case HVACMode.FAN_ONLY:
                 payload = {"value": "fanOnly"}
             case HVACMode.OFF:
-                await self.async_turn_off()
+                await self.coordinator.async_request_refresh()
+                self.set_attr()
                 return
 
-        if ac_control["value"] == "off":
-            await self.async_turn_on()
-
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
         try:
             async with session.put(
                 BOSCHCOM_DOMAIN
@@ -277,15 +227,7 @@ class BoschComClimate(ClimateEntity):
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_set_hvac_mode(hvac_mode)
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
@@ -296,6 +238,7 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode) -> None:
         """Set preset mode."""
+        await self.coordinator.authentication()
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -332,15 +275,7 @@ class BoschComClimate(ClimateEntity):
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_set_preset_mode(preset_mode)
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
@@ -351,6 +286,7 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_fan_mode(self, fan_mode) -> None:
         """Set new target fan mode."""
+        await self.coordinator.authentication()
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -378,15 +314,7 @@ class BoschComClimate(ClimateEntity):
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_set_fan_mode(fan_mode)
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
@@ -397,6 +325,7 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_swing_mode(self, swing_mode) -> None:
         """Set new target fan mode."""
+        await self.coordinator.authentication()
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -418,15 +347,7 @@ class BoschComClimate(ClimateEntity):
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.set_swing_mode(swing_mode)
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
@@ -437,6 +358,7 @@ class BoschComClimate(ClimateEntity):
 
     async def async_set_swing_horizontal_mode(self, swing_mode) -> None:
         """Set new target fan mode."""
+        await self.coordinator.authentication()
         session = async_get_clientsession(self.hass)
         headers = {
             "Authorization": f"Bearer {self.coordinator.token}",
@@ -458,15 +380,7 @@ class BoschComClimate(ClimateEntity):
                 json=payload,
             ) as response:
                 # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.set_swing_horizontal_mode(swing_mode)
-                elif response.status != 204:
+                if response.status != 204:
                     _LOGGER.error(f"{response.url} returned {response.status}")
                     return
         except ValueError:
