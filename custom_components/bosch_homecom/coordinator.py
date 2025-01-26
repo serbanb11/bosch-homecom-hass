@@ -140,18 +140,8 @@ class BoschComModuleCoordinator(DataUpdateCoordinator[BoschComModuleData]):
                     except ValueError:
                         _LOGGER.error("Response is not JSON")
                     return response_json
-                # Refresh token
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.get_firmware(session)
-                else:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return None
+                _LOGGER.error(f"{response.url} returned {response.status}")
+                return None
         except ValueError:
             _LOGGER.error(f"{response.url} exception")
 
