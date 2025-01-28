@@ -1,10 +1,10 @@
-# Alternative Home Connect Integration for Home Assistant
+# Bosch HomeCom Easy integration for Home Assistant
 
 [![version](https://img.shields.io/github/manifest-json/v/serbanb11/bosch-homecom-hass?filename=custom_components%2Fbosch_homecom%2Fmanifest.json&color=slateblue)](https://github.com/serbanb11/bosch-homecom-hass/releases/latest)
 [![HACS](https://img.shields.io/badge/HACS-Default-orange.svg?logo=HomeAssistantCommunityStore&logoColor=white)](https://github.com/hacs/integration)
 
 
-This project is an integration for Bosch Home Comfort enabled appliances compatible with Bosch Home Comfort. It is not affiliated with either BSH or Home Assistant.
+This project is an integration for Bosch HomeCom Easy enabled appliances. It is not affiliated with either Bosch or Home Assistant.
 
 ***At the moment this integration was tested only with Bosch Climate Class 6000i.***
 
