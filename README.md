@@ -14,8 +14,7 @@ This project is an integration for Bosch Home Comfort enabled appliances compati
 This integration has the following features:
 * Retrieve an authentication token based on username and password from singlekey-id.com
 * Refresh token if expired
-* All the entities are dynamically read from the API and reflect true capabilities of the appliance.
-* The state of all entities is updated in real time with a cloud push type integration.
+* The state of all entities are updated on each action and every 5 minutes.
 * Using pure async implementation for reduced load on the platform.
 * Read devices notifications
 

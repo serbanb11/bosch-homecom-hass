@@ -1,15 +1,21 @@
 """Bosch HomeCom Custom Component."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 
-from homeassistant import config_entries, core
-from homeassistant.const import Platform
+from aiohttp.client_exceptions import ClientConnectorError, ClientError
+from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .config_flow import check_jwt, get_token
-from .const import BOSCHCOM_DOMAIN, BOSCHCOM_ENDPOINT_GATEWAYS, DOMAIN
+from .const import DOMAIN, MODEL
 from .coordinator import BoschComModuleCoordinator
 
 PLATFORMS: list[Platform] = [
@@ -22,49 +28,31 @@ PLATFORMS: list[Platform] = [
 _LOGGER = logging.getLogger(__name__)
 
 
-async def get_devices(hass: core.HomeAssistant, config: list) -> None:
-    """Get devices."""
-    session = async_get_clientsession(hass)
-
-    headers = {
-        "Authorization": f"Bearer {config['access_token']}"  # Set Bearer token
-    }
-    try:
-        async with session.get(
-            BOSCHCOM_DOMAIN + BOSCHCOM_ENDPOINT_GATEWAYS,
-            headers=headers,
-        ) as response:
-            # Ensure the request was successful
-            if response.status == 200:
-                try:
-                    response_json = await response.json()
-                except ValueError:
-                    _LOGGER.error("Authentication error")
-                    return None
-                return response_json
-            _LOGGER.error(f"{response.url} returned {response.status}")
-            return None
-    except ValueError:
-        _LOGGER.error(f"{response.url} exception")
-
-
-async def async_setup_entry(
-    hass: core.HomeAssistant, entry: config_entries.ConfigEntry
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up platform from a ConfigEntry."""
-    hass.data.setdefault(DOMAIN, {})
-    hass_data = dict(entry.data)
-    hass.data[DOMAIN][entry.entry_id] = hass_data
-    config = hass.data[DOMAIN][entry.entry_id]
+    username: str | None = entry.data.get(CONF_USERNAME)
+    password: str | None = entry.data.get(CONF_PASSWORD)
 
-    token = config["access_token"]
-    if not check_jwt(token):
-        response_json = await get_token(hass, config["refresh_token"], entry.entry_id)
-        hass.config_entries.async_update_entry(entry, data=config | response_json)
+    websession = async_get_clientsession(hass)
+
+    options = ConnectionOptions(username=username, password=password)
+    try:
+        bhc = await HomeComAlt.create(websession, options)
+    except (ApiError, ClientError, ClientConnectorError, TimeoutError) as err:
+        raise ConfigEntryNotReady from err
+    except AuthFailedError as err:
+        raise ConfigEntryAuthFailed from err
+
+    devices = await bhc.async_get_devices()
 
     coordinators: list[BoschComModuleCoordinator] = [
-        BoschComModuleCoordinator(hass, device, entry.entry_id)
-        for device in await get_devices(hass, config)
+        BoschComModuleCoordinator(
+            hass,
+            bhc,
+            device,
+            await bhc.async_get_firmware(device["deviceId"]),
+        )
+        for device in await devices
     ]
 
     await asyncio.gather(
@@ -81,9 +69,9 @@ async def async_setup_entry(
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, c.device["deviceId"])},
-            name="Bosch_" + c.device["deviceType"] + "_" + c.device["deviceId"],
+            name=c.device["deviceId"],
             manufacturer="Bosch",
-            model=c.device["deviceType"],
+            model=MODEL[c.device["deviceType"]],
             sw_version=c.data.firmware,
         )
 
@@ -93,12 +81,6 @@ async def async_setup_entry(
     return True
 
 
-async def async_unload_entry(
-    hass: core.HomeAssistant, entry: config_entries.ConfigEntry
-) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        # Remove config entry from domain.
-        hass.data[DOMAIN].pop(entry.entry_id)
-
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

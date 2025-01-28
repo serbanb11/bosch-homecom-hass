@@ -7,6 +7,6 @@
   "documentation": "https://github.com/serbanb11/bosch-homecom-hass/",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/serbanb11/bosch-homecom-hass/issues",
-  "requirements": [],
+  "requirements": ["homecom_alt"],
   "version": "1.0.0"
 }

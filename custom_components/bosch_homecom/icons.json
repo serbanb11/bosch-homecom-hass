@@ -1,0 +1,30 @@
+{
+    "entity": {
+      "climate": {
+        "ac": {
+          "default": "mdi:air-conditioner"
+        }
+      },
+      "switch": {
+        "plasmacluster": {
+          "default": "mdi:air-purifier"
+        }
+      },
+      "text": {
+        "notifications": {
+          "default": "mdi:bell"
+        }
+      },
+      "select": {
+        "program": {
+          "default": "mdi:fan-clock"
+        },
+        "airflow_vertical": {
+          "default": "mdi:pan-vertical"
+        },
+        "airflow_horizontal": {
+          "default": "mdi:pan-horizontal"
+        }
+      }
+    }
+  }

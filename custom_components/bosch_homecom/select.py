@@ -6,19 +6,9 @@ import logging
 from homeassistant import config_entries, core
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    BOSCHCOM_DOMAIN,
-    BOSCHCOM_ENDPOINT_AIRFLOW_HORIZONTAL,
-    BOSCHCOM_ENDPOINT_AIRFLOW_VERTICAL,
-    BOSCHCOM_ENDPOINT_GATEWAYS,
-    BOSCHCOM_ENDPOINT_SWITCH_ENABLE,
-    BOSCHCOM_ENDPOINT_SWITCH_PROGRAM,
-    DOMAIN,
-)
 from .coordinator import BoschComModuleCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,86 +21,46 @@ async def async_setup_entry(
     config_entry: config_entries.ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the BoschCom devices."""
+    """Set up the BoschCom airflows and porgram selects."""
     coordinators = config_entry.runtime_data
     async_add_entities(
-        BoschComSelectAirflowHorizontal(coordinator=coordinator)
+        BoschComSelectAirflowHorizontal(coordinator=coordinator, field="horizontal")
         for coordinator in coordinators
     )
     async_add_entities(
-        BoschComSelectAirflowVertical(coordinator=coordinator)
+        BoschComSelectAirflowVertical(coordinator=coordinator, field="vertical")
         for coordinator in coordinators
     )
     async_add_entities(
-        BoschComSelectProgram(coordinator=coordinator) for coordinator in coordinators
+        BoschComSelectProgram(coordinator=coordinator, field="program")
+        for coordinator in coordinators
     )
 
 
-class BoschComSelectAirflowHorizontal(SelectEntity):
+class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
     """Representation of Horizontal airflow select."""
+
+    _attr_has_entity_name = True
 
     def __init__(
         self,
         coordinator: BoschComModuleCoordinator,
+        field: str,
     ) -> None:
         """Initialize select entity."""
-        super().__init__()
-        self._attr_unique_id = (
-            coordinator.data.device["deviceId"] + "_horizontal_airflow"
-        )
-        self._attr_name = coordinator.data.device["deviceId"] + "_horizontal_airflow"
-        self.name = (
-            "Bosch_"
-            + coordinator.data.device["deviceType"]
-            + "_"
-            + coordinator.data.device["deviceId"]
-            + "_horizontal_airflow"
-        )
+        super().__init__(coordinator)
+        self._attr_translation_key = "airflow_horizontal"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
         self._coordinator = coordinator
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._coordinator.device["deviceId"])},
-        )
-
-    @property
-    def should_poll(self) -> bool:
-        """Home Assistant will poll an entity when the should_poll property returns True."""
-        return True
+        self._attr_should_poll = False
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
-        await self._coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self._coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._coordinator.data.device["deviceId"]
-                + BOSCHCOM_ENDPOINT_AIRFLOW_HORIZONTAL,
-                headers=headers,
-                json={"value": option},
-            ) as response:
-                # Ensure the request was successful
-                if response.status == 401:
-                    errors: dict[str, str] = {}
-                    try:
-                        await self._coordinator.get_token()
-                    except ValueError:
-                        errors["base"] = "auth"
-                    if not errors:
-                        self.async_select_option(option)
-                elif response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self._coordinator.bhc.async_set_horizontal_swing_mode(
+            self._coordinator.data.device["deviceId"], option
+        )
 
         await self._coordinator.async_request_refresh()
 
@@ -152,60 +102,33 @@ class BoschComSelectAirflowHorizontal(SelectEntity):
             None,
         )
         self._attr_current_option = airFlowHorizontal["value"]
+        self.async_write_ha_state()
 
 
-class BoschComSelectAirflowVertical(SelectEntity):
-    """Representation of vertical airflow select."""
+class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
+    """Representation of Vertical airflow select."""
 
-    def __init__(self, coordinator: BoschComModuleCoordinator) -> None:
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinator,
+        field: str,
+    ) -> None:
         """Initialize select entity."""
-        super().__init__()
-        self._attr_unique_id = coordinator.data.device["deviceId"] + "_vertical_airflow"
-        self._attr_name = coordinator.data.device["deviceId"] + "_vertical_airflow"
-        self.name = (
-            "Bosch_"
-            + coordinator.data.device["deviceType"]
-            + "_"
-            + coordinator.data.device["deviceId"]
-            + "_vertical_airflow"
-        )
+        super().__init__(coordinator)
+        self._attr_translation_key = "airflow_vertical"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
         self._coordinator = coordinator
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._coordinator.device["deviceId"])},
-        )
-
-    @property
-    def should_poll(self) -> bool:
-        """Home Assistant will poll an entity when the should_poll property returns True."""
-        return True
+        self._attr_should_poll = False
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
-        await self._coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self._coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._coordinator.data.device["deviceId"]
-                + BOSCHCOM_ENDPOINT_AIRFLOW_VERTICAL,
-                headers=headers,
-                json={"value": option},
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self._coordinator.bhc.async_set_vertical_swing_mode(
+            self._coordinator.data.device["deviceId"], option
+        )
 
         await self._coordinator.async_request_refresh()
 
@@ -247,85 +170,36 @@ class BoschComSelectAirflowVertical(SelectEntity):
             None,
         )
         self._attr_current_option = airFlowVertical["value"]
+        self.async_write_ha_state()
 
 
-class BoschComSelectProgram(SelectEntity):
+class BoschComSelectProgram(CoordinatorEntity, SelectEntity):
     """Representation of program select."""
 
-    def __init__(self, coordinator: BoschComModuleCoordinator) -> None:
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinator,
+        field: str,
+    ) -> None:
         """Initialize select entity."""
-        super().__init__()
-        self._attr_unique_id = coordinator.data.device["deviceId"] + "_program"
-        self._attr_name = coordinator.data.device["deviceId"] + "_program"
-        self.name = (
-            "Bosch_"
-            + coordinator.data.device["deviceType"]
-            + "_"
-            + coordinator.data.device["deviceId"]
-            + "_program"
-        )
+        super().__init__(coordinator)
+        self._attr_translation_key = "program"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
         self._coordinator = coordinator
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._coordinator.device["deviceId"])},
-        )
-
-    @property
-    def should_poll(self) -> bool:
-        """Home Assistant will poll an entity when the should_poll property returns True."""
-        return True
+        self._attr_should_poll = False
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
-        await self._coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self._coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
-        if option == "off":
-            payload = "off"
-        else:
-            payload = "on"
-        # send enable request
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._coordinator.data.device["deviceId"]
-                + BOSCHCOM_ENDPOINT_SWITCH_ENABLE,
-                headers=headers,
-                json={"value": payload},
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
-
-        if option == "off":
-            return
-
-        # send switch program request
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._coordinator.data.device["deviceId"]
-                + BOSCHCOM_ENDPOINT_SWITCH_PROGRAM,
-                headers=headers,
-                json={"value": option},
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self._coordinator.bhc.async_control_program(
+            self._coordinator.data.device["deviceId"], "on"
+        )
+        await self._coordinator.bhc.async_switch_program(
+            self._coordinator.data.device["deviceId"], option
+        )
 
         await self._coordinator.async_request_refresh()
 
@@ -389,3 +263,4 @@ class BoschComSelectProgram(SelectEntity):
             None,
         )
         self._attr_current_option = program["value"]
+        self.async_write_ha_state()

@@ -1,12 +1,11 @@
 """Bosch HomeCom Custom Component."""
 
-from datetime import timedelta
+from __future__ import annotations
+
 import logging
 from typing import Any
 
-import voluptuous as vol
-
-from homeassistant import config_entries, core
+from homeassistant import config_entries
 from homeassistant.components.climate import (
     FAN_AUTO,
     FAN_DIFFUSE,
@@ -22,37 +21,22 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, CONF_CODE, UnitOfTemperature
-from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    BOSCHCOM_DOMAIN,
-    BOSCHCOM_ENDPOINT_AIRFLOW_HORIZONTAL,
-    BOSCHCOM_ENDPOINT_AIRFLOW_VERTICAL,
-    BOSCHCOM_ENDPOINT_CONTROL,
-    BOSCHCOM_ENDPOINT_ECO,
-    BOSCHCOM_ENDPOINT_FAN_SPEED,
-    BOSCHCOM_ENDPOINT_FULL_POWER,
-    BOSCHCOM_ENDPOINT_GATEWAYS,
-    BOSCHCOM_ENDPOINT_MODE,
-    BOSCHCOM_ENDPOINT_TEMP,
-    DOMAIN,
-)
+from .const import DOMAIN
 from .coordinator import BoschComModuleCoordinator
+
+PARALLEL_UPDATES = 1
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(minutes=10)
-
-AUTH_SCHEMA = vol.Schema({vol.Required(CONF_CODE): cv.string})
-
 
 async def async_setup_entry(
-    hass: core.HomeAssistant,
+    hass: HomeAssistant,
     config_entry: config_entries.ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -63,9 +47,11 @@ async def async_setup_entry(
     )
 
 
-class BoschComClimate(ClimateEntity):
+class BoschComClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom climate entity."""
 
+    _attr_has_entity_name = False
+    _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_fan_modes = [FAN_AUTO, FAN_DIFFUSE, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
     _attr_hvac_modes = [
@@ -95,19 +81,18 @@ class BoschComClimate(ClimateEntity):
         coordinator: BoschComModuleCoordinator,
     ) -> None:
         """Initialize climate entity."""
-        super().__init__()
-        self._attr_name = (
-            "Bosch_"
+        super().__init__(coordinator)
+        self._attr_unique_id = coordinator.device["deviceId"]
+        self._attr_translation_key = "ac"
+        self._name = (
+            "Boschcom_"
             + coordinator.device["deviceType"]
             + "_"
             + coordinator.device["deviceId"]
         )
-        self._attr_unique_id = coordinator.device["deviceId"]
-        self._name = (
-            "Bosch_"
-            + coordinator.device["deviceType"]
-            + "_"
-            + coordinator.device["deviceId"]
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self.unique_id)},
+            name=self._name,
         )
         self.coordinator = coordinator
 
@@ -115,284 +100,121 @@ class BoschComClimate(ClimateEntity):
         # already available in the coordinator data.
         self.set_attr()
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.unique_id)},
-            name=self.name,
-        )
-
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.set_attr()
+        self.async_write_ha_state()
 
     async def async_turn_on(self) -> None:
         """Turn on."""
-        try:
-            await self.async_set_hvac_mode(HVACMode.AUTO)
-        except ValueError:
-            _LOGGER.error("Turn on exception")
+        await self.coordinator.bhc.async_turn_on(self._attr_unique_id)
+
+        await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn off."""
-        try:
-            await self.async_set_hvac_mode(HVACMode.OFF)
-        except ValueError:
-            _LOGGER.error("Turn on exception")
+        await self.coordinator.bhc.async_turn_off(self._attr_unique_id)
+
+        await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
-        await self.coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_TEMP,
-                headers=headers,
-                json={"value": temperature},
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self.coordinator.bhc.async_set_temperature(
+            self._attr_unique_id, temperature
+        )
 
         await self.coordinator.async_request_refresh()
-        self.set_attr()
 
     async def async_set_hvac_mode(self, hvac_mode) -> None:
         """Set new hvac mode."""
-        await self.coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
-        # Control
-        if hvac_mode == HVACMode.OFF:
-            payload = {"value": "off"}
-        else:
-            payload = {"value": "on"}
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_CONTROL,
-                headers=headers,
-                json=payload,
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
 
         match hvac_mode:
             case HVACMode.AUTO:
-                payload = {"value": "auto"}
+                payload = "auto"
             case HVACMode.HEAT:
-                payload = {"value": "heat"}
+                payload = "heat"
             case HVACMode.COOL:
-                payload = {"value": "cool"}
+                payload = "cool"
             case HVACMode.DRY:
-                payload = {"value": "dry"}
+                payload = "dry"
             case HVACMode.FAN_ONLY:
-                payload = {"value": "fanOnly"}
+                payload = "fanOnly"
             case HVACMode.OFF:
+                await self.coordinator.bhc.async_turn_off(self._attr_unique_id)
                 await self.coordinator.async_request_refresh()
-                self.set_attr()
                 return
 
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_MODE,
-                headers=headers,
-                json=payload,
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self.coordinator.bhc.async_turn_on(self._attr_unique_id)
+        await self.coordinator.bhc.async_set_hvac_mode(self._attr_unique_id, payload)
 
         await self.coordinator.async_request_refresh()
-        self.set_attr()
 
     async def async_set_preset_mode(self, preset_mode) -> None:
         """Set preset mode."""
-        await self.coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
         if preset_mode == PRESET_ECO:
-            ENDPOINT = BOSCHCOM_ENDPOINT_ECO
-            payload = {"value": "on"}
+            await self.coordinator.bhc.async_set_eco(self._attr_unique_id, True)
         elif preset_mode == PRESET_BOOST:
-            ENDPOINT = BOSCHCOM_ENDPOINT_FULL_POWER
-            payload = {"value": "on"}
+            await self.coordinator.bhc.async_set_boost(self._attr_unique_id, True)
         else:
-            eco_mode = next(
-                (
-                    ref
-                    for ref in self.coordinator.data.advanced_functions
-                    if "ecoMode" in ref["id"]
-                ),
-                None,
-            )
-            if eco_mode == "on":
-                ENDPOINT = BOSCHCOM_ENDPOINT_ECO
-                payload = {"value": "off"}
-            else:
-                ENDPOINT = BOSCHCOM_ENDPOINT_FULL_POWER
-                payload = {"value": "off"}
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + ENDPOINT,
-                headers=headers,
-                json=payload,
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+            await self.coordinator.bhc.async_set_eco(self._attr_unique_id, False)
+            await self.coordinator.bhc.async_set_boost(self._attr_unique_id, False)
 
         await self.coordinator.async_request_refresh()
-        self.set_attr()
 
     async def async_set_fan_mode(self, fan_mode) -> None:
         """Set new target fan mode."""
-        await self.coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
         if fan_mode == FAN_AUTO:
-            payload = {"value": "auto"}
+            payload = "auto"
         elif fan_mode == FAN_DIFFUSE:
-            payload = {"value": "quiet"}
+            payload = "quiet"
         elif fan_mode == FAN_LOW:
-            payload = {"value": "low"}
+            payload = "low"
         elif fan_mode == FAN_MEDIUM:
-            payload = {"value": "mid"}
+            payload = "mid"
         elif fan_mode == FAN_HIGH:
-            payload = {"value": "high"}
+            payload = "high"
         else:
             return
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_FAN_SPEED,
-                headers=headers,
-                json=payload,
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self.coordinator.bhc.async_set_fan_mode(self._attr_unique_id, payload)
 
         await self.coordinator.async_request_refresh()
-        self.set_attr()
 
     async def async_set_swing_mode(self, swing_mode) -> None:
-        """Set new target fan mode."""
-        await self.coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
+        """Set new vertical swing mode."""
         if swing_mode == SWING_ON:
-            payload = {"value": "swing"}
+            payload = "swing"
         elif swing_mode == SWING_OFF:
-            payload = {"value": "angle3"}
+            payload = "angle3"
         else:
             return
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_AIRFLOW_VERTICAL,
-                headers=headers,
-                json=payload,
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self.coordinator.bhc.async_set_vertical_swing_mode(
+            self._attr_unique_id, payload
+        )
 
         await self.coordinator.async_request_refresh()
-        self.set_attr()
 
-    async def async_set_swing_horizontal_mode(self, swing_mode) -> None:
-        """Set new target fan mode."""
-        await self.coordinator.authentication()
-        session = async_get_clientsession(self.hass)
-        headers = {
-            "Authorization": f"Bearer {self.coordinator.token}",
-            "Content-Type": "application/json; charset=UTF-8",
-        }
-        if swing_mode == SWING_ON:
+    async def async_set_swing_horizontal_mode(self, swing_horizontal_mode) -> None:
+        """Set new horizontal swing mode."""
+        if swing_horizontal_mode == SWING_ON:
             payload = {"value": "swing"}
-        elif swing_mode == SWING_OFF:
+        elif swing_horizontal_mode == SWING_OFF:
             payload = {"value": "center"}
         else:
             return
-        try:
-            async with session.put(
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self._attr_unique_id
-                + BOSCHCOM_ENDPOINT_AIRFLOW_HORIZONTAL,
-                headers=headers,
-                json=payload,
-            ) as response:
-                # Ensure the request was successful
-                if response.status != 204:
-                    _LOGGER.error(f"{response.url} returned {response.status}")
-                    return
-        except ValueError:
-            _LOGGER.error(f"{response.url} exception")
+        await self.coordinator.bhc.async_set_horizontal_swing_mode(
+            self._attr_unique_id, payload
+        )
 
         await self.coordinator.async_request_refresh()
-        self.set_attr()
 
-    def set_attr(self) -> None:
-        """Populate attributes with data from the coordinator."""
+    def _set_standard_functions(self, standard_functions: list[dict]) -> None:
+        """Populate standard functions."""
 
-        for ref in self.coordinator.data.stardard_functions:
+        for ref in standard_functions:
             normalized_id = ref["id"].split("/", 2)[-1]
 
             match normalized_id:
@@ -447,6 +269,10 @@ class BoschComClimate(ClimateEntity):
                 self._attr_target_temperature = 22
                 self._attr_target_temperature_high = 30
                 self._attr_target_temperature_low = 16
+
+    def set_attr(self) -> None:
+        """Populate attributes with data from the coordinator."""
+        self._set_standard_functions(self.coordinator.data.stardard_functions)
 
         for ref in self.coordinator.data.advanced_functions:
             normalized_id = ref["id"].split("/", 2)[-1]
