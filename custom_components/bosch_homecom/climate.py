@@ -43,14 +43,14 @@ async def async_setup_entry(
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
     async_add_entities(
-        BoschComClimate(coordinator=coordinator) for coordinator in coordinators
+        BoschComClimate(coordinator=coordinator, field="clima") for coordinator in coordinators
     )
 
 
 class BoschComClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom climate entity."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_fan_modes = [FAN_AUTO, FAN_DIFFUSE, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
@@ -79,22 +79,16 @@ class BoschComClimate(CoordinatorEntity, ClimateEntity):
     def __init__(
         self,
         coordinator: BoschComModuleCoordinator,
+        field: str,
     ) -> None:
         """Initialize climate entity."""
         super().__init__(coordinator)
-        self._attr_unique_id = coordinator.device["deviceId"]
         self._attr_translation_key = "ac"
-        self._name = (
-            "Boschcom_"
-            + coordinator.device["deviceType"]
-            + "_"
-            + coordinator.device["deviceId"]
-        )
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, self.unique_id)},
-            name=self._name,
-        )
-        self.coordinator = coordinator
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._coordinator = coordinator
+        self._attr_should_poll = False
 
         # Call this in __init__ so data is populated right away, since it's
         # already available in the coordinator data.
