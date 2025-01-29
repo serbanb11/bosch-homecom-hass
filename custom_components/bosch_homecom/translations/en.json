@@ -26,16 +26,16 @@
             }
         },
         "error": {
-            "no_devices_found": "[%key:common::config_flow::abort::no_devices_found%]",
-            "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-            "unknown": "[%key:common::config_flow::error::unknown%]"
+            "no_devices_found": "No devices found",
+            "cannot_connect": "Cannot connect",
+            "unknown": "Unkown error"
         },
         "abort": {
-            "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+            "already_configured": "Already configured",
             "device_unsupported": "The device is unsupported.",
-            "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+            "reauth_successful": "Reauth successful",
             "reauth_unsuccessful": "Re-authentication was unsuccessful, please remove the integration and set it up again.",
-            "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+            "reconfigure_successful": "Reconfigure successful"
         }
     }
 }
