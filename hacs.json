@@ -1,5 +1,4 @@
 {
   "name": "Bosch HomeCom",
-  "render_readme": true,
-  "iot_class": "Cloud Polling"
+  "render_readme": true
 }
