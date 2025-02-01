@@ -50,7 +50,7 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
     entry.add_to_hass(hass)
 
     mock_api = AsyncMock()
-    mock_api.async_get_devices.return_value = devices
+    mock_api.async_get_devices.return_value = AsyncMock(return_value=devices)()
     mock_api.async_get_firmware.return_value = {"value": "1.0.0"}
     mock_api.async_update.return_value = BHCDevice(
             device=devices[0]["deviceId"],
