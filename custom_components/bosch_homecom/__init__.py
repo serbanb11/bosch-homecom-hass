@@ -52,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             device,
             await bhc.async_get_firmware(device["deviceId"]),
         )
-        for device in await devices
+        for device in devices
     ]
 
     await asyncio.gather(

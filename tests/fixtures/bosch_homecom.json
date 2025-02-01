@@ -1,0 +1,265 @@
+{
+    "devices": {
+    "deviceId": "123",
+    "deviceType": "rac"
+    },
+    "firmwares": "1.0.0",
+    "notifications": ["test"],
+    "stardard_functions": [
+    {
+        "id": "/airConditioning/operationMode",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "auto",
+        "allowedValues": [
+        "auto",
+        "heat",
+        "cool",
+        "dry",
+        "fanOnly"
+        ]
+    },
+    {
+        "id": "/airConditioning/acControl",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "off",
+        "allowedValues": [
+        "on",
+        "off"
+        ]
+    },
+    {
+        "id": "/airConditioning/fanSpeed",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "quiet",
+        "allowedValues": [
+        "auto",
+        "quiet",
+        "low",
+        "mid",
+        "high"
+        ]
+    },
+    {
+        "id": "/airConditioning/airFlowHorizontal",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "center",
+        "allowedValues": [
+        "center",
+        "left",
+        "right",
+        "swing"
+        ]
+    },
+    {
+        "id": "/airConditioning/airFlowVertical",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "auto",
+        "allowedValues": [
+        "auto",
+        "angle1",
+        "angle2",
+        "angle3",
+        "angle4",
+        "swing"
+        ]
+    },
+    {
+        "id": "/airConditioning/temperatureSetpoint",
+        "type": "floatValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": 25.0,
+        "unitOfMeasure": "C",
+        "minValue": 16.0,
+        "maxValue": 30.0
+    },
+    {
+        "id": "/airConditioning/roomTemperature",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 25.0,
+        "unitOfMeasure": "C"
+    }
+    ],
+    "advanced_functions": [
+    {
+        "id": "/airConditioning/airPurificationMode",
+        "type": "stringValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": "off"
+    },
+    {
+        "id": "/airConditioning/fullPowerMode",
+        "type": "stringValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": "off"
+    },
+    {
+        "id": "/airConditioning/ecoMode",
+        "type": "stringValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": "off"
+    }
+    ],
+    "switch_programs": [
+    {
+        "id": "/airConditioning/switchPrograms/enabled",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "on",
+        "allowedValues": [
+        "off",
+        "on"
+        ]
+    },
+    {
+        "id": "/airConditioning/switchPrograms/activeProgram",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "program1",
+        "allowedValues": [
+        "program1",
+        "program2"
+        ]
+    },
+    {
+        "id": "/airConditioning/switchPrograms/temporarySetting/enabled",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "off",
+        "allowedValues": [
+        "off"
+        ]
+    },
+    {
+        "id": "/airConditioning/switchPrograms/configuration",
+        "type": "configDataArray",
+        "writeable": 0,
+        "maxNbOfSwitchPoints": 70,
+        "maxNbOfSwitchPointsPerDay": 10,
+        "switchPointTimeRaster": 15,
+        "allowedValues": [
+        {
+            "operationMode": {
+            "type": "stringValue",
+            "allowedValues": [
+                "auto"
+            ]
+            },
+            "fanSpeed": {
+            "type": "stringValue",
+            "allowedValues": [
+                "auto",
+                "quiet",
+                "low",
+                "mid",
+                "high"
+            ]
+            }
+        },
+        {
+            "operationMode": {
+            "type": "stringValue",
+            "allowedValues": [
+                "heat"
+            ]
+            },
+            "temperatureSetpoint": {
+            "type": "floatValue",
+            "minValue": 16,
+            "maxValue": 30,
+            "unitOfMeasure": "C"
+            },
+            "fanSpeed": {
+            "type": "stringValue",
+            "allowedValues": [
+                "auto",
+                "quiet",
+                "low",
+                "mid",
+                "high"
+            ]
+            }
+        },
+        {
+            "operationMode": {
+            "type": "stringValue",
+            "allowedValues": [
+                "cool"
+            ]
+            },
+            "temperatureSetpoint": {
+            "type": "floatValue",
+            "minValue": 16,
+            "maxValue": 30,
+            "unitOfMeasure": "C"
+            },
+            "fanSpeed": {
+            "type": "stringValue",
+            "allowedValues": [
+                "auto",
+                "quiet",
+                "low",
+                "mid",
+                "high"
+            ]
+            }
+        },
+        {
+            "operationMode": {
+            "type": "stringValue",
+            "allowedValues": [
+                "dry"
+            ]
+            },
+            "temperatureSetpoint": {
+            "type": "floatValue",
+            "minValue": 16,
+            "maxValue": 30,
+            "unitOfMeasure": "C"
+            },
+            "fanSpeed": {
+            "type": "stringValue",
+            "allowedValues": [
+                "auto"
+            ]
+            }
+        },
+        {
+            "operationMode": {
+            "type": "stringValue",
+            "allowedValues": [
+                "fanOnly"
+            ]
+            },
+            "fanSpeed": {
+            "type": "stringValue",
+            "allowedValues": [
+                "quiet",
+                "low",
+                "mid",
+                "high"
+            ]
+            }
+        }
+        ]
+    }
+    ]
+}
