@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN, CONF_DEVICES
+from .const import CONF_DEVICES, DOMAIN
 
 
 @dataclass
@@ -52,6 +52,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
     user: str
+    data: dict[str, Any] | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -154,7 +155,6 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle a reconfiguration flow initialized by the user."""
         errors: dict[str, str] = {}
-        reconfigure_entry = self._get_reconfigure_entry()
 
         if user_input is not None:
             try:
@@ -181,14 +181,8 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
 
-            self.async_update_reload_and_abort(
-                reconfigure_entry,
-                data_updates={
-                    CONF_USERNAME: user_input[CONF_USERNAME],
-                    CONF_PASSWORD: user_input[CONF_PASSWORD],
-                    CONF_DEVICES: await devices,
-                },
-            )
+            self.data = user_input
+            self.data[CONF_DEVICES] = await devices
             return await self.async_step_reconfigure_devices()
 
         return self.async_show_form(
@@ -206,12 +200,17 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             vol.Required(
                 device["deviceId"] + "_" + device["deviceType"], default=True
             ): cv.boolean
-            for device in reconfigure_entry.data.get(CONF_DEVICES)
+            for device in self.data[CONF_DEVICES]
         }
 
         if user_input is not None:
             return self.async_update_reload_and_abort(
-                reconfigure_entry, data_updates={CONF_DEVICES: user_input}
+                reconfigure_entry,
+                data_updates={
+                    CONF_USERNAME: self.data[CONF_USERNAME],
+                    CONF_PASSWORD: self.data[CONF_PASSWORD],
+                    CONF_DEVICES: user_input,
+                },
             )
 
         return self.async_show_form(

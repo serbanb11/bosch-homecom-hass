@@ -9,7 +9,7 @@ from aiohttp.client_exceptions import ClientConnectorError, ClientError
 from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_DEVICES, Platform
+from homeassistant.const import CONF_DEVICES, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
