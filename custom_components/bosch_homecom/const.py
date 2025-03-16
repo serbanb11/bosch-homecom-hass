@@ -26,3 +26,5 @@ ATTR_FULL_POWER = "fullPowerMode"
 ATTR_ECO_MODE = "ecoMode"
 ATTR_TIMERS_ON = "timersOn"
 ATTR_TIMERS_OFF = "timersOff"
+
+CONF_DEVICES = "devices"

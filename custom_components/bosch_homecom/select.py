@@ -23,18 +23,44 @@ async def async_setup_entry(
 ) -> None:
     """Set up the BoschCom airflows and porgram selects."""
     coordinators = config_entry.runtime_data
-    async_add_entities(
-        BoschComSelectAirflowHorizontal(coordinator=coordinator, field="horizontal")
-        for coordinator in coordinators
-    )
-    async_add_entities(
-        BoschComSelectAirflowVertical(coordinator=coordinator, field="vertical")
-        for coordinator in coordinators
-    )
-    async_add_entities(
-        BoschComSelectProgram(coordinator=coordinator, field="program")
-        for coordinator in coordinators
-    )
+    entities = []
+    for coordinator in coordinators:
+        if next(
+            (
+                ref
+                for ref in coordinator.data.stardard_functions
+                if "airFlowHorizontal" in ref["id"]
+            ),
+            None,
+        ):
+            entities.append(
+                BoschComSelectAirflowHorizontal(
+                    coordinator=coordinator, field="horizontal"
+                )
+            )
+        if next(
+            (
+                ref
+                for ref in coordinator.data.stardard_functions
+                if "airFlowVertical" in ref["id"]
+            ),
+            None,
+        ):
+            entities.append(
+                BoschComSelectAirflowVertical(coordinator=coordinator, field="vertical")
+            )
+        if next(
+            (
+                ref
+                for ref in coordinator.data.switch_programs
+                if "activeProgram" in ref["id"]
+            ),
+            None,
+        ):
+            entities.append(
+                BoschComSelectProgram(coordinator=coordinator, field="program")
+            )
+    async_add_entities(entities)
 
 
 class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):

@@ -23,16 +23,12 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
 from .coordinator import BoschComModuleCoordinator
 
 PARALLEL_UPDATES = 1
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -43,7 +39,8 @@ async def async_setup_entry(
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
     async_add_entities(
-        BoschComClimate(coordinator=coordinator, field="clima") for coordinator in coordinators
+        BoschComClimate(coordinator=coordinator, field="clima")
+        for coordinator in coordinators
     )
 
 

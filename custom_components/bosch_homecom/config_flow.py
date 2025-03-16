@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_DEVICES
 
 
 @dataclass
@@ -61,23 +61,61 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                await async_check_credentials(self.hass, user_input)
+                options = ConnectionOptions(
+                    username=user_input.get(CONF_USERNAME),
+                    password=user_input.get(CONF_PASSWORD),
+                )
+
+                websession = async_get_clientsession(self.hass)
+                bhc = await HomeComAlt.create(websession, options)
+
+                # await async_check_credentials(self.hass, user_input)
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
                 errors["base"] = "cannot_connect"
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
-            else:
-                await self.async_set_unique_id(user_input.get(CONF_USERNAME))
-                self._abort_if_unique_id_configured(
-                    {CONF_USERNAME: user_input.get(CONF_USERNAME)}
-                )
 
-                # User is done, create the config entry.
-                return self.async_create_entry(title="Bosch HomeCom", data=user_input)
+            try:
+                devices = await bhc.async_get_devices()
+            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            self.data = user_input
+            self.data[CONF_DEVICES] = await devices
+            return await self.async_step_devices()
 
         return self.async_show_form(
             step_id="user", data_schema=AUTH_SCHEMA, errors=errors
+        )
+
+    async def async_step_devices(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle a flow initialized by the user."""
+        errors: dict[str, str] = {}
+
+        data_schema = {
+            vol.Required(
+                device["deviceId"] + "_" + device["deviceType"], default=True
+            ): cv.boolean
+            for device in self.data[CONF_DEVICES]
+        }
+
+        if user_input is not None:
+            self.data[CONF_DEVICES] = user_input
+            await self.async_set_unique_id(user_input.get(CONF_USERNAME))
+            self._abort_if_unique_id_configured(
+                {CONF_USERNAME: user_input.get(CONF_USERNAME)}
+            )
+
+            # User is done, create the config entry.
+            return self.async_create_entry(title="Bosch HomeCom", data=self.data)
+
+        return self.async_show_form(
+            step_id="devices", data_schema=vol.Schema(data_schema), errors=errors
         )
 
     async def async_step_reauth(
@@ -120,18 +158,64 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                await async_check_credentials(self.hass, user_input)
+                options = ConnectionOptions(
+                    username=user_input.get(CONF_USERNAME),
+                    password=user_input.get(CONF_PASSWORD),
+                )
+
+                websession = async_get_clientsession(self.hass)
+                bhc = await HomeComAlt.create(websession, options)
+
+                # await async_check_credentials(self.hass, user_input)
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
                 errors["base"] = "cannot_connect"
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
-            else:
-                # User is done, create the config entry.
-                return self.async_update_reload_and_abort(
-                    reconfigure_entry, data_updates=user_input
-                )
+
+            try:
+                devices = await bhc.async_get_devices()
+            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+
+            self.async_update_reload_and_abort(
+                reconfigure_entry,
+                data_updates={
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: user_input[CONF_PASSWORD],
+                    CONF_DEVICES: await devices,
+                },
+            )
+            return await self.async_step_reconfigure_devices()
 
         return self.async_show_form(
             step_id="reconfigure", data_schema=AUTH_SCHEMA, errors=errors
+        )
+
+    async def async_step_reconfigure_devices(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle a flow initialized by the user."""
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+
+        data_schema = {
+            vol.Required(
+                device["deviceId"] + "_" + device["deviceType"], default=True
+            ): cv.boolean
+            for device in reconfigure_entry.data.get(CONF_DEVICES)
+        }
+
+        if user_input is not None:
+            return self.async_update_reload_and_abort(
+                reconfigure_entry, data_updates={CONF_DEVICES: user_input}
+            )
+
+        return self.async_show_form(
+            step_id="reconfigure_devices",
+            data_schema=vol.Schema(data_schema),
+            errors=errors,
         )

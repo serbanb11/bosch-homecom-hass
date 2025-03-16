@@ -9,7 +9,7 @@ from aiohttp.client_exceptions import ClientConnectorError, ClientError
 from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_DEVICES, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
@@ -45,6 +45,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     devices = await bhc.async_get_devices()
 
+    config_devices: dict | None = entry.data.get(CONF_DEVICES)
+    filtered_devices = [
+        device
+        for device in await devices
+        if config_devices.get(f"{device['deviceId']}_{device['deviceType']}", False)
+    ]
+
     coordinators: list[BoschComModuleCoordinator] = [
         BoschComModuleCoordinator(
             hass,
@@ -52,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             device,
             await bhc.async_get_firmware(device["deviceId"]),
         )
-        for device in await devices
+        for device in filtered_devices
     ]
 
     await asyncio.gather(

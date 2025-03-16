@@ -21,10 +21,19 @@ async def async_setup_entry(
 ) -> None:
     """Set up the BoschCom plasmacluster switches."""
     coordinators = config_entry.runtime_data
-    async_add_entities(
+    entities = [
         BoschComSwitchAirPurification(coordinator=coordinator, field="plasmacluster")
         for coordinator in coordinators
-    )
+        if next(
+            (
+                ref
+                for ref in coordinator.data.advanced_functions
+                if "airPurificationMode" in ref["id"]
+            ),
+            None,
+        )
+    ]
+    async_add_entities(entities)
 
 
 class BoschComSwitchAirPurification(CoordinatorEntity, SwitchEntity):
