@@ -85,7 +85,8 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             self.data = user_input
-            self.data[CONF_DEVICES] = await devices
+            self.data[CONF_DEVICES] = devices
+            _LOGGER.info("Devices: %s", self.data[CONF_DEVICES])
             return await self.async_step_devices()
 
         return self.async_show_form(
