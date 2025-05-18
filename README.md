@@ -7,6 +7,7 @@
 This project is an integration for Bosch HomeCom Easy enabled appliances. It is not affiliated with either Bosch or Home Assistant.
 
 ***At the moment this integration was tested only with Bosch Climate Class 6000i.***
+***Users reported that Bosch Climate Class 3000i based on Midea is not working.***
 
 </br>
 
@@ -25,7 +26,9 @@ This integration has the following features:
 Before installing the integration you need to install Bosch HomeCom Easy APP and configure your devices.
 
 ### Installation
-The easiest way, if you are using HACS, is to install it through [HACS](https://hacs.xyz/).
+The easiest way, if you are using HACS, is to install it through [HACS](https://hacs.xyz/). This integration can be added using [custom repo](https://www.hacs.xyz/docs/faq/custom_repositories/)
+URL: https://github.com/serbanb11/bosch-homecom-hass
+
 For manual installation, copy the bosch_homecom folder and all of its contents into your Home Assistant's custom_components folder. This folder is usually inside your /config folder. If you are running Hass.io, use SAMBA to copy the folder over. If you are running Home Assistant Supervised, the custom_components folder might be located at /usr/share/hassio/homeassistant. You may need to create the custom_components folder and then copy the bosch_homecom folder and all of its contents into it.
 
 A dialog box will popup asking you to input your Bosch HomeCom Easy APP username and password. 
