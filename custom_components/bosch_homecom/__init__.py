@@ -16,7 +16,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, MODEL
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
-from .homecom_alt import (
+from homecom_alt import (
     ApiError,
     AuthFailedError,
     ConnectionOptions,

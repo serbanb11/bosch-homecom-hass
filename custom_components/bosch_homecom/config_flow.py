@@ -17,7 +17,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
 from .const import CONF_DEVICES, DOMAIN
-from .homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
+from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 
 
 @dataclass

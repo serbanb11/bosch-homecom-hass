@@ -9,7 +9,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DEFAULT_UPDATE_INTERVAL, DOMAIN, MANUFACTURER
-from .homecom_alt import (
+from homecom_alt import (
     ApiError,
     AuthFailedError,
     BHCDeviceK40,
