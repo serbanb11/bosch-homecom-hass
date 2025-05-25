@@ -9,7 +9,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinator
+from .coordinator import BoschComModuleCoordinatorRac
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ async def async_setup_entry(
     entities = [
         BoschComSwitchAirPurification(coordinator=coordinator, field="plasmacluster")
         for coordinator in coordinators
+        if coordinator.data.device["deviceType"] == "rac"
         if next(
             (
                 ref
@@ -43,7 +44,7 @@ class BoschComSwitchAirPurification(CoordinatorEntity, SwitchEntity):
 
     def __init__(
         self,
-        coordinator: BoschComModuleCoordinator,
+        coordinator: BoschComModuleCoordinatorRac,
         field: str,
     ) -> None:
         """Initialize select entity."""

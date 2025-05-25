@@ -6,7 +6,6 @@ import asyncio
 import logging
 
 from aiohttp.client_exceptions import ClientConnectorError, ClientError
-from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_DEVICES, CONF_PASSWORD, CONF_USERNAME, Platform
@@ -16,11 +15,20 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, MODEL
-from .coordinator import BoschComModuleCoordinator
+from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
+from .homecom_alt import (
+    ApiError,
+    AuthFailedError,
+    ConnectionOptions,
+    HomeComAlt,
+    HomeComK40,
+    HomeComRac,
+)
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
     Platform.SELECT,
+    Platform.SENSOR,
     Platform.SWITCH,
     Platform.TEXT,
 ]
@@ -30,6 +38,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up platform from a ConfigEntry."""
+    coordinators: list[any] = []
     username: str | None = entry.data.get(CONF_USERNAME)
     password: str | None = entry.data.get(CONF_PASSWORD)
 
@@ -52,15 +61,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if config_devices.get(f"{device['deviceId']}_{device['deviceType']}", False)
     ]
 
-    coordinators: list[BoschComModuleCoordinator] = [
-        BoschComModuleCoordinator(
-            hass,
-            bhc,
-            device,
-            await bhc.async_get_firmware(device["deviceId"]),
-        )
-        for device in filtered_devices
-    ]
+    for device in filtered_devices:
+        device_id = device["deviceId"]
+        firmware = await bhc.async_get_firmware(device_id)
+
+        if device["deviceType"] == "rac":
+            coordinators.append(
+                BoschComModuleCoordinatorRac(
+                    hass,
+                    HomeComRac(websession, options, device_id),
+                    device,
+                    firmware,
+                )
+            )
+        elif device["deviceType"] == "k40":
+            coordinators.append(
+                BoschComModuleCoordinatorK40(
+                    hass,
+                    HomeComK40(websession, options, device_id),
+                    device,
+                    firmware,
+                )
+            )
 
     await asyncio.gather(
         *[

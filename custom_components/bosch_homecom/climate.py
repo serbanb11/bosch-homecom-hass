@@ -25,7 +25,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinator
+from .coordinator import BoschComModuleCoordinatorRac
 
 PARALLEL_UPDATES = 1
 
@@ -40,6 +40,7 @@ async def async_setup_entry(
     async_add_entities(
         BoschComClimate(coordinator=coordinator, field="clima")
         for coordinator in coordinators
+        if coordinator.data.device["deviceType"] == "rac"
     )
 
 
@@ -74,7 +75,7 @@ class BoschComClimate(CoordinatorEntity, ClimateEntity):
 
     def __init__(
         self,
-        coordinator: BoschComModuleCoordinator,
+        coordinator: BoschComModuleCoordinatorRac,
         field: str,
     ) -> None:
         """Initialize climate entity."""

@@ -6,7 +6,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinator
+from .coordinator import BoschComModuleCoordinatorRac
 
 
 async def async_setup_entry(
@@ -29,7 +29,7 @@ class BoschComSensorNotifications(CoordinatorEntity, TextEntity):
 
     def __init__(
         self,
-        coordinator: BoschComModuleCoordinator,
+        coordinator: BoschComModuleCoordinatorRac,
         field: str,
     ) -> None:
         """Initialize select entity."""

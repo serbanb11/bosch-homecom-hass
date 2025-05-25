@@ -9,7 +9,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinator
+from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,41 +25,99 @@ async def async_setup_entry(
     coordinators = config_entry.runtime_data
     entities = []
     for coordinator in coordinators:
-        if next(
-            (
-                ref
-                for ref in coordinator.data.stardard_functions
-                if "airFlowHorizontal" in ref["id"]
-            ),
-            None,
-        ):
-            entities.append(
-                BoschComSelectAirflowHorizontal(
-                    coordinator=coordinator, field="horizontal"
+        if coordinator.data.device["deviceType"] == "rac":
+            if next(
+                (
+                    ref
+                    for ref in coordinator.data.stardard_functions
+                    if "airFlowHorizontal" in ref["id"]
+                ),
+                None,
+            ):
+                entities.append(
+                    BoschComSelectAirflowHorizontal(
+                        coordinator=coordinator, field="horizontal"
+                    )
                 )
-            )
-        if next(
-            (
-                ref
-                for ref in coordinator.data.stardard_functions
-                if "airFlowVertical" in ref["id"]
-            ),
-            None,
-        ):
-            entities.append(
-                BoschComSelectAirflowVertical(coordinator=coordinator, field="vertical")
-            )
-        if next(
-            (
-                ref
-                for ref in coordinator.data.switch_programs
-                if "activeProgram" in ref["id"]
-            ),
-            None,
-        ):
-            entities.append(
-                BoschComSelectProgram(coordinator=coordinator, field="program")
-            )
+            if next(
+                (
+                    ref
+                    for ref in coordinator.data.stardard_functions
+                    if "airFlowVertical" in ref["id"]
+                ),
+                None,
+            ):
+                entities.append(
+                    BoschComSelectAirflowVertical(
+                        coordinator=coordinator, field="vertical"
+                    )
+                )
+            if next(
+                (
+                    ref
+                    for ref in coordinator.data.switch_programs
+                    if "activeProgram" in ref["id"]
+                ),
+                None,
+            ):
+                entities.append(
+                    BoschComSelectProgram(coordinator=coordinator, field="program")
+                )
+        if coordinator.data.device["deviceType"] == "k40":
+            for entry in coordinator.data.dhw_circuits:
+                dhw_id = entry["id"].split("/")[-1]
+                if entry["operationMode"]:
+                    entities.append(
+                        BoschComSelectDhwOperationMode(
+                            coordinator=coordinator,
+                            field=dhw_id,
+                            allowedValues=entry["operationMode"]["allowedValues"],
+                        )
+                    )
+                if entry["currentTemperatureLevel"]:
+                    entities.append(
+                        BoschComSelectDhwCurrentTemp(
+                            coordinator=coordinator,
+                            field=dhw_id,
+                            allowedValues=entry["currentTemperatureLevel"][
+                                "allowedValues"
+                            ],
+                        )
+                    )
+            for entry in coordinator.data.heating_circuits:
+                hc_id = entry["id"].split("/")[-1]
+                if entry["currentSuWiMode"]:
+                    entities.append(
+                        BoschComSelectHcSuwiMode(
+                            coordinator=coordinator,
+                            field=hc_id,
+                            allowedValues=entry["currentSuWiMode"]["allowedValues"],
+                        )
+                    )
+                if entry["heatCoolMode"]:
+                    entities.append(
+                        BoschComSelectHcHeatcoolMode(
+                            coordinator=coordinator,
+                            field=hc_id,
+                            allowedValues=entry["heatCoolMode"]["allowedValues"],
+                        )
+                    )
+            if coordinator.data.holiday_mode:
+                entities.append(
+                    BoschComSelectHolidayMode(
+                        coordinator=coordinator,
+                        field="holiday_mode",
+                        allowedValues=coordinator.data.holiday_mode["allowedValues"],
+                    )
+                )
+            if coordinator.data.away_mode:
+                entities.append(
+                    BoschComSelectAwayMode(
+                        coordinator=coordinator,
+                        field="away_mode",
+                        allowedValues=coordinator.data.away_mode["allowedValues"],
+                    )
+                )
     async_add_entities(entities)
 
 
@@ -70,7 +128,7 @@ class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
 
     def __init__(
         self,
-        coordinator: BoschComModuleCoordinator,
+        coordinator: BoschComModuleCoordinatorRac,
         field: str,
     ) -> None:
         """Initialize select entity."""
@@ -138,7 +196,7 @@ class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
 
     def __init__(
         self,
-        coordinator: BoschComModuleCoordinator,
+        coordinator: BoschComModuleCoordinatorRac,
         field: str,
     ) -> None:
         """Initialize select entity."""
@@ -206,7 +264,7 @@ class BoschComSelectProgram(CoordinatorEntity, SelectEntity):
 
     def __init__(
         self,
-        coordinator: BoschComModuleCoordinator,
+        coordinator: BoschComModuleCoordinatorRac,
         field: str,
     ) -> None:
         """Initialize select entity."""
@@ -289,4 +347,341 @@ class BoschComSelectProgram(CoordinatorEntity, SelectEntity):
             None,
         )
         self._attr_current_option = program["value"]
+        self.async_write_ha_state()
+
+
+class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
+    """Representation of dhw operation mode select."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "dhw_operation_mode"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_options = allowedValues
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option."""
+        await self._coordinator.bhc.async_put_dhw_operation_mode(
+            self._coordinator.data.device["deviceId"], self._attr_name, option
+        )
+
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Get the current status of the select entity from device_status."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.dhw_circuits:
+            if entry.get("id") == "/dhwCircuits/" + self._attr_name:
+                operationMode = safe_get(entry["operationMode"], "value")
+
+        return operationMode
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.dhw_circuits:
+            if entry.get("id") == "/dhwCircuits/" + self._attr_name:
+                operationMode = safe_get(entry["operationMode"], "value")
+
+        self._attr_current_option = operationMode
+        self.async_write_ha_state()
+
+
+class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
+    """Representation of dhw current temp select."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "dhw_current_temp"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}-temp"
+        self._attr_name = field + "_temp"
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_options = allowedValues
+        self.field = field
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option."""
+        await self._coordinator.bhc.async_put_dhw_current_temp_level(
+            self._coordinator.data.device["deviceId"], self.field, option
+        )
+
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Get the current status of the select entity from device_status."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.dhw_circuits:
+            if entry.get("id") == "/dhwCircuits/" + self.field:
+                currentTemperatureLevel = safe_get(
+                    entry["currentTemperatureLevel"], "value"
+                )
+
+        return currentTemperatureLevel
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.dhw_circuits:
+            if entry.get("id") == "/dhwCircuits/" + self.field:
+                currentTemperatureLevel = safe_get(
+                    entry["currentTemperatureLevel"], "value"
+                )
+
+        self._attr_current_option = currentTemperatureLevel
+        self.async_write_ha_state()
+
+
+class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
+    """Representation of hc summer winter mode select."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "hc_suwi_mode"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}-suwi"
+        self._attr_name = field + "_suwi"
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_options = allowedValues
+        self.field = field
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option."""
+        await self._coordinator.bhc.async_put_hc_suwi_mode(
+            self._coordinator.data.device["deviceId"], self.field, option
+        )
+
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Get the current status of the select entity from device_status."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.heating_circuits:
+            if entry.get("id") == "/heatingCircuits/" + self.field:
+                currentSuWiMode = safe_get(entry["currentSuWiMode"], "value")
+
+        return currentSuWiMode
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.heating_circuits:
+            if entry.get("id") == "/heatingCircuits/" + self.field:
+                currentSuWiMode = safe_get(entry["currentSuWiMode"], "value")
+
+        self._attr_current_option = currentSuWiMode
+        self.async_write_ha_state()
+
+
+class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
+    """Representation of hc heat cool mode select."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "hc_heatcool_mode"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_options = allowedValues
+        self.field = field
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option."""
+        await self._coordinator.bhc.async_put_hc_heatcool_mode(
+            self._coordinator.data.device["deviceId"], self.field, option
+        )
+
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Get the current status of the select entity from device_status."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.heating_circuits:
+            if entry.get("id") == "/heatingCircuits/" + self.field:
+                heatCoolMode = safe_get(entry["heatCoolMode"], "value")
+
+        return heatCoolMode
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+
+        def safe_get(data, key, default="unknown"):
+            """Return unknown if null."""
+            value = data.get(key)
+            return value if value is not None else default
+
+        for entry in self.coordinator.data.heating_circuits:
+            if entry.get("id") == "/heatingCircuits/" + self.field:
+                heatCoolMode = safe_get(entry["heatCoolMode"], "value")
+
+        self._attr_current_option = heatCoolMode
+        self.async_write_ha_state()
+
+
+class BoschComSelectHolidayMode(CoordinatorEntity, SelectEntity):
+    """Representation of holiday mode select."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "holiday_mode"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_options = allowedValues
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option."""
+        await self._coordinator.bhc.async_put_holiday_mode(
+            self._coordinator.data.device["deviceId"], option
+        )
+
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Get the current status of the select entity from device_status."""
+
+        return self.coordinator.data.holiday_mode["values"]
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+
+        self._attr_current_option = self.coordinator.data.holiday_mode["values"]
+        self.async_write_ha_state()
+
+
+class BoschComSelectAwayMode(CoordinatorEntity, SelectEntity):
+    """Representation of away mode select."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "away_mode"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_options = allowedValues
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option."""
+        await self._coordinator.bhc.async_put_away_mode(
+            self._coordinator.data.device["deviceId"], option
+        )
+
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Get the current status of the select entity from device_status."""
+
+        return self.coordinator.data.away_mode["value"]
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+
+        self._attr_current_option = self.coordinator.data.away_mode["value"]
         self.async_write_ha_state()
