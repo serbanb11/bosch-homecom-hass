@@ -1,0 +1,59 @@
+set_dhw_tempreture:
+  name: Set DHW Temperature
+  description: Set the temperature of dhw for a specific level
+  target:
+    entity:
+      integration: bosch_homecom
+  fields:
+    level:
+      name: level
+      description: The tempreture level to set temperature for
+      required: true
+      default: "eco"
+      example: "high"
+      selector:
+        select:
+          options:
+            - "eco"
+            - "high"
+            - "low"
+    temperature:
+      name: temperature
+      description: The tempreture to set to level of dhw circuit
+      required: true
+      example: 44.0
+      selector:
+        number:
+          min: 30
+          max: 53
+          step: 0.1
+          unit_of_measurement: "°C"
+set_dhw_extrahot_water:
+  name: Set DHW extra hot water
+  description: Start or stop the extra hot water mode for dhw circuit
+  target:
+    entity:
+      integration: bosch_homecom
+  fields:
+    mode:
+      name: mode
+      description: Start or stop the extra hot water mode for dhw circuit
+      required: true
+      default: "start"
+      example: "stop"
+      selector:
+        select:
+          options:
+            - "start"
+            - "stop"
+    duration:
+      name: duration
+      description: The duration in minutes for the extra hot water mode
+      required: false
+      default: 60
+      example: 60
+      selector:
+        number:
+          min: 60
+          max: 2880
+          unit_of_measurement: "minutes"

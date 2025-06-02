@@ -9,7 +9,7 @@ from aiohttp.client_exceptions import ClientConnectorError, ClientError
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_DEVICES, CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -30,7 +30,6 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,
-    Platform.TEXT,
 ]
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,7 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     firmware,
                 )
             )
-        elif device["deviceType"] == "k40":
+        elif device["deviceType"] == "k40" or device["deviceType"] == "k30":
             coordinators.append(
                 BoschComModuleCoordinatorK40(
                     hass,
@@ -105,6 +104,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     entry.runtime_data = coordinators
+    hass.data[DOMAIN] = {"coordinators": coordinators}
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -113,3 +113,71 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Add custom action."""
+
+    async def set_dhw_tempreture_service(call: ServiceCall) -> None:
+        """Service to change temperature."""
+        for entity in call.data["entity_id"]:
+            device_id = entity.split("_")[2]
+            coordinator = next(
+                (
+                    c
+                    for c in hass.data.get(DOMAIN).get("coordinators")
+                    if c.device["deviceId"] == device_id
+                ),
+                None,
+            )
+            if not coordinator:
+                _LOGGER.error("Coordinator not found for entity %s", entity)
+                return
+            await coordinator.bhc.async_set_dhw_temp_level(
+                device_id,
+                entity.split("_")[3],
+                call.data.get("level"),
+                call.data.get("temperature"),
+            )
+            await coordinator.async_request_refresh()
+
+    # Register our service with Home Assistant.
+    hass.services.async_register(
+        DOMAIN, "set_dhw_tempreture", set_dhw_tempreture_service
+    )
+
+    async def set_dhw_extrahot_water_service(call: ServiceCall) -> None:
+        """Service to control extrahot water service."""
+        for entity in call.data["entity_id"]:
+            device_id = entity.split("_")[2]
+            coordinator = next(
+                (
+                    c
+                    for c in hass.data.get(DOMAIN).get("coordinators")
+                    if c.device["deviceId"] == device_id
+                ),
+                None,
+            )
+            if not coordinator:
+                _LOGGER.error("Coordinator not found for entity %s", entity)
+                return
+            if call.data.get("mode") == "start":
+                await coordinator.bhc.async_set_dhw_charge_duration(
+                    device_id,
+                    entity.split("_")[3],
+                    call.data.get("duration"),
+                )
+            await coordinator.bhc.async_set_dhw_charge(
+                device_id,
+                entity.split("_")[3],
+                call.data.get("mode"),
+            )
+            await coordinator.async_request_refresh()
+
+    # Register our service with Home Assistant.
+    hass.services.async_register(
+        DOMAIN, "set_dhw_extrahot_water", set_dhw_extrahot_water_service
+    )
+
+    # Return boolean to indicate that initialization was successfully.
+    return True
