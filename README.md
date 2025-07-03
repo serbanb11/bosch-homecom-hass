@@ -6,9 +6,15 @@
 
 This project is an integration for Bosch HomeCom Easy enabled appliances. It is not affiliated with either Bosch or Home Assistant.
 
-***At the moment this integration was tested only with Bosch Climate Class 6000i. Added partial support for k40***
+## Supported Devices
 
-***Users reported that Bosch Climate Class 3000i based on Midea is not working.***
+***At the moment this integration was tested only with:***
+- **Bosch Climate Class 6000i**
+- **Bosch Climate Class 3000i** (that are *not* based on Midea)
+- **K40**
+- **K30**
+
+***Users reported that Bosch Climate Class 3000i and 7000i based on Midea are not working.***
 
 </br>
 
