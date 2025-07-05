@@ -11,6 +11,7 @@ from homeassistant.components.climate import (
     FAN_HIGH,
     FAN_LOW,
     FAN_MEDIUM,
+    PRESET_AWAY,
     PRESET_BOOST,
     PRESET_ECO,
     PRESET_NONE,
@@ -19,15 +20,20 @@ from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
+    HVACAction,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinatorRac
+from .coordinator import BoschComModuleCoordinatorRac, BoschComModuleCoordinatorK40
+
+import logging
 
 PARALLEL_UPDATES = 1
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -38,13 +44,18 @@ async def async_setup_entry(
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
     async_add_entities(
-        BoschComClimate(coordinator=coordinator, field="clima")
+        BoschComRacClimate(coordinator=coordinator, field="clima")
         for coordinator in coordinators
         if coordinator.data.device["deviceType"] == "rac"
     )
+    async_add_entities(
+        BoschComK40Climate(coordinator=coordinator, field="clima")
+        for coordinator in coordinators
+        if coordinator.data.device["deviceType"] in ["k30", "k40"]
+    )
 
 
-class BoschComClimate(CoordinatorEntity, ClimateEntity):
+class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom climate entity."""
 
     _attr_has_entity_name = True
@@ -278,3 +289,113 @@ class BoschComClimate(CoordinatorEntity, ClimateEntity):
                         self._attr_preset_mode = PRESET_ECO
                 case _:
                     pass
+
+class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
+    """Representation of a BoschComK40 climate entity."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_hvac_modes = [
+        HVACMode.OFF,
+        HVACMode.AUTO,
+    ]
+    _attr_preset_modes = [PRESET_NONE, PRESET_AWAY]
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.PRESET_MODE
+    )
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+    ) -> None:
+        """Initialize climate entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "ac"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}"
+        self._attr_name = field
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+
+        # Call this in __init__ so data is populated right away, since it's
+        # already available in the coordinator data.
+        self.set_attr()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.set_attr()
+        self.async_write_ha_state()
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set new target temperature."""
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
+            return
+
+        heating_circuits = await self.coordinator.bhc.async_get_hc(self._attr_unique_id)
+        references = heating_circuits.get("references", [])
+        if not references:
+            return None
+
+        for ref in references:
+            hc_id = ref["id"].split("/")[-1]
+            await self.coordinator.bhc.async_set_hc_manual_room_setpoint(
+                self._attr_unique_id, hc_id, temperature
+            )
+
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_preset_mode(self, preset_mode) -> None:
+        """Set preset mode."""
+        if preset_mode == PRESET_NONE:
+            await self.coordinator.bhc.async_put_away_mode(self._attr_unique_id, "off")
+        elif preset_mode == PRESET_AWAY:
+            await self.coordinator.bhc.async_put_away_mode(self._attr_unique_id, "on")
+        
+        await self.coordinator.async_request_refresh()
+
+    def _set_heating_circuits(self, heating_circuits: list[dict]) -> None:
+        """Populate heating circuits."""
+
+        for ref in heating_circuits:
+            for key in ref.keys():
+                match key:
+                    case "operationMode":
+                        match ref[key]["value"]:
+                            case "auto":
+                                self._attr_hvac_mode = HVACMode.AUTO
+                            case "off":
+                                self._attr_hvac_mode = HVACMode.OFF
+                            case "manual":
+                                # Not sure what to do here
+                                self._attr_hvac_mode = HVACMode.AUTO
+                    case "currentSuWiMode":
+                        match ref[key]["value"]:
+                            case "off":
+                                self._attr_hvac_action = HVACAction.IDLE
+                            case "forced":
+                                self._attr_hvac_action = HVACAction.HEATING
+                            case "cooling":
+                                self._attr_hvac_action = HVACAction.COOLING
+                    case "currentRoomSetpoint":
+                        self._attr_target_temperature = ref[key]["value"]                        
+                    case "roomTemp":
+                        self._attr_current_temperature = ref[key]["value"]
+                    case "actualHumidity":
+                        self._attr_current_humidity = ref[key]["value"]
+
+    def set_attr(self) -> None:
+        """Populate attributes with data from the coordinator."""
+        # self._set_standard_functions(self.coordinator.data.stardard_functions)
+        self._set_heating_circuits(self.coordinator.data.heating_circuits)
+
+        match self.coordinator.data.away_mode.get("value"):
+            case "off":
+                self._attr_preset_mode = PRESET_NONE
+            case "on":
+                self._attr_preset_mode = PRESET_AWAY
+            case _:
+                self._attr_preset_mode = PRESET_NONE

@@ -63,7 +63,7 @@ async def async_setup_entry(
                 entities.append(
                     BoschComSelectProgram(coordinator=coordinator, field="program")
                 )
-        if coordinator.data.device["deviceType"] == "k40":
+        if coordinator.data.device["deviceType"] in ["k30", "k40"]:
             for entry in coordinator.data.dhw_circuits:
                 dhw_id = entry["id"].split("/")[-1]
                 if entry["operationMode"]:
