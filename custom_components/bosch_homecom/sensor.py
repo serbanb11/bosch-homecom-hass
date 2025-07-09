@@ -5,6 +5,7 @@ import logging
 
 from homeassistant import config_entries, core
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor.const import SensorDeviceClass
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -58,15 +59,19 @@ async def async_setup_entry(
                         coordinator=coordinator, config_entry=config_entry, field=hc_id
                     )
                 )
-            entities.append(
+            entities.extend([
                 BoschComSensorHs(
                     coordinator=coordinator,
                     config_entry=config_entry,
                     field="heat_source",
-                )
+                ),            
+                BoschComSensorOutdoorTemp(
+                    coordinator=coordinator,
+                    config_entry=config_entry,
+                    field="outdoor_temp",
+                )]
             )
     async_add_entities(entities)
-
 
 class BoschComSensorBase(CoordinatorEntity, SensorEntity):
     """Boshcom sensor base class."""
@@ -195,16 +200,10 @@ class BoschComSensorDhw(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorDhw operationMode."""
-
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                actualTemp_value = safe_get(entry["actualTemp"], "value")
-                actualTemp_unit = safe_get(entry["actualTemp"], "unitOfMeasure")
+                actualTemp_value = entry["actualTemp"].get("value", "unknown")
+                actualTemp_unit = entry["actualTemp"].get("unitOfMeasure", "unknown")
                 return str(actualTemp_value) + actualTemp_unit
         return "unknown"
 
@@ -212,24 +211,13 @@ class BoschComSensorDhw(BoschComSensorBase):
     def extra_state_attributes(self):
         """Return attributes."""
 
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                operationMode_value = safe_get(entry["operationMode"], "value")
-                charge_value = safe_get(entry["charge"], "value")
-                chargeRemainingTime_value = safe_get(
-                    entry["chargeRemainingTime"], "value"
-                )
-                singleChargeSetpoint_value = safe_get(
-                    entry["singleChargeSetpoint"], "value"
-                )
-                currentTemperatureLevel_value = safe_get(
-                    entry["currentTemperatureLevel"], "value"
-                )
+                operationMode_value = entry["operationMode"].get("value", "unknown")
+                charge_value = entry["charge"].get("value", "unknown")
+                chargeRemainingTime_value = entry["chargeRemainingTime"].get("value", "unknown")
+                singleChargeSetpoint_value = entry["singleChargeSetpoint"].get("value", "unknown")
+                currentTemperatureLevel_value = entry["currentTemperatureLevel"].get("value", "unknown")
 
                 result = {
                     "operationMode": operationMode_value,
@@ -281,38 +269,82 @@ class BoschComSensorHc(BoschComSensorBase):
     def state(self):
         """Return BoschComSensorHc operationMode."""
 
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                return safe_get(entry["operationMode"], "value")
+                return entry["operationMode"].get("value", "unknown")
+
         return "unknown"
 
     @property
     def extra_state_attributes(self):
         """Return attributes."""
 
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                currentSuWiMode_value = safe_get(entry["currentSuWiMode"], "value")
-                heatCoolMode_value = safe_get(entry["heatCoolMode"], "value")
+                currentSuWiMode_value = entry["currentSuWiMode"].get("value", "unknown")
+                heatCoolMode_value = entry["heatCoolMode"].get("value", "unknown")
+                roomTemp_value = entry["roomTemp"].get("value", "unknown")
+                actualHumidity_value = entry["actualHumidity"].get("value", "unknown")
+                manualRoomSetpoint_value = entry["manualRoomSetpoint"].get("value", "unknown")
+                currentRoomSetpoint_value = entry["currentRoomSetpoint"].get("value", "unknown")
+                coolingRoomTempSetpoint_value = entry["coolingRoomTempSetpoint"].get("value", "unknown")
 
                 return {
                     "currentSuWiMode": currentSuWiMode_value,
                     "heatCoolMode": heatCoolMode_value,
+                    "roomTemp": roomTemp_value,
+                    "actualHumidity": actualHumidity_value,
+                    "manualRoomSetpoint": manualRoomSetpoint_value,
+                    "currentRoomSetpoint": currentRoomSetpoint_value,
+                    "coolingRoomTempSetpoint": coolingRoomTempSetpoint_value,
                 }
+
         return {
-            "currentSuWiMode": "unknonw",
-            "heatCoolMode": "unknonw",
+            "currentSuWiMode": "unknown",
+            "heatCoolMode": "unknown",
+            "roomTemp": "unknown",
+            "actualHumidity": "unknown",
+            "manualRoomSetpoint": "unknown",
+            "currentRoomSetpoint": "unknown",
+            "coolingRoomTempSetpoint": "unknown",
         }
+
+class BoschComSensorOutdoorTemp(BoschComSensorBase):
+    """BoschComSensorOutdoorTemp sensor."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = SensorDeviceClass.TEMPERATURE
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name=field + "_sensor",
+            unique_id=f"{coordinator.unique_id}-{field}-sensor",
+            icon="mdi:sun-thermometer",
+        )
+        self._attr_translation_key = "OutdoorTemp"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field + "_sensor"
+        self._attr_should_poll = False
+        self.field = field
+
+        _LOGGER.debug(
+            "Init BoschComSensorOutdoorTemp: name=%s, unique_id=%s",
+            self._attr_name,
+            self._attr_unique_id,
+        )
+
+    @property
+    def state(self):
+        """Return BoschComSensorHc outdoorTemp."""
+        return self.coordinator.data.outdoor_temp.get("value", "unknown")
 
 
 class BoschComSensorHs(BoschComSensorBase):
@@ -348,24 +380,19 @@ class BoschComSensorHs(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHS type."""
-
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
-        return safe_get(self.coordinator.data.hs_pump_type, "value")
+        return self.coordinator.data.hs_pump_type.get("value", "unknown")
 
     @property
     def extra_state_attributes(self):
         """Return attributes."""
+        consumption = self.coordinator.data.consumption.get("values", "unknown")
 
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
-        consumption = safe_get(self.coordinator.data.consumption, "values")
+        if not len(consumption):
+            return {
+                "outputProduced": consumption,
+                "eheater": consumption,
+                "compressor": consumption,
+            }
 
         return {
             "outputProduced": consumption[0]["outputProduced"],
