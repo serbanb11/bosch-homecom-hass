@@ -10,6 +10,7 @@ This project is an integration for Bosch HomeCom Easy enabled appliances. It is 
 
 ***At the moment this integration was tested only with:***
 - **Bosch Climate Class 6000i**
+- **Bosch Climate Class 5000i**
 - **Bosch Climate Class 3000i** (that are *not* based on Midea)
 - **K40**
 - **K30**
