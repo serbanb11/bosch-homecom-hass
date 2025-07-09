@@ -140,3 +140,7 @@ cards:
           (selected, state, entity) => this.call_service('select',
           'select_option', { entity_id: entity.entity_id, option: selected })
 ```
+
+## Acknowledgements
+
+Special thanks to [RonNabuurs](https://github.com/RonNabuurs) for his valuable work on integrating **k30** into this project.
