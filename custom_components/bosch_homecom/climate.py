@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant import config_entries
@@ -19,17 +20,15 @@ from homeassistant.components.climate import (
     SWING_ON,
     ClimateEntity,
     ClimateEntityFeature,
-    HVACMode,
     HVACAction,
+    HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinatorRac, BoschComModuleCoordinatorK40
-
-import logging
+from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
 
 PARALLEL_UPDATES = 1
 
@@ -302,8 +301,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
     ]
     _attr_preset_modes = [PRESET_NONE, PRESET_AWAY]
     _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.PRESET_MODE
+        ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
 
     def __init__(
@@ -338,7 +336,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         heating_circuits = await self.coordinator.bhc.async_get_hc(self._attr_unique_id)
         references = heating_circuits.get("references", [])
         if not references:
-            return None
+            return
 
         for ref in references:
             hc_id = ref["id"].split("/")[-1]
@@ -354,14 +352,19 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
             await self.coordinator.bhc.async_put_away_mode(self._attr_unique_id, "off")
         elif preset_mode == PRESET_AWAY:
             await self.coordinator.bhc.async_put_away_mode(self._attr_unique_id, "on")
-        
+
         await self.coordinator.async_request_refresh()
 
     def _set_heating_circuits(self, heating_circuits: list[dict]) -> None:
         """Populate heating circuits."""
 
         for ref in heating_circuits:
-            for key in ref.keys():
+            for key in ref:
+                val = ref[key]
+                if not isinstance(val, dict):
+                    continue
+                if val.get("value") is None:
+                    continue
                 match key:
                     case "operationMode":
                         match ref[key]["value"]:
@@ -381,7 +384,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                             case "cooling":
                                 self._attr_hvac_action = HVACAction.COOLING
                     case "currentRoomSetpoint":
-                        self._attr_target_temperature = ref[key]["value"]                        
+                        self._attr_target_temperature = ref[key]["value"]
                     case "roomTemp":
                         self._attr_current_temperature = ref[key]["value"]
                     case "actualHumidity":

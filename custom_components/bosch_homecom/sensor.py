@@ -59,19 +59,22 @@ async def async_setup_entry(
                         coordinator=coordinator, config_entry=config_entry, field=hc_id
                     )
                 )
-            entities.extend([
-                BoschComSensorHs(
-                    coordinator=coordinator,
-                    config_entry=config_entry,
-                    field="heat_source",
-                ),            
-                BoschComSensorOutdoorTemp(
-                    coordinator=coordinator,
-                    config_entry=config_entry,
-                    field="outdoor_temp",
-                )]
+            entities.extend(
+                [
+                    BoschComSensorHs(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field="heat_source",
+                    ),
+                    BoschComSensorOutdoorTemp(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field="outdoor_temp",
+                    ),
+                ]
             )
     async_add_entities(entities)
+
 
 class BoschComSensorBase(CoordinatorEntity, SensorEntity):
     """Boshcom sensor base class."""
@@ -202,8 +205,12 @@ class BoschComSensorDhw(BoschComSensorBase):
         """Return BoschComSensorDhw operationMode."""
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                actualTemp_value = entry["actualTemp"].get("value", "unknown")
-                actualTemp_unit = entry["actualTemp"].get("unitOfMeasure", "unknown")
+                actualTemp_value = (entry.get("actualTemp") or {}).get(
+                    "value", "unknown"
+                )
+                actualTemp_unit = (entry.get("actualTemp") or {}).get(
+                    "unitOfMeasure", "unknown"
+                )
                 return str(actualTemp_value) + actualTemp_unit
         return "unknown"
 
@@ -213,11 +220,19 @@ class BoschComSensorDhw(BoschComSensorBase):
 
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                operationMode_value = entry["operationMode"].get("value", "unknown")
-                charge_value = entry["charge"].get("value", "unknown")
-                chargeRemainingTime_value = entry["chargeRemainingTime"].get("value", "unknown")
-                singleChargeSetpoint_value = entry["singleChargeSetpoint"].get("value", "unknown")
-                currentTemperatureLevel_value = entry["currentTemperatureLevel"].get("value", "unknown")
+                operationMode_value = (entry.get("operationMode") or {}).get(
+                    "value", "unknown"
+                )
+                charge_value = (entry.get("charge") or {}).get("value", "unknown")
+                chargeRemainingTime_value = (
+                    entry.get("chargeRemainingTime") or {}
+                ).get("value", "unknown")
+                singleChargeSetpoint_value = (
+                    entry.get("singleChargeSetpoint") or {}
+                ).get("value", "unknown")
+                currentTemperatureLevel_value = (
+                    entry.get("currentTemperatureLevel") or {}
+                ).get("value", "unknown")
 
                 result = {
                     "operationMode": operationMode_value,
@@ -227,7 +242,7 @@ class BoschComSensorDhw(BoschComSensorBase):
                     "singleChargeSetpoint": singleChargeSetpoint_value,
                 }
 
-                for item in entry["tempLevel"]:
+                for item in entry.get("tempLevel") or {}:
                     result[item] = entry["tempLevel"][item]["value"]
 
                 return result
@@ -271,7 +286,7 @@ class BoschComSensorHc(BoschComSensorBase):
 
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                return entry["operationMode"].get("value", "unknown")
+                return (entry.get("operationMode") or {}).get("value", "unknown")
 
         return "unknown"
 
@@ -281,13 +296,25 @@ class BoschComSensorHc(BoschComSensorBase):
 
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                currentSuWiMode_value = entry["currentSuWiMode"].get("value", "unknown")
-                heatCoolMode_value = entry["heatCoolMode"].get("value", "unknown")
-                roomTemp_value = entry["roomTemp"].get("value", "unknown")
-                actualHumidity_value = entry["actualHumidity"].get("value", "unknown")
-                manualRoomSetpoint_value = entry["manualRoomSetpoint"].get("value", "unknown")
-                currentRoomSetpoint_value = entry["currentRoomSetpoint"].get("value", "unknown")
-                coolingRoomTempSetpoint_value = entry["coolingRoomTempSetpoint"].get("value", "unknown")
+                currentSuWiMode_value = (entry.get("currentSuWiMode") or {}).get(
+                    "value", "unknown"
+                )
+                heatCoolMode_value = (entry.get("heatCoolMode") or {}).get(
+                    "value", "unknown"
+                )
+                roomTemp_value = (entry.get("roomTemp") or {}).get("value", "unknown")
+                actualHumidity_value = (entry.get("actualHumidity") or {}).get(
+                    "value", "unknown"
+                )
+                manualRoomSetpoint_value = (entry.get("manualRoomSetpoint") or {}).get(
+                    "value", "unknown"
+                )
+                currentRoomSetpoint_value = (
+                    entry.get("currentRoomSetpoint") or {}
+                ).get("value", "unknown")
+                coolingRoomTempSetpoint_value = (
+                    entry.get("coolingRoomTempSetpoint") or {}
+                ).get("value", "unknown")
 
                 return {
                     "currentSuWiMode": currentSuWiMode_value,
@@ -308,6 +335,7 @@ class BoschComSensorHc(BoschComSensorBase):
             "currentRoomSetpoint": "unknown",
             "coolingRoomTempSetpoint": "unknown",
         }
+
 
 class BoschComSensorOutdoorTemp(BoschComSensorBase):
     """BoschComSensorOutdoorTemp sensor."""
@@ -344,7 +372,9 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHc outdoorTemp."""
-        return self.coordinator.data.outdoor_temp.get("value", "unknown")
+        return str(
+            self.coordinator.data.outdoor_temp.get("value", "unknown")
+        ) + self.coordinator.data.outdoor_temp.get("unitOfMeasure", "unknown")
 
 
 class BoschComSensorHs(BoschComSensorBase):
@@ -380,12 +410,12 @@ class BoschComSensorHs(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHS type."""
-        return self.coordinator.data.hs_pump_type.get("value", "unknown")
+        return (self.coordinator.data.hs_pump_type or {}).get("value", "unknown")
 
     @property
     def extra_state_attributes(self):
         """Return attributes."""
-        consumption = self.coordinator.data.consumption.get("values", "unknown")
+        consumption = (self.coordinator.data.consumption or {}).get("values", "unknown")
 
         if not len(consumption):
             return {
