@@ -1,0 +1,91 @@
+from homeassistant import config_entries
+from homeassistant.const import UnitOfTemperature
+from homeassistant.components.water_heater import WaterHeaterEntity, WaterHeaterEntityFeature
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .coordinator import BoschComModuleCoordinatorK40
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: config_entries.ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the BoschCom devices."""
+    coordinators = config_entry.runtime_data
+    async_add_entities(
+        BoschComK40WaterHeater(coordinator=coordinator, field="waterheater")
+        for coordinator in coordinators
+        if coordinator.data.device["deviceType"] in ["k30", "k40"]
+    )
+
+class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
+    """Representation of a BoschComK40 water heater entity."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_supported_features = (
+        WaterHeaterEntityFeature.OPERATION_MODE
+    )
+    _attr_operation_list = ["Eco+", "Eco", "Comfort"]
+
+    _operation_map = {
+        "Eco+": "eco",
+        "Eco": "low",
+        "Comfort": "high",
+    }
+    _ioperation_map = {}
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+    ) -> None:
+        """Initialize water heater entity."""
+        super().__init__(coordinator)
+        # self._attr_translation_key = "ac"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}"
+        self._attr_name = field
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._ioperation_map = {v: k for k, v in self._operation_map.items()}
+
+        # Call this in __init__ so data is populated right away, since it's
+        # already available in the coordinator data.
+        self.set_attr()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.set_attr()
+        self.async_write_ha_state()
+
+    
+    async def async_set_operation_mode(self, operation_mode: str) -> None:
+        """Set new target operation mode."""
+        for ref in self.coordinator.data.dhw_circuits:
+            dhw_id = ref["id"].split("/")[-1]
+            await self.coordinator.bhc.async_put_dhw_operation_mode(
+                self._attr_unique_id, dhw_id, self._operation_map[operation_mode]
+            )
+        await self.coordinator.async_request_refresh()
+
+
+    def _set_domestic_hot_water_circuits(self, domestic_hot_water_circuits: list[dict]) -> None:
+        """Populate heating circuits."""
+
+        for ref in domestic_hot_water_circuits:
+            for key in ref.keys():
+                match key:
+                    case "operationMode":
+                        self._attr_current_operation = self._ioperation_map[ref[key]["value"]]
+                    case "actualTemp":
+                        self._attr_current_temperature = ref[key]["value"]
+
+    def set_attr(self) -> None:
+        """Populate attributes with data from the coordinator."""
+        self._set_domestic_hot_water_circuits(self.coordinator.data.dhw_circuits)
