@@ -108,10 +108,9 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
             notifications=data.notifications,
             holiday_mode=data.holiday_mode,
             away_mode=data.away_mode,
-            consumption=data.consumption,
             power_limitation=data.power_limitation,
             outdoor_temp=data.outdoor_temp,
-            hs_pump_type=data.hs_pump_type,
+            heat_sources=data.heat_sources,
             dhw_circuits=data.dhw_circuits,
             heating_circuits=data.heating_circuits,
         )

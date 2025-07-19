@@ -1,6 +1,11 @@
+"""Bosch HomeCom Custom Component."""
+
 from homeassistant import config_entries
+from homeassistant.components.water_heater import (
+    WaterHeaterEntity,
+    WaterHeaterEntityFeature,
+)
 from homeassistant.const import UnitOfTemperature
-from homeassistant.components.water_heater import WaterHeaterEntity, WaterHeaterEntityFeature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -21,21 +26,21 @@ async def async_setup_entry(
         if coordinator.data.device["deviceType"] in ["k30", "k40"]
     )
 
+
 class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     """Representation of a BoschComK40 water heater entity."""
 
     _attr_has_entity_name = True
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_supported_features = (
-        WaterHeaterEntityFeature.OPERATION_MODE
-    )
-    _attr_operation_list = ["Eco+", "Eco", "Comfort"]
+    _attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
+    _attr_operation_list = ["Eco+", "Eco", "Comfort", "Program"]
 
     _operation_map = {
         "Eco+": "eco",
         "Eco": "low",
         "Comfort": "high",
+        "Program": "ownprogram",
     }
     _ioperation_map = {}
 
@@ -64,7 +69,6 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         self.set_attr()
         self.async_write_ha_state()
 
-    
     async def async_set_operation_mode(self, operation_mode: str) -> None:
         """Set new target operation mode."""
         for ref in self.coordinator.data.dhw_circuits:
@@ -74,15 +78,18 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             )
         await self.coordinator.async_request_refresh()
 
-
-    def _set_domestic_hot_water_circuits(self, domestic_hot_water_circuits: list[dict]) -> None:
+    def _set_domestic_hot_water_circuits(
+        self, domestic_hot_water_circuits: list[dict]
+    ) -> None:
         """Populate heating circuits."""
 
         for ref in domestic_hot_water_circuits:
-            for key in ref.keys():
+            for key in ref:
                 match key:
                     case "operationMode":
-                        self._attr_current_operation = self._ioperation_map[ref[key]["value"]]
+                        self._attr_current_operation = self._ioperation_map[
+                            ref[key]["value"]
+                        ]
                     case "actualTemp":
                         self._attr_current_temperature = ref[key]["value"]
 

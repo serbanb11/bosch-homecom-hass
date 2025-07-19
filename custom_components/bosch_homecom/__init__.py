@@ -9,7 +9,12 @@ from aiohttp.client_exceptions import ClientConnectorError, ClientError
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_DEVICES, CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -178,6 +183,36 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register our service with Home Assistant.
     hass.services.async_register(
         DOMAIN, "set_dhw_extrahot_water", set_dhw_extrahot_water_service
+    )
+
+    async def get_custom_path_service(call: ServiceCall) -> ServiceResponse:
+        """Service to query any endpoint."""
+        for entity in call.data["entity_id"]:
+            device_id = entity.split("_")[2]
+            coordinator = next(
+                (
+                    c
+                    for c in hass.data.get(DOMAIN).get("coordinators")
+                    if c.device["deviceId"] == device_id
+                ),
+                None,
+            )
+            if not coordinator:
+                _LOGGER.error("Coordinator not found for entity %s", entity)
+                return {}
+            result = await coordinator.bhc.async_action_universal_get(
+                device_id,
+                call.data.get("path"),
+            )
+            return result or {}
+        return {}
+
+    # Register our service with Home Assistant.
+    hass.services.async_register(
+        DOMAIN,
+        "get_custom_path_service",
+        get_custom_path_service,
+        supports_response=SupportsResponse.ONLY,
     )
 
     # Return boolean to indicate that initialization was successfully.

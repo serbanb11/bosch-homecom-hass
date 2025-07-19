@@ -57,3 +57,16 @@ set_dhw_extrahot_water:
           min: 60
           max: 2880
           unit_of_measurement: "minutes"
+get_custom_path_service:
+  name: Fetch Custom Path Service
+  description: Fetch the custom path service for the Bosch HomeCom integration
+  target:
+    entity:
+      integration: bosch_homecom
+  fields:
+    path:
+      name: path
+      description: Custom path to fetch data from
+      required: true
+      default: "/resource/notifications"
+      example: "/resource/notifications"

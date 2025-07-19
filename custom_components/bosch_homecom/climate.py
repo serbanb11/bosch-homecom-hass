@@ -289,6 +289,7 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
                 case _:
                     pass
 
+
 class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschComK40 climate entity."""
 

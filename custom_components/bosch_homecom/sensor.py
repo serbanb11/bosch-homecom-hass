@@ -410,22 +410,69 @@ class BoschComSensorHs(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHS type."""
-        return (self.coordinator.data.hs_pump_type or {}).get("value", "unknown")
+        return (self.coordinator.data.heat_sources.get("pumpType") or {}).get(
+            "value", "unknown"
+        )
 
     @property
     def extra_state_attributes(self):
         """Return attributes."""
-        consumption = (self.coordinator.data.consumption or {}).get("values", "unknown")
+        consumption = (self.coordinator.data.heat_sources.get("consumption") or {}).get(
+            "values", "unknown"
+        )
+
+        numberOfStarts = (self.coordinator.data.heat_sources.get("starts") or {}).get(
+            "values"
+        ) or []
+        numberOfStarts_dict = {k: v for d in numberOfStarts for k, v in d.items()}
+
+        returnTemperature = str(
+            (self.coordinator.data.heat_sources.get("returnTemperature") or {}).get(
+                "value", "unknown"
+            )
+        ) + (self.coordinator.data.heat_sources.get("returnTemperature") or {}).get(
+            "unitOfMeasure", "unknown"
+        )
+
+        actualSupplyTemperature = str(
+            (
+                self.coordinator.data.heat_sources.get("actualSupplyTemperature") or {}
+            ).get("value", "unknown")
+        ) + (
+            self.coordinator.data.heat_sources.get("actualSupplyTemperature") or {}
+        ).get("unitOfMeasure", "unknown")
+
+        actualModulation = str(
+            (self.coordinator.data.heat_sources.get("actualModulation") or {}).get(
+                "value", "unknown"
+            )
+        ) + (self.coordinator.data.heat_sources.get("actualModulation") or {}).get(
+            "unitOfMeasure", "unknown"
+        )
+
+        result = {
+            "numberOfStartsCh": numberOfStarts_dict.get("ch", "unknown"),
+            "numberOfStartsDhw": numberOfStarts_dict.get("dhw", "unknown"),
+            "numberOfStartsTotal": numberOfStarts_dict.get("total", "unknown"),
+            "returnTemperature": returnTemperature,
+            "actualSupplyTemperature": actualSupplyTemperature,
+            "actualModulation": actualModulation,
+        }
 
         if not len(consumption):
-            return {
-                "outputProduced": consumption,
-                "eheater": consumption,
-                "compressor": consumption,
-            }
-
-        return {
-            "outputProduced": consumption[0]["outputProduced"],
-            "eheater": consumption[1]["eheater"],
-            "compressor": consumption[2]["compressor"],
-        }
+            result.update(
+                {
+                    "outputProduced": consumption,
+                    "eheater": consumption,
+                    "compressor": consumption,
+                }
+            )
+        else:
+            result.update(
+                {
+                    "outputProduced": consumption[0]["outputProduced"],
+                    "eheater": consumption[1]["eheater"],
+                    "compressor": consumption[2]["compressor"],
+                }
+            )
+        return result
