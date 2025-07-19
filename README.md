@@ -41,6 +41,88 @@ For manual installation, copy the bosch_homecom folder and all of its contents i
 
 A dialog box will popup asking you to input your Bosch HomeCom Easy APP username and password. 
 
+## Bosch Climate Residential Air Conditioning (RAC) 
+### Entities
+- climate entity with the following features
+    
+    fan_modes = [FAN_AUTO, FAN_DIFFUSE, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
+
+    hvac_modes = [OFF, AUTO, HEAT, COOL, DRY, FAN_ONLY]
+    
+    preset_modes = [PRESET_NONE, PRESET_BOOST, PRESET_ECO]
+    
+    swing_horizontal_modes = [SWING_OFF, SWING_ON]
+    
+    swing_modes = [SWING_OFF, SWING_ON]
+ - select entities
+   
+   horizontal position: center, left, right, swing
+   
+   vertical positon: auto, angle 1-5, swing
+ - switch for plasmacluster
+ - sensor for notifications
+
+## Bosch k30 and k40
+- climate entity
+
+- water heater entity
+
+- select entities
+
+  away mode = [ON, OFF]
+
+  domestic hot water (DHW): [OFF, low, high, eco, ownprogram] 
+
+  domestic hot water temperature: [OFF, low, high, eco] 
+
+  heating circuit (HC): [off, manual, auto]
+
+  heatcool mode: [heat, cool, heatCool]
+
+  summerwinter: [forced, off, cooling]
+
+  holiday_mode: [hm1-hm8]
+
+- sensors
+
+  notifications
+  
+  domestic hot water with state current temp and attributes:
+   - operationMode
+   - currentTemperatureLevel
+   - charge
+   - chargeRemainingTime
+   - singleChargeSetpoint
+   - temperature per leve low, high, eco
+  
+  heating circuit with state current mode and attributes:
+   - currentSuWiMode
+   - heatCoolMode
+   - roomTemp
+   - actualHumidity
+   - manualRoomSetpoint
+   - currentRoomSetpoint
+   - coolingRoomTempSetpoint
+
+  heat source with state type and attributes:
+   - numberOfStartsCh
+   - numberOfStartsDhw
+   - numberOfStartsTotal
+   - returnTemperature
+   - actualSupplyTemperature
+   - actualModulation
+   - outputProduced
+   - eheater
+   - compressor
+
+- custom actions
+  Fetch Custom Path Service
+  ![Lovelace card](/img/call_example.png)
+
+  Set extra hot water for specific duration
+
+  Set DHW Temperature for levels eco, low, high
+
 
 # Lovelace
 
