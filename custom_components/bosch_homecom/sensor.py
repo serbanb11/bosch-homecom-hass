@@ -242,8 +242,10 @@ class BoschComSensorDhw(BoschComSensorBase):
                     "singleChargeSetpoint": singleChargeSetpoint_value,
                 }
 
-                for item in entry.get("tempLevel") or {}:
-                    result[item] = entry["tempLevel"][item]["value"]
+                for item, temp_item in (entry.get("tempLevel") or {}).items():
+                    result[item] = (
+                        temp_item.get("value", "unknown") if temp_item else "unknown"
+                    )
 
                 return result
         return "unknown"
@@ -470,9 +472,11 @@ class BoschComSensorHs(BoschComSensorBase):
         else:
             result.update(
                 {
-                    "outputProduced": consumption[0]["outputProduced"],
-                    "eheater": consumption[1]["eheater"],
-                    "compressor": consumption[2]["compressor"],
+                    "outputProduced": (consumption[0] or {}).get(
+                        "outputProduced", "unknown"
+                    ),
+                    "eheater": (consumption[1] or {}).get("eheater", "unknown"),
+                    "compressor": (consumption[2] or {}).get("compressor", "unknown"),
                 }
             )
         return result

@@ -34,13 +34,14 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
-    _attr_operation_list = ["Eco+", "Eco", "Comfort", "Program"]
+    _attr_operation_list = ["Eco+", "Eco", "Comfort", "Program", "Off"]
 
     _operation_map = {
         "Eco+": "eco",
         "Eco": "low",
         "Comfort": "high",
         "Program": "ownprogram",
+        "Off": "Off",
     }
     _ioperation_map = {}
 
