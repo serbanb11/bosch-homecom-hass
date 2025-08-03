@@ -7,11 +7,71 @@
 This project is an integration for Bosch HomeCom Easy enabled appliances. It is not affiliated with either Bosch or Home Assistant.
 
 ***At the moment login using username and password is not working due to captch enforced by SingleKey ID. In order to login follow the following flow***<br />
-***1. Try the username and password login that will fail***<br />
-***2. Open the following URL: https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.bosch.tt.dashtt.pointt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bsch***<br />
-***3. Open developer tools in network tab***<br />
-***4. Login using credentials***<br />
-***5. Copy code and paste in HomeAssistant box***
+
+### Step-by-Step Instructions
+
+#### 1. Open the Authorization URL
+
+Open the following URL in your browser:
+
+```
+https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.bosch.tt.dashtt.pointt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bsch
+```
+
+---
+
+#### 3. Open Developer Tools (Network Tab)
+
+- Press `F12` or right-click > **Inspect**.
+- Go to the **Network** tab.
+
+![Developer Tools](./img/dev_tools.png)
+
+---
+
+#### 4. Log In Using Your Credentials
+
+- Enter your **username and password** on the loaded page.
+- Complete any CAPTCHA if required.
+- Wait for the login to complete and redirect.
+
+> You may see a redirect error due to unsupported URI scheme (`com.bosch.tt.dashtt.pointt://...`). This is expected.
+
+---
+
+#### 5. Extract the Authorization Code
+
+- In the **Network tab**, find the request to the redirect URI:
+  ```
+  com.bosch.tt.dashtt.pointt://app/login?code=YOUR_CODE_HERE&state=...
+  ```
+- Copy only the value of the `code` parameter. This values should end in **-1**
+
+  Example:
+  ```
+  code=3d7a2ff1f39e4d509e83012b45e7abcd-1
+  ```
+
+![Authorization Code](./img/login.png)
+
+---
+
+#### 6. Paste Code Into Home Assistant
+
+- Go back to your Home Assistant (or related app).
+- When prompted for an **authorization code**, paste the code you copied.
+- Submit it to complete the login.
+
+✅ Done! You are now authenticated.
+
+---
+
+#### 🛠️ Tips
+
+- Use a **private window** to avoid session conflicts.
+- If the network request is hard to find, filter by `redirect_uri` or search for `code=`.
+
+---
 
 ## Supported Devices
 
