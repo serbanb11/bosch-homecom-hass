@@ -10,13 +10,18 @@ from typing import Any
 from aiohttp import ClientConnectorError
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.config_entries import (
+    SOURCE_REAUTH,
+    SOURCE_RECONFIGURE,
+    ConfigFlow,
+    ConfigFlowResult,
+)
+from homeassistant.const import CONF_CODE, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
-from .const import CONF_DEVICES, DOMAIN
+from .const import CONF_DEVICES, CONF_REFRESH, DOMAIN
 from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 
 
@@ -28,6 +33,7 @@ class BhcConfig:
     password: str
     token: str
     refresh_token: str
+    code: str
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +41,8 @@ _LOGGER = logging.getLogger(__name__)
 AUTH_SCHEMA = vol.Schema(
     {vol.Required(CONF_USERNAME): cv.string, vol.Required(CONF_PASSWORD): cv.string}
 )
+
+BROWSER_AUTH_SCHEMA = vol.Schema({vol.Required(CONF_CODE): cv.string})
 
 
 async def async_check_credentials(hass: HomeAssistant, data: dict[str, Any]) -> None:
@@ -70,6 +78,10 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 websession = async_get_clientsession(self.hass)
                 bhc = await HomeComAlt.create(websession, options)
 
+                # need to use browser login
+                if bhc is not None:
+                    return await self.async_step_browser()
+
                 # await async_check_credentials(self.hass, user_input)
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
                 errors["base"] = "cannot_connect"
@@ -93,6 +105,47 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=AUTH_SCHEMA, errors=errors
         )
 
+    async def async_step_browser(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle a flow initialized by the user."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                options = ConnectionOptions(
+                    code=user_input.get(CONF_CODE),
+                )
+
+                websession = async_get_clientsession(self.hass)
+                bhc = await HomeComAlt.create(websession, options)
+
+                # await async_check_credentials(self.hass, user_input)
+            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+
+            try:
+                devices = await bhc.async_get_devices()
+            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            self.data = user_input
+            self.data[CONF_DEVICES] = await devices
+            self.data[CONF_REFRESH] = bhc._options.refresh_token
+            self.data[CONF_TOKEN] = bhc._options.token
+
+            _LOGGER.info("Devices: %s", self.data[CONF_DEVICES])
+            return await self.async_step_devices()
+
+        return self.async_show_form(
+            step_id="browser", data_schema=BROWSER_AUTH_SCHEMA, errors=errors
+        )
+
     async def async_step_devices(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -113,6 +166,16 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 {CONF_USERNAME: user_input.get(CONF_USERNAME)}
             )
 
+            if self.source == SOURCE_REAUTH:
+                return self.async_update_reload_and_abort(
+                    self._get_reauth_entry(),
+                    data_updates=self.data,
+                )
+            if self.source in SOURCE_RECONFIGURE:
+                return self.async_update_reload_and_abort(
+                    self._get_reconfigure_entry(),
+                    data_updates=self.data,
+                )
             # User is done, create the config entry.
             return self.async_create_entry(title="Bosch HomeCom", data=self.data)
 
@@ -138,7 +201,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 await async_check_credentials(self.hass, user_input)
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
-                return self.async_abort(reason="reauth_unsuccessful")
+                return await self.async_step_browser()
 
             return self.async_update_reload_and_abort(
                 self._get_reauth_entry(), data=user_input
@@ -166,6 +229,10 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 websession = async_get_clientsession(self.hass)
                 bhc = await HomeComAlt.create(websession, options)
+
+                # need to use browser login
+                if bhc is not None:
+                    return await self.async_step_browser()
 
                 # await async_check_credentials(self.hass, user_input)
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):

@@ -6,6 +6,13 @@
 
 This project is an integration for Bosch HomeCom Easy enabled appliances. It is not affiliated with either Bosch or Home Assistant.
 
+***At the moment login using username and password is not working due to captch enforced by SingleKey ID. In order to login follow the following flow***<br />
+***1. Try the username and password login that will fail***<br />
+***2. Open the following URL: https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.bosch.tt.dashtt.pointt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bsch***<br />
+***3. Open developer tools in network tab***<br />
+***4. Login using credentials***<br />
+***5. Copy code and paste in HomeAssistant box***
+
 ## Supported Devices
 
 ***At the moment this integration was tested only with:***

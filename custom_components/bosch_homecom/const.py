@@ -29,4 +29,5 @@ ATTR_ECO_MODE = "ecoMode"
 ATTR_TIMERS_ON = "timersOn"
 ATTR_TIMERS_OFF = "timersOff"
 
-CONF_DEVICES = "devices"
+CONF_DEVICES: Final = "devices"
+CONF_REFRESH: Final = "refresh"

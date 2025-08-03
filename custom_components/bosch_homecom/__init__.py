@@ -8,7 +8,13 @@ import logging
 from aiohttp.client_exceptions import ClientConnectorError, ClientError
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_DEVICES, CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.const import (
+    CONF_DEVICES,
+    CONF_PASSWORD,
+    CONF_TOKEN,
+    CONF_USERNAME,
+    Platform,
+)
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -19,7 +25,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, MODEL
+from .const import CONF_REFRESH, DOMAIN, MODEL
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
 from homecom_alt import (
     ApiError,
@@ -46,10 +52,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinators: list[any] = []
     username: str | None = entry.data.get(CONF_USERNAME)
     password: str | None = entry.data.get(CONF_PASSWORD)
+    token: str | None = entry.data.get(CONF_TOKEN)
+    refresh: str | None = entry.data.get(CONF_REFRESH)
 
+    if token and refresh:
+        options = ConnectionOptions(token=token, refresh_token=refresh)
+    elif username and password:
+        options = ConnectionOptions(username=username, password=password)
+    else:
+        _LOGGER.error("No valid credentials provided")
+        return False
     websession = async_get_clientsession(hass)
-
-    options = ConnectionOptions(username=username, password=password)
     try:
         bhc = await HomeComAlt.create(websession, options)
     except (ApiError, ClientError, ClientConnectorError, TimeoutError) as err:

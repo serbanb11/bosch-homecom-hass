@@ -10,19 +10,26 @@
                 "title": "Authentication"
             },
             "reauth_confirm": {
-            "description": "Please enter the correct username and password for SingleKey ID",
-            "data": {
-                "username": "SingleKey ID username",
-                "password": "SingleKey ID password"
-            }
+                "description": "Please enter the correct username and password for SingleKey ID",
+                "data": {
+                    "username": "SingleKey ID username",
+                    "password": "SingleKey ID password"
+                }
             },
             "reconfigure": {
-            "description": "Update configuration for SingleKey ID.",
-            "data": {
-                "username": "SingleKey ID username",
-                "password": "SingleKey ID password"
+                "description": "Update configuration for SingleKey ID.",
+                "data": {
+                    "username": "SingleKey ID username",
+                    "password": "SingleKey ID password"
+                },
+                "title": "Authentication"
             },
-            "title": "Authentication"
+            "browser": {
+                "description": "Login in browser using [URL](https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.bosch.tt.dashtt.pointt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bsch) in readme and capture code using browser's developer tools.",
+                "data": {
+                    "code": "SingleKey ID code"
+                },
+                "title": "Browser Authentication"
             }
         },
         "error": {
