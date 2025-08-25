@@ -7,8 +7,10 @@ from tenacity import RetryError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_TOKEN
 
-from .const import DEFAULT_UPDATE_INTERVAL, DOMAIN, MANUFACTURER
+from .const import DEFAULT_UPDATE_INTERVAL, DOMAIN, MANUFACTURER, CONF_REFRESH
 from homecom_alt import (
     ApiError,
     AuthFailedError,
@@ -26,7 +28,7 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
     """A coordinator to manage the fetching of BoschCom data."""
 
     def __init__(
-        self, hass: HomeAssistant, bhc: HomeComRac, device: list, firmware: dict
+        self, hass: HomeAssistant, bhc: HomeComRac, device: list, firmware: dict, entry: ConfigEntry
     ) -> None:
         """Initialize coordinator."""
         super().__init__(
@@ -39,6 +41,7 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
         self.bhc = bhc
         self.unique_id = device["deviceId"]
         self.device = device
+        self.entry = entry
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -57,6 +60,21 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
         except AuthFailedError as error:
             raise AuthFailedError(error) from error
 
+        # Persist refreshed tokens if they changed
+        try:
+            token = getattr(self.bhc, "_options", None).token if getattr(self.bhc, "_options", None) else None
+            refresh = getattr(self.bhc, "_options", None).refresh_token if getattr(self.bhc, "_options", None) else None
+            if token and refresh:
+                cur_token = self.entry.data.get(CONF_TOKEN)
+                cur_refresh = self.entry.data.get(CONF_REFRESH)
+                if token != cur_token or refresh != cur_refresh:
+                    new_data = dict(self.entry.data)
+                    new_data[CONF_TOKEN] = token
+                    new_data[CONF_REFRESH] = refresh
+                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+        except Exception:  # best-effort; don't fail updates due to persistence
+            _LOGGER.debug("Failed to persist refreshed tokens", exc_info=True)
+
         return BHCDeviceRac(
             device=self.device,
             firmware=data.firmware,
@@ -71,7 +89,7 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
     """A coordinator to manage the fetching of BoschCom data."""
 
     def __init__(
-        self, hass: HomeAssistant, bhc: HomeComK40, device: list, firmware: dict
+        self, hass: HomeAssistant, bhc: HomeComK40, device: list, firmware: dict, entry: ConfigEntry
     ) -> None:
         """Initialize coordinator."""
         super().__init__(
@@ -84,6 +102,7 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
         self.bhc = bhc
         self.unique_id = device["deviceId"]
         self.device = device
+        self.entry = entry
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -101,6 +120,21 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
             raise UpdateFailed(error) from error
         except AuthFailedError as error:
             raise AuthFailedError(error) from error
+
+        # Persist refreshed tokens if they changed
+        try:
+            token = getattr(self.bhc, "_options", None).token if getattr(self.bhc, "_options", None) else None
+            refresh = getattr(self.bhc, "_options", None).refresh_token if getattr(self.bhc, "_options", None) else None
+            if token and refresh:
+                cur_token = self.entry.data.get(CONF_TOKEN)
+                cur_refresh = self.entry.data.get(CONF_REFRESH)
+                if token != cur_token or refresh != cur_refresh:
+                    new_data = dict(self.entry.data)
+                    new_data[CONF_TOKEN] = token
+                    new_data[CONF_REFRESH] = refresh
+                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+        except Exception:
+            _LOGGER.debug("Failed to persist refreshed tokens", exc_info=True)
 
         return BHCDeviceK40(
             device=self.device,

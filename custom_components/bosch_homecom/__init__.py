@@ -70,12 +70,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except AuthFailedError as err:
         raise ConfigEntryAuthFailed from err
 
+    # Persist tokens obtained/rotated during create
+    try:
+        new_token = getattr(bhc, "_options", None).token if getattr(bhc, "_options", None) else None
+        new_refresh = getattr(bhc, "_options", None).refresh_token if getattr(bhc, "_options", None) else None
+        if new_token and new_refresh and (new_token != token or new_refresh != refresh):
+            new_data = dict(entry.data)
+            new_data[CONF_TOKEN] = new_token
+            new_data[CONF_REFRESH] = new_refresh
+            hass.config_entries.async_update_entry(entry, data=new_data)
+            token = new_token
+            refresh = new_refresh
+            options = ConnectionOptions(token=token, refresh_token=refresh)
+    except Exception:
+        _LOGGER.debug("Failed to persist tokens after login", exc_info=True)
+
     devices = await bhc.async_get_devices()
+    if asyncio.iscoroutine(devices):
+        devices = await devices
 
     config_devices: dict | None = entry.data.get(CONF_DEVICES)
     filtered_devices = [
         device
-        for device in await devices
+        for device in devices
         if config_devices.get(f"{device['deviceId']}_{device['deviceType']}", False)
     ]
 
@@ -90,6 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     HomeComRac(websession, options, device_id),
                     device,
                     firmware,
+                    entry,
                 )
             )
         elif device["deviceType"] == "k40" or device["deviceType"] == "k30":
@@ -99,6 +117,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     HomeComK40(websession, options, device_id),
                     device,
                     firmware,
+                    entry,
                 )
             )
 
