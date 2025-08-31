@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 import logging
@@ -92,10 +93,14 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
 
+
+            if asyncio.iscoroutine(devices):
+                devices = await devices
+
             if self.data is None:
                 self.data = {}
             self.data.update(user_input)
-            self.data[CONF_DEVICES] = await devices
+            self.data[CONF_DEVICES] = devices
             self.data[CONF_REFRESH] = bhc.refresh_token
             self.data[CONF_TOKEN] = bhc.token
 

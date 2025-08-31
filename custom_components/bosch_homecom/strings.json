@@ -33,9 +33,13 @@
             }
         },
         "error": {
-            "no_devices_found": "No devices found",
-            "cannot_connect": "Cannot connect",
-            "unknown": "Unkown error"
+            "username_required": "Username is required.",
+            "code_required": "Verification code is required.",
+            "unknown": "An unknown error occurred.",
+            "cannot_connect": "Cannot connect to Bosch servers.",
+            "no_devices_found": "No devices found.",
+            "no_device_selected": "You must select at least one device.",
+            "already_configured": "This account is already configured."
         },
         "abort": {
             "already_configured": "Already configured",
