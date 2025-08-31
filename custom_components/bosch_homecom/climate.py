@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant import config_entries
@@ -31,8 +30,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
 
 PARALLEL_UPDATES = 1
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(

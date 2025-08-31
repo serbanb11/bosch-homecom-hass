@@ -1,6 +1,5 @@
 """Bosch HomeCom Custom Component."""
 
-import logging
 from typing import Any
 
 from homeassistant import config_entries, core
@@ -10,8 +9,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import BoschComModuleCoordinatorRac
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(

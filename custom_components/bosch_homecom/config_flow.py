@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from aiohttp import ClientConnectorError
+from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 import voluptuous as vol
 
 from homeassistant.config_entries import (
@@ -16,13 +17,11 @@ from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
 )
-from homeassistant.const import CONF_CODE, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
 from .const import CONF_DEVICES, CONF_REFRESH, DOMAIN
-from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 
 
 @dataclass
@@ -30,7 +29,6 @@ class BhcConfig:
     """HomeCom device configuration class."""
 
     username: str
-    password: str
     token: str
     refresh_token: str
     code: str
@@ -38,21 +36,9 @@ class BhcConfig:
 
 _LOGGER = logging.getLogger(__name__)
 
-AUTH_SCHEMA = vol.Schema(
-    {vol.Required(CONF_USERNAME): cv.string, vol.Required(CONF_PASSWORD): cv.string}
-)
+AUTH_SCHEMA = vol.Schema({vol.Required(CONF_USERNAME): cv.string})
 
 BROWSER_AUTH_SCHEMA = vol.Schema({vol.Required(CONF_CODE): cv.string})
-
-
-async def async_check_credentials(hass: HomeAssistant, data: dict[str, Any]) -> None:
-    """Login using provided creds."""
-    websession = async_get_clientsession(hass)
-
-    options = ConnectionOptions(
-        username=data.get(CONF_USERNAME), password=data.get(CONF_PASSWORD)
-    )
-    await HomeComAlt.create(websession, options)
 
 
 class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -69,37 +55,8 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            try:
-                options = ConnectionOptions(
-                    username=user_input.get(CONF_USERNAME),
-                    password=user_input.get(CONF_PASSWORD),
-                )
-
-                websession = async_get_clientsession(self.hass)
-                bhc = await HomeComAlt.create(websession, options)
-
-                # need to use browser login
-                if bhc is not None:
-                    return await self.async_step_browser()
-
-                # await async_check_credentials(self.hass, user_input)
-            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-
-            try:
-                devices = await bhc.async_get_devices()
-            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
             self.data = user_input
-            self.data[CONF_DEVICES] = await devices
-            _LOGGER.info("Devices: %s", self.data[CONF_DEVICES])
-            return await self.async_step_devices()
+            return await self.async_step_browser()
 
         return self.async_show_form(
             step_id="user", data_schema=AUTH_SCHEMA, errors=errors
@@ -118,7 +75,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
                 websession = async_get_clientsession(self.hass)
-                bhc = await HomeComAlt.create(websession, options)
+                bhc = await HomeComAlt.create(websession, options, True)
 
                 # await async_check_credentials(self.hass, user_input)
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
@@ -134,10 +91,13 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
-            self.data = user_input
+
+            if self.data is None:
+                self.data = {}
+            self.data.update(user_input)
             self.data[CONF_DEVICES] = await devices
-            self.data[CONF_REFRESH] = bhc._options.refresh_token
-            self.data[CONF_TOKEN] = bhc._options.token
+            self.data[CONF_REFRESH] = bhc.refresh_token
+            self.data[CONF_TOKEN] = bhc.token
 
             _LOGGER.info("Devices: %s", self.data[CONF_DEVICES])
             return await self.async_step_devices()
@@ -160,6 +120,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         }
 
         if user_input is not None:
+            self.data.update(user_input)
             self.data[CONF_DEVICES] = user_input
             await self.async_set_unique_id(user_input.get(CONF_USERNAME))
             self._abort_if_unique_id_configured(
@@ -198,14 +159,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            try:
-                await async_check_credentials(self.hass, user_input)
-            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
-                return await self.async_step_browser()
-
-            return self.async_update_reload_and_abort(
-                self._get_reauth_entry(), data=user_input
-            )
+            return await self.async_step_browser()
 
         return self.async_show_form(
             step_id="reauth_confirm",
@@ -221,37 +175,8 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            try:
-                options = ConnectionOptions(
-                    username=user_input.get(CONF_USERNAME),
-                    password=user_input.get(CONF_PASSWORD),
-                )
-
-                websession = async_get_clientsession(self.hass)
-                bhc = await HomeComAlt.create(websession, options)
-
-                # need to use browser login
-                if bhc is not None:
-                    return await self.async_step_browser()
-
-                # await async_check_credentials(self.hass, user_input)
-            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-
-            try:
-                devices = await bhc.async_get_devices()
-            except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
-
             self.data = user_input
-            self.data[CONF_DEVICES] = await devices
-            return await self.async_step_reconfigure_devices()
+            return await self.async_step_browser()
 
         return self.async_show_form(
             step_id="reconfigure", data_schema=AUTH_SCHEMA, errors=errors
@@ -276,7 +201,6 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 reconfigure_entry,
                 data_updates={
                     CONF_USERNAME: self.data[CONF_USERNAME],
-                    CONF_PASSWORD: self.data[CONF_PASSWORD],
                     CONF_DEVICES: user_input,
                 },
             )

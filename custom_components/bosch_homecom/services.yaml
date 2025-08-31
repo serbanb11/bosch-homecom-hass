@@ -60,10 +60,13 @@ set_dhw_extrahot_water:
 get_custom_path_service:
   name: Fetch Custom Path Service
   description: Fetch the custom path service for the Bosch HomeCom integration
-  target:
-    entity:
-      integration: bosch_homecom
   fields:
+    device_id:
+      name: device_id
+      description: The device id to fetch data from
+      required: true
+      default: "100000000"
+      example: "100000000"
     path:
       name: path
       description: Custom path to fetch data from

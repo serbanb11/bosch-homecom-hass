@@ -1,7 +1,6 @@
 """Bosch HomeCom Custom Component."""
 
 from datetime import timedelta
-import logging
 
 from homeassistant import config_entries, core
 from homeassistant.components.select import SelectEntity
@@ -10,8 +9,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
-
-_LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=1440)
 
