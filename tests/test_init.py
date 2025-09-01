@@ -1,22 +1,30 @@
 """Test component setup."""
-from custom_components.bosch_homecom.const import DOMAIN, MANUFACTURER
-from unittest.mock import Mock, AsyncMock, patch
-from homeassistant.helpers import device_registry as dr
-from homeassistant.const import CONF_USERNAME
-from homecom_alt import BHCDeviceRac
-from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-import pytest
+
 import json
-from custom_components.bosch_homecom import PLATFORMS
-from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DOMAIN
-from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
+from homeassistant.helpers import device_registry as dr
+from homeassistant.setup import async_setup_component
+from homecom_alt import BHCDeviceRac
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.bosch_homecom import PLATFORMS
+from custom_components.bosch_homecom.const import (
+    CONF_DEVICES,
+    CONF_REFRESH,
+    DOMAIN,
+    MANUFACTURER,
+)
+
 
 @pytest.fixture
 def bhc():
     """Fixture for HomeComAlt instance."""
     return Mock()
+
 
 @pytest.fixture
 def entry():
@@ -24,12 +32,21 @@ def entry():
         domain=DOMAIN,
         title="test-user",
         unique_id="test-user",
-        data={"123_rac": True, CONF_DEVICES: {"123_rac": True}, CONF_REFRESH: "mock_refresh", CONF_TOKEN: "mock_token", CONF_USERNAME: "test-user", CONF_CODE: "valid_code"},
+        data={
+            "123_rac": True,
+            CONF_DEVICES: {"123_rac": True},
+            CONF_REFRESH: "mock_refresh",
+            CONF_TOKEN: "mock_token",
+            CONF_USERNAME: "test-user",
+            CONF_CODE: "valid_code",
+        },
     )
 
-@pytest.fixture()  
-def devices():  
+
+@pytest.fixture()
+def devices():
     return [{"deviceId": "123", "deviceType": "rac"}]
+
 
 @pytest.fixture()
 def sensor_data():
@@ -38,6 +55,7 @@ def sensor_data():
     with file_path.open() as f:
         data = json.load(f)
     return data
+
 
 @pytest.mark.asyncio
 async def test_entry_setup_unload(hass, entry, devices, sensor_data):
@@ -48,8 +66,7 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
         "custom_components.bosch_homecom.HomeComRac.async_update",
         new_callable=AsyncMock,
     ) as mock_update, patch(
-        "custom_components.bosch_homecom.HomeComAlt.create",
-        new_callable=AsyncMock
+        "custom_components.bosch_homecom.HomeComAlt.create", new_callable=AsyncMock
     ) as mock_create:
         # Mock the BHC instance returned by HomeComAlt.create
         mock_bhc = AsyncMock()
@@ -58,13 +75,13 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
         mock_bhc.async_get_devices.return_value = devices
         mock_bhc.async_get_firmware.return_value = {"value": "1.0.0"}
         mock_bhc.async_update.return_value = BHCDeviceRac(
-                device={"deviceId": "123", "deviceType": "rac"},
-                firmware=sensor_data["firmwares"],
-                notifications=sensor_data["notifications"],
-                stardard_functions=sensor_data["stardard_functions"],
-                advanced_functions=sensor_data["advanced_functions"],
-                switch_programs=sensor_data["switch_programs"],
-            )
+            device={"deviceId": "123", "deviceType": "rac"},
+            firmware=sensor_data["firmwares"],
+            notifications=sensor_data["notifications"],
+            stardard_functions=sensor_data["stardard_functions"],
+            advanced_functions=sensor_data["advanced_functions"],
+            switch_programs=sensor_data["switch_programs"],
+        )
         mock_create.return_value = mock_bhc
         mock_update.return_value = mock_bhc
         await hass.config_entries.async_setup(entry.entry_id)
@@ -75,9 +92,7 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
 
     assert dev_entries
     dev_entry = dev_entries[0]
-    assert dev_entry.identifiers == {
-        (DOMAIN, devices[0]["deviceId"])
-    }
+    assert dev_entry.identifiers == {(DOMAIN, devices[0]["deviceId"])}
     assert dev_entry.manufacturer == MANUFACTURER
     assert dev_entry.name == "Boschcom_rac_123"
     assert dev_entry.model == "Residential Air Conditioning"
@@ -89,6 +104,7 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
 
     await hass.async_block_till_done()
     assert unload.call_count == len(PLATFORMS)
+
 
 async def test_async_setup(hass):
     """Test the component gets setup."""

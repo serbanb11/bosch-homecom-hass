@@ -2,3 +2,7 @@ homecom_alt
 pytest
 pytest-cov
 pytest-homeassistant-custom-component
+coverage
+ruff
+black
+isort

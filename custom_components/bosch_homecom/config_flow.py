@@ -9,9 +9,6 @@ import logging
 from typing import Any
 
 from aiohttp import ClientConnectorError
-from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
-import voluptuous as vol
-
 from homeassistant.config_entries import (
     SOURCE_REAUTH,
     SOURCE_RECONFIGURE,
@@ -21,6 +18,8 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
+from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
+import voluptuous as vol
 
 from .const import CONF_DEVICES, CONF_REFRESH, DOMAIN
 
@@ -98,7 +97,6 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(
                     step_id="browser", data_schema=BROWSER_AUTH_SCHEMA, errors=errors
                 )
-
 
             if asyncio.iscoroutine(devices):
                 devices = await devices

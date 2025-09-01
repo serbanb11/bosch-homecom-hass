@@ -442,7 +442,9 @@ class BoschComSensorHs(BoschComSensorBase):
             ).get("value", "unknown")
         ) + (
             self.coordinator.data.heat_sources.get("actualSupplyTemperature") or {}
-        ).get("unitOfMeasure", "unknown")
+        ).get(
+            "unitOfMeasure", "unknown"
+        )
 
         actualModulation = str(
             (self.coordinator.data.heat_sources.get("actualModulation") or {}).get(

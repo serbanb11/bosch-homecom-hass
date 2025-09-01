@@ -23,7 +23,14 @@ async def async_get_config_entry_diagnostics(
         stardard_functions,
         advanced_functions,
         switch_programs,
-    ) = [], [], [], [], [], []
+    ) = (
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
     coordinators = config_entry.runtime_data
     for coordinator in coordinators:
         device.append(coordinator.data.device)

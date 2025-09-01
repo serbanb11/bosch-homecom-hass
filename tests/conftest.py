@@ -1,18 +1,23 @@
 """Fixtures for testing."""
 
-import pytest
-from custom_components.bosch_homecom.config_flow import BoschHomecomConfigFlow
 import threading
+
+import pytest
+
+from custom_components.bosch_homecom.config_flow import BoschHomecomConfigFlow
+
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable custom integrations."""
     return
 
+
 @pytest.fixture
 def mock_config_flow():
     """Fixture to mock the config flow."""
     return BoschHomecomConfigFlow()
+
 
 @pytest.fixture(autouse=True)
 def whitelist_pycares_shutdown_thread():
