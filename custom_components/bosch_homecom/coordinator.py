@@ -227,12 +227,13 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
 
     async def _async_update_data(self) -> BHCDeviceK40:
         """Update data via library."""
-        try:
-            data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
-        except (ApiError, InvalidSensorDataError, RetryError) as error:
-            raise UpdateFailed(error) from error
-        except AuthFailedError as error:
-            raise AuthFailedError(error) from error
+        if self.auth_provider:
+            try:
+                data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
+            except (ApiError, InvalidSensorDataError, RetryError) as error:
+                raise UpdateFailed(error) from error
+            except AuthFailedError as error:
+                raise AuthFailedError(error) from error
 
         # Persist refreshed tokens if they changed
         try:
@@ -244,6 +245,10 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
                     conf_data = dict(self.entry.data)
                     self.bhc.token = conf_data[CONF_TOKEN]
                     self.bhc.refresh_token = conf_data[CONF_REFRESH]
+                    try:
+                        data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
+                    except (ApiError, InvalidSensorDataError, RetryError) as error:
+                        raise UpdateFailed(error) from error
                 elif refresh != cur_refresh and self.auth_provider:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = token
