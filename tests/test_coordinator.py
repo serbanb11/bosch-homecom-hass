@@ -1,12 +1,13 @@
 import pytest
 from unittest.mock import Mock, AsyncMock
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
-from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinator
-from custom_components.bosch_homecom.const import DOMAIN, MANUFACTURER, DEFAULT_UPDATE_INTERVAL
-from homecom_alt import ApiError, InvalidSensorDataError, AuthFailedError, BHCDevice
+from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorRac
+from custom_components.bosch_homecom.const import DOMAIN, MANUFACTURER, DEFAULT_UPDATE_INTERVAL,CONF_DEVICES, CONF_REFRESH
+from homecom_alt import ApiError, InvalidSensorDataError, AuthFailedError, BHCDeviceRac
 from tenacity import RetryError
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 
 """Tests for the BoschComModuleCoordinator."""
 
@@ -30,9 +31,19 @@ def firmware():
         "value": "1.0.0"
     }
 
-def test_init_coordinator(hass, bhc, device, firmware):
+@pytest.fixture
+def entry():
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="test-user",
+        unique_id="test-user",
+        data={"123_rac": True, CONF_DEVICES: {"123_rac": True}, CONF_REFRESH: "mock_refresh", CONF_TOKEN: "mock_token", CONF_USERNAME: "test-user", CONF_CODE: "valid_code"},
+    )
+
+def test_init_coordinator(hass, entry, bhc, device, firmware):
     """Test the initialization of the coordinator."""
-    coordinator = BoschComModuleCoordinator(hass, bhc, device, firmware)
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, False)
 
     assert coordinator.hass == hass
     assert coordinator.bhc == bhc
@@ -49,10 +60,11 @@ def test_init_coordinator(hass, bhc, device, firmware):
     assert coordinator.always_update is True
 
 @pytest.mark.asyncio
-async def test_async_update_data_success(hass, bhc, device, firmware):
+async def test_async_update_data_success(hass, entry, bhc, device, firmware):
     """Test successful data update."""
-    coordinator = BoschComModuleCoordinator(hass, bhc, device, firmware)
-    bhc.async_update = AsyncMock(return_value=BHCDevice(
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, False)
+    bhc.async_update = AsyncMock(return_value=BHCDeviceRac(
         device=device,
         firmware=firmware,
         notifications=[],
@@ -63,43 +75,47 @@ async def test_async_update_data_success(hass, bhc, device, firmware):
 
     data = await coordinator._async_update_data()
     assert data.device == device
-    assert data.firmware == firmware
+    assert data.firmware == {}
     assert data.notifications == []
     assert data.stardard_functions == []
     assert data.advanced_functions == []
     assert data.switch_programs == []
 
 @pytest.mark.asyncio
-async def test_async_update_data_api_error(hass, bhc, device, firmware):
+async def test_async_update_data_api_error(hass, entry, bhc, device, firmware):
     """Test data update with ApiError."""
-    coordinator = BoschComModuleCoordinator(hass, bhc, device, firmware)
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, False)
     bhc.async_update = Mock(side_effect=ApiError("error_status"))
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
 
 @pytest.mark.asyncio
-async def test_async_update_data_invalid_sensor_data_error(hass, bhc, device, firmware):
+async def test_async_update_data_invalid_sensor_data_error(hass, entry, bhc, device, firmware):
     """Test data update with InvalidSensorDataError."""
-    coordinator = BoschComModuleCoordinator(hass, bhc, device, firmware)
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, False)
     bhc.async_update = Mock(side_effect=InvalidSensorDataError("error_status"))
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
 
 @pytest.mark.asyncio
-async def test_async_update_data_retry_error(hass, bhc, device, firmware):
+async def test_async_update_data_retry_error(hass, entry, bhc, device, firmware):
     """Test data update with RetryError."""
-    coordinator = BoschComModuleCoordinator(hass, bhc, device, firmware)
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, False)
     bhc.async_update = Mock(side_effect=RetryError("error_status"))
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
 
 @pytest.mark.asyncio
-async def test_async_update_data_auth_failed_error(hass, bhc, device, firmware):
+async def test_async_update_data_auth_failed_error(hass, entry, bhc, device, firmware):
     """Test data update with AuthFailedError."""
-    coordinator = BoschComModuleCoordinator(hass, bhc, device, firmware)
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, False)
     bhc.async_update = Mock(side_effect=AuthFailedError("error_status"))
 
     with pytest.raises(AuthFailedError):

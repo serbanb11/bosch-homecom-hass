@@ -89,9 +89,15 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 devices = await bhc.async_get_devices()
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
                 errors["base"] = "cannot_connect"
+                return self.async_show_form(
+                    step_id="browser", data_schema=BROWSER_AUTH_SCHEMA, errors=errors
+                )
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
+                return self.async_show_form(
+                    step_id="browser", data_schema=BROWSER_AUTH_SCHEMA, errors=errors
+                )
 
 
             if asyncio.iscoroutine(devices):
@@ -153,7 +159,10 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
         """Handle configuration by re-auth."""
-        self.user = entry_data[CONF_USERNAME]
+        if entry_data is not None:
+            self.user = entry_data.get(CONF_USERNAME)
+        else:
+            self.user = None
         self.context["title_placeholders"] = {"user": self.user}
         return await self.async_step_reauth_confirm()
 

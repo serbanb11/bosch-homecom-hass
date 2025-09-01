@@ -77,10 +77,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_data[CONF_REFRESH] = bhc.refresh_token
         hass.config_entries.async_update_entry(entry, data=new_data)
 
+    if asyncio.iscoroutine(devices):
+        devices = await devices
+
     config_devices: dict | None = entry.data.get(CONF_DEVICES)
     filtered_devices = [
         device
-        for device in await devices
+        for device in devices
         if config_devices.get(f"{device['deviceId']}_{device['deviceType']}", False)
     ]
 
