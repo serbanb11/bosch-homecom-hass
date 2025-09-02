@@ -13,6 +13,7 @@ MODEL = {
     "rac": "Residential Air Conditioning",
     "k30": "Bosch boiler",
     "k40": "Bosch boiler",
+    "wddw2": "Bosch Water Heater",
 }
 
 ATTR_NOTIFICATIONS = "notifications"

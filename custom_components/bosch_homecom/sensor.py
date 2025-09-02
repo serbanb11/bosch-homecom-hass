@@ -9,7 +9,7 @@ from homeassistant.components.sensor.const import SensorDeviceClass
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
+from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac, BoschComModuleCoordinatorWddw2
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +38,14 @@ async def async_setup_entry(
         ):
             entities.append(
                 BoschComSensorNotificationsK40(
+                    coordinator=coordinator, config_entry=config_entry
+                )
+            )
+        elif (
+            coordinator.data.device["deviceType"] == "wddw2"
+        ):
+            entities.append(
+                BoschComSensorNotificationsWddw2(
                     coordinator=coordinator, config_entry=config_entry
                 )
             )
@@ -73,6 +81,16 @@ async def async_setup_entry(
                     ),
                 ]
             )
+        elif (
+            coordinator.data.device["deviceType"] == "wddw2"
+        ):
+            for ref in coordinator.data.dhw_circuits:
+                dhw_id = ref["id"].split("/")[-1]
+                entities.append(
+                    BoschComSensorDhwWddw2(
+                        coordinator=coordinator, config_entry=config_entry, field=dhw_id
+                    )
+                )
     async_add_entities(entities)
 
 
@@ -119,7 +137,7 @@ class BoschComSensorNotificationsRac(BoschComSensorBase):
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorNotificationsK40: name=%s, unique_id=%s",
+            "Init BoschComSensorNotificationsRac: name=%s, unique_id=%s",
             self._attr_name,
             self._attr_unique_id,
         )
@@ -168,6 +186,43 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
             if "dcd" in item and "ccd" in item
         )
 
+class BoschComSensorNotificationsWddw2(BoschComSensorBase):
+    """BoschComSensor notifications."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorWddw2,
+        config_entry: config_entries.ConfigEntry,
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name="_notifications",
+            unique_id=f"{coordinator.unique_id}-notifications",
+            icon="mdi:bell",
+        )
+        self._attr_translation_key = "notifications"
+        self._attr_unique_id = f"{coordinator.unique_id}-notifications"
+        self._attr_name = "notifications"
+        self._attr_should_poll = False
+
+        _LOGGER.debug(
+            "Init BoschComSensorNotificationsWddw2: name=%s, unique_id=%s",
+            self._attr_name,
+            self._attr_unique_id,
+        )
+
+    @property
+    def state(self):
+        """Return Notifications."""
+        return "\n".join(
+            f"{item['dcd']}-{item['ccd']}"
+            for item in self.coordinator.data.notifications
+            if "dcd" in item and "ccd" in item
+        )
 
 class BoschComSensorDhw(BoschComSensorBase):
     """BoschComSensorDhw sensor."""
@@ -482,3 +537,84 @@ class BoschComSensorHs(BoschComSensorBase):
                 }
             )
         return result
+
+
+class BoschComSensorDhwWddw2(BoschComSensorBase):
+    """BoschComSensorDhw sensor."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorWddw2,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name=field + "_sensor",
+            unique_id=f"{coordinator.unique_id}-{field}-sensor",
+            icon="mdi:water-boiler",
+        )
+        self._attr_translation_key = "dhw"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field + "_sensor"
+        self._attr_should_poll = False
+        self.field = field
+
+        _LOGGER.debug(
+            "Init BoschComSensorDhw: name=%s, unique_id=%s",
+            self._attr_name,
+            self._attr_unique_id,
+        )
+
+    @property
+    def state(self):
+        """Return BoschComSensorDhw operationMode."""
+        for entry in self.coordinator.data.dhw_circuits:
+            if entry.get("id") == "/dhwCircuits/" + self.field:
+                operationMode_value = (entry.get("operationMode") or {}).get(
+                    "value", "unknown"
+                )
+                actualTemp_value = (
+                    (entry.get("tempLevel") or {}).get(operationMode_value, {}).get("value", "unknown")
+                )
+                actualTemp_unit = (
+                    (entry.get("tempLevel") or {}).get(operationMode_value, {}).get("unitOfMeasure", "unknown")
+                )
+                return str(actualTemp_value) + actualTemp_unit
+        return "unknown"
+
+    @property
+    def extra_state_attributes(self):
+        """Return attributes."""
+
+        for entry in self.coordinator.data.dhw_circuits:
+            if entry.get("id") == "/dhwCircuits/" + self.field:
+                operationMode_value = (entry.get("operationMode") or {}).get(
+                    "value", "unknown"
+                )
+                numberOfStarts_value = (entry.get("nbStarts") or {}).get("value", "unknown")
+                ariboxTemp_value = (entry.get("airBoxTemperature") or {}).get("value", "unknown")
+                fanSpeed_value = (entry.get("fanSpeed") or {}).get("value", "unknown")
+                inletTemp_value = (entry.get("inletTemperature") or {}).get("value", "unknown")
+                outletTemp_value = (entry.get("outletTemperature") or {}).get("value", "unknown")
+                waterFlow_value = (entry.get("waterFlow") or {}).get("value", "unknown")
+
+                result = {
+                    "nbStarts": numberOfStarts_value,
+                    "airBoxTemperature": ariboxTemp_value,
+                    "fanSpeed": fanSpeed_value,
+                    "outletTemperature": outletTemp_value,
+                    "waterFlow": waterFlow_value,
+                }
+
+                for item, temp_item in (entry.get("tempLevel") or {}).items():
+                    result[item] = (
+                        temp_item.get("value", "unknown") if temp_item else "unknown"
+                    )
+
+                return result
+        return "unknown"

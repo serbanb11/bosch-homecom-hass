@@ -14,6 +14,7 @@ from homecom_alt import (
     HomeComGeneric,
     HomeComK40,
     HomeComRac,
+    HomeComWddw2,
 )
 
 from homeassistant.config_entries import ConfigEntry
@@ -33,6 +34,7 @@ from .coordinator import (
     BoschComModuleCoordinatorGeneric,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
+    BoschComModuleCoordinatorWddw2,
 )
 
 PLATFORMS: list[Platform] = [
@@ -114,6 +116,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 BoschComModuleCoordinatorK40(
                     hass,
                     HomeComK40(
+                        websession, coordinator_options, device_id, auth_provider
+                    ),
+                    device,
+                    firmware,
+                    entry,
+                    auth_provider,
+                )
+            )
+        elif device["deviceType"] == "wddw2":
+            coordinators.append(
+                BoschComModuleCoordinatorWddw2(
+                    hass,
+                    HomeComWddw2(
                         websession, coordinator_options, device_id, auth_provider
                     ),
                     device,
