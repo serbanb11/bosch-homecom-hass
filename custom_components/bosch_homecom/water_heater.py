@@ -25,18 +25,14 @@ async def async_setup_entry(
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "wddw2":
             entities.append(
-                BoschComWddw2WaterHeater(
-                    coordinator=coordinator, field="waterheater"
-                )
+                BoschComWddw2WaterHeater(coordinator=coordinator, field="waterheater")
             )
         elif (
             coordinator.data.device["deviceType"] == "k40"
             or coordinator.data.device["deviceType"] == "k30"
         ):
             entities.append(
-                BoschComK40WaterHeater(
-                    coordinator=coordinator, field="waterheater"
-                )
+                BoschComK40WaterHeater(coordinator=coordinator, field="waterheater")
             )
     async_add_entities(entities)
 
@@ -165,13 +161,14 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
                     case "operationMode":
                         operationMode_value = ref[key]["value"]
                         actualTemp_value = (
-                            (domestic_hot_water_circuits.get("tempLevel") or {}).get(operationMode_value, {}).get("value", "unknown")
+                            (domestic_hot_water_circuits.get("tempLevel") or {})
+                            .get(operationMode_value, {})
+                            .get("value", "unknown")
                         )
-                         self._attr_operation_list = ref[key]["allowedValues"]
+                        self._attr_operation_list = ref[key]["allowedValues"]
         self._attr_current_operation = operationMode_value
         self._attr_current_temperature = actualTemp_value
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""
         self._set_domestic_hot_water_circuits(self.coordinator.data.dhw_circuits)
-

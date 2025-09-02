@@ -13,6 +13,7 @@ from homecom_alt import (
     BHCDeviceGeneric,
     BHCDeviceK40,
     BHCDeviceRac,
+    BHCDeviceWddw2,
     HomeComK40,
     HomeComRac,
     HomeComWddw2,
