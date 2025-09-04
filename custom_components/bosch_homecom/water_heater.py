@@ -161,7 +161,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
                     case "operationMode":
                         operationMode_value = ref[key]["value"]
                         actualTemp_value = (
-                            (domestic_hot_water_circuits.get("tempLevel") or {})
+                            (ref.get("tempLevel") or {})
                             .get(operationMode_value, {})
                             .get("value", "unknown")
                         )

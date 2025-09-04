@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 import logging
+import re
 
 from homeassistant import config_entries, core
 from homeassistant.components.sensor import SensorEntity
@@ -86,11 +87,12 @@ async def async_setup_entry(
         ):
             for ref in coordinator.data.dhw_circuits:
                 dhw_id = ref["id"].split("/")[-1]
-                entities.append(
-                    BoschComSensorDhwWddw2(
-                        coordinator=coordinator, config_entry=config_entry, field=dhw_id
+                if re.fullmatch(r"dhw\d", dhw_id):
+                    entities.append(
+                        BoschComSensorDhwWddw2(
+                            coordinator=coordinator, config_entry=config_entry, field=dhw_id
+                        )
                     )
-                )
     async_add_entities(entities)
 
 
