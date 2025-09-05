@@ -146,7 +146,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         for ref in self.coordinator.data.dhw_circuits:
             dhw_id = ref["id"].split("/")[-1]
             await self.coordinator.bhc.async_put_dhw_operation_mode(
-                self._attr_unique_id, dhw_id, self._operation_map[operation_mode]
+                self._attr_unique_id, dhw_id, operation_mode
             )
         await self.coordinator.async_request_refresh()
 
