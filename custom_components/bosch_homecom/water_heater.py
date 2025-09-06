@@ -9,6 +9,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+import re
 
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorWddw2
 
@@ -145,9 +146,10 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Set new target operation mode."""
         for ref in self.coordinator.data.dhw_circuits:
             dhw_id = ref["id"].split("/")[-1]
-            await self.coordinator.bhc.async_put_dhw_operation_mode(
-                self._attr_unique_id, dhw_id, operation_mode
-            )
+            if re.fullmatch(r"dhw\d", dhw_id):
+                await self.coordinator.bhc.async_put_dhw_operation_mode(
+                    self._attr_unique_id, dhw_id, operation_mode
+                )
         await self.coordinator.async_request_refresh()
 
     def _set_domestic_hot_water_circuits(
@@ -156,16 +158,17 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Populate heating circuits."""
 
         for ref in domestic_hot_water_circuits:
-            for key in ref:
-                match key:
-                    case "operationMode":
-                        operationMode_value = ref[key]["value"]
-                        actualTemp_value = (
-                            (ref.get("tempLevel") or {})
-                            .get(operationMode_value, {})
-                            .get("value", "unknown")
-                        )
-                        self._attr_operation_list = ref[key]["allowedValues"]
+            if re.fullmatch(r"dhw\d", dhw_id):
+                for key in ref:
+                    match key:
+                        case "operationMode":
+                            operationMode_value = ref[key]["value"]
+                            actualTemp_value = (
+                                (ref.get("tempLevel") or {})
+                                .get(operationMode_value, {})
+                                .get("value", "unknown")
+                            )
+                            self._attr_operation_list = ref[key]["allowedValues"]
         self._attr_current_operation = operationMode_value
         self._attr_current_temperature = actualTemp_value
 

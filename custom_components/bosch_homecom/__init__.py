@@ -92,7 +92,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     is_first = True
     for device in filtered_devices:
         device_id = device["deviceId"]
-        firmware = await bhc.async_get_firmware(device_id)
+        try:
+            firmware = await bhc.async_get_firmware(device_id)
+        except ApiError as err:
+            if "504" in str(err):
+                _LOGGER.warning("Firmware request for %s timed out (504), setting to not_available", device_id)
+                firmware = {"value": "unknown"}
+            else:
+                raise
         auth_provider = False
         if is_first:
             auth_provider = True
