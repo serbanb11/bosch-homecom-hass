@@ -17,10 +17,7 @@ set_dhw_tempreture:
             - "eco"
             - "high"
             - "low"
-            - "handWash"
-            - "shower"
-            - "bath"
-            - "dishWash"
+            - "manual"
     temperature:
       name: temperature
       description: The tempreture to set to level of dhw circuit
