@@ -81,6 +81,9 @@ https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&non
 - **Bosch Climate Class 3000i** (that are *not* based on Midea)
 - **K40**
 - **K30**
+  - Buderus Logatherm WLW 186i heat pump with the MX300 communication module
+- **wddw2**
+  - Hydronext 5700s with wifi module Bosch 7736505449
 
 ***Users reported that Bosch Climate Class 3000i and 7000i based on Midea are not working.***
 

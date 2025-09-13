@@ -158,6 +158,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Populate heating circuits."""
 
         for ref in domestic_hot_water_circuits:
+            dhw_id = ref["id"].split("/")[-1]
             if re.fullmatch(r"dhw\d", dhw_id):
                 for key in ref:
                     match key:
