@@ -32,6 +32,7 @@ async def async_setup_entry(
                         BoschComWddw2WaterHeater(
                             coordinator=coordinator, field=dhw_id
                         )
+                    )
         elif (
             coordinator.data.device["deviceType"] == "k40"
             or coordinator.data.device["deviceType"] == "k30"
