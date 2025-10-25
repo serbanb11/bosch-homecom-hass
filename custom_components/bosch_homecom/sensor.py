@@ -511,6 +511,22 @@ class BoschComSensorHs(BoschComSensorBase):
             "unitOfMeasure", "unknown"
         )
 
+        collectorInflowTemp = str(
+            (self.coordinator.data.heat_sources.get("collectorInflowTemp") or {}).get(
+                "value", "unknown"
+            )
+        ) + (self.coordinator.data.heat_sources.get("collectorInflowTemp") or {}).get(
+            "unitOfMeasure", "unknown"
+        )   
+
+        collectorOutflowTemp = str(
+            (self.coordinator.data.heat_sources.get("collectorOutflowTemp") or {}).get(
+                "value", "unknown"
+            )
+        ) + (self.coordinator.data.heat_sources.get("collectorOutflowTemp") or {}).get(
+            "unitOfMeasure", "unknown"
+        )
+
         result = {
             "numberOfStartsCh": numberOfStarts_dict.get("ch", "unknown"),
             "numberOfStartsDhw": numberOfStarts_dict.get("dhw", "unknown"),
@@ -518,6 +534,8 @@ class BoschComSensorHs(BoschComSensorBase):
             "returnTemperature": returnTemperature,
             "actualSupplyTemperature": actualSupplyTemperature,
             "actualModulation": actualModulation,
+            "collectorInflowTemp": collectorInflowTemp,
+            "collectorOutflowTemp": collectorOutflowTemp,
         }
 
         if not len(consumption):
