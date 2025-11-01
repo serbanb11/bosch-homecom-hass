@@ -12,6 +12,10 @@ DOMAIN = "bosch_homecom"
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=15)
 MANUFACTURER: Final = "Bosch"
 
+CONF_UPDATE_SECONDS: Final = "update_seconds"
+MIN_UPDATE_SECONDS: Final = 15      # avoids spam
+MAX_UPDATE_SECONDS: Final = 3600   # 1 hour
+
 MODEL = {
     "rac": "Residential Air Conditioning",
     "k30": "Bosch boiler",
