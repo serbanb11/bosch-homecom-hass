@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 
 from aiohttp.client_exceptions import ClientConnectorError, ClientError
 from homecom_alt import (
@@ -29,7 +30,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_REFRESH, DOMAIN, MODEL
+from .const import CONF_REFRESH, DOMAIN, MODEL, CONF_UPDATE_SECONDS, DEFAULT_UPDATE_INTERVAL
 from .coordinator import (
     BoschComModuleCoordinatorGeneric,
     BoschComModuleCoordinatorK40,
@@ -182,6 +183,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN] = {"coordinators": coordinators}
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    
+    if CONF_UPDATE_SECONDS not in entry.options:
+        new_options = dict(entry.options)
+        new_options[CONF_UPDATE_SECONDS] = int(DEFAULT_UPDATE_INTERVAL.total_seconds())
+        hass.config_entries.async_update_entry(entry, options=new_options)
+        
+    def _get_update_interval(entry: ConfigEntry) -> timedelta:
+        seconds = int(entry.options.get(
+            CONF_UPDATE_SECONDS,
+            int(DEFAULT_UPDATE_INTERVAL.total_seconds())
+        ))
+        return timedelta(seconds=seconds)
+
+    # Aplica o intervalo inicial a todos os coordinators
+    for coordinator in entry.runtime_data:
+        coordinator.update_interval = _get_update_interval(entry)
+
+    # Listener para futuras alterações nas opções
+    async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry):
+        new_interval = _get_update_interval(updated_entry)
+        for coordinator in updated_entry.runtime_data:
+            coordinator.update_interval = new_interval
+
+    entry.async_on_unload(entry.add_update_listener(_update_listener))
     return True
 
 
