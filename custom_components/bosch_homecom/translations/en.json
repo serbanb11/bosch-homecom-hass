@@ -33,9 +33,13 @@
             }
         },
         "error": {
-            "no_devices_found": "No devices found",
-            "cannot_connect": "Cannot connect",
-            "unknown": "Unkown error"
+            "username_required": "Username is required.",
+            "code_required": "Verification code is required.",
+            "unknown": "An unknown error occurred.",
+            "cannot_connect": "Cannot connect to Bosch servers.",
+            "no_devices_found": "No devices found.",
+            "no_device_selected": "You must select at least one device.",
+            "already_configured": "This account is already configured."
         },
         "abort": {
             "already_configured": "Already configured",
@@ -43,6 +47,17 @@
             "reauth_successful": "Reauth successful",
             "reauth_unsuccessful": "Re-authentication was unsuccessful, please remove the integration and set it up again.",
             "reconfigure_successful": "Reconfigure successful"
+        },
+        "options": {
+            "step": {
+                "init": {
+                    "title": "Options",
+                    "description": "Adjust runtime options for Bosch HomeCom.",
+                    "data": {
+                        "update_seconds": "Update interval (seconds)"
+                    }
+                }
+            }
         }
     }
 }

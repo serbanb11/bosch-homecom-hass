@@ -47,6 +47,17 @@
             "reauth_successful": "Reauth successful",
             "reauth_unsuccessful": "Re-authentication was unsuccessful, please remove the integration and set it up again.",
             "reconfigure_successful": "Reconfigure successful"
+        },
+        "options": {
+            "step": {
+                "init": {
+                    "title": "Options",
+                    "description": "Adjust runtime options for Bosch HomeCom.",
+                    "data": {
+                        "update_seconds": "Update interval (seconds)"
+                    }
+                }
+            }
         }
     }
 }

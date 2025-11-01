@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Final
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import UnitOfTemperature, UnitOfPressure, UnitOfVolumeFlowRate, PERCENTAGE
+
 
 DOMAIN = "bosch_homecom"
-DEFAULT_UPDATE_INTERVAL: Final = timedelta(minutes=4)
+DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=15)
 MANUFACTURER: Final = "Bosch"
+
+CONF_UPDATE_SECONDS: Final = "update_seconds"
+MIN_UPDATE_SECONDS: Final = 15      # avoids spam
+MAX_UPDATE_SECONDS: Final = 3600   # 1 hour
 
 MODEL = {
     "rac": "Residential Air Conditioning",
@@ -32,3 +39,57 @@ ATTR_TIMERS_OFF = "timersOff"
 
 CONF_DEVICES: Final = "devices"
 CONF_REFRESH: Final = "refresh"
+
+BOSCH_SENSOR_DESCRIPTORS = {
+    "wddw2": [
+        {
+            "key": "operation_mode",
+            "path": ["dhw_circuits", "dhw1", "operationMode"],
+            "name": "DHW Operation Mode",
+            "device_class": None,
+            "unit": None,
+            "state_class": None,
+        },
+        {
+            "key": "air_box_temperature",
+            "path": ["dhw_circuits", "dhw1", "airBoxTemperature"],
+            "name": "Air Box Temperature",
+            "device_class": SensorDeviceClass.TEMPERATURE,
+            "unit": UnitOfTemperature.CELSIUS,
+            "state_class": "measurement",
+        },
+        {
+            "key": "inlet_temperature",
+            "path": ["dhw_circuits", "dhw1", "inletTemperature"],
+            "name": "DHW Inlet Temperature",
+            "device_class": SensorDeviceClass.TEMPERATURE,
+            "unit": UnitOfTemperature.CELSIUS,
+            "state_class": "measurement",
+        },
+        {
+            "key": "outlet_temperature",
+            "path": ["dhw_circuits", "dhw1", "outletTemperature"],
+            "name": "DHW Outlet Temperature",
+            "device_class": SensorDeviceClass.TEMPERATURE,
+            "unit": UnitOfTemperature.CELSIUS,
+            "state_class": "measurement",
+        },
+        {
+            "key": "water_flow",
+            "path": ["dhw_circuits", "dhw1", "waterFlow"],
+            "name": "DHW Water Flow",
+            "device_class": None,
+            "unit": None,  # a API já devolve "l/min" na unidade do nó
+            "state_class": "measurement",
+        },
+        # No WDDW2 o contador de arranques vem como nbStarts dentro do dhw1
+        {
+            "key": "heat_source_starts",
+            "path": ["dhw_circuits", "dhw1", "nbStarts"],
+            "name": "Heat Source Starts",
+            "device_class": None,
+            "unit": None,
+            "state_class": "total_increasing",
+        },
+    ]
+}
