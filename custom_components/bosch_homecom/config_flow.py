@@ -5,8 +5,13 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 import logging
 from typing import Any
+
+from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResult
 
 from aiohttp import ClientConnectorError
 from homeassistant.config_entries import (
@@ -15,14 +20,22 @@ from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
 )
+
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 import voluptuous as vol
 
-from .const import CONF_DEVICES, CONF_REFRESH, DOMAIN
-
+from .const import (
+    DOMAIN,
+    CONF_DEVICES,
+    CONF_REFRESH,
+    CONF_UPDATE_SECONDS,
+    DEFAULT_UPDATE_INTERVAL,
+    MIN_UPDATE_SECONDS,
+    MAX_UPDATE_SECONDS,
+)
 
 @dataclass
 class BhcConfig:
@@ -47,6 +60,10 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
     user: str
     data: dict[str, Any] | None = None
+
+    @staticmethod
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry):
+        return BoschHomeComOptionsFlowHandler(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -222,3 +239,32 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(data_schema),
             errors=errors,
         )
+
+class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle Bosch HomeCom options."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None) -> FlowResult:
+        if user_input is not None:
+            # Guardar opções
+            return self.async_create_entry(title="", data=user_input)
+
+        # valor atual das opções (ou default do const)
+        current_seconds = int(
+            self.config_entry.options.get(
+                CONF_UPDATE_SECONDS, int(DEFAULT_UPDATE_INTERVAL.total_seconds())
+            )
+        )
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_UPDATE_SECONDS,
+                    default=current_seconds
+                ): vol.All(int, vol.Range(min=MIN_UPDATE_SECONDS, max=MAX_UPDATE_SECONDS)),
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=schema)
