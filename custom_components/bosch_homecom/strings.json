@@ -49,13 +49,11 @@
             "reconfigure_successful": "Reconfigure successful"
         },
         "options": {
-            "step": {
-                "init": {
-                    "title": "Options",
-                    "description": "Adjust runtime options for Bosch HomeCom.",
-                    "data": {
-                        "update_seconds": "Update interval (seconds)"
-                    }
+            "init": {
+                "title": "Options",
+                "description": "Adjust runtime options for Bosch HomeCom.",
+                "data": {
+                    "update_seconds": "Update interval (seconds)"
                 }
             }
         }
