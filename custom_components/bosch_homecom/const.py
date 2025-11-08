@@ -9,7 +9,7 @@ from homeassistant.const import UnitOfTemperature, UnitOfPressure, UnitOfVolumeF
 
 
 DOMAIN = "bosch_homecom"
-DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=15)
+DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
 MANUFACTURER: Final = "Bosch"
 
 CONF_UPDATE_SECONDS: Final = "update_seconds"

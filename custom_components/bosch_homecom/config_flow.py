@@ -243,8 +243,9 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
 class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle Bosch HomeCom options."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+    def __init__(self, entry: config_entries.ConfigEntry):
+        super().__init__()
+        self._entry = entry
 
     async def async_step_init(self, user_input=None) -> FlowResult:
         if user_input is not None:
@@ -253,7 +254,7 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
 
         # valor atual das opções (ou default do const)
         current_seconds = int(
-            self.config_entry.options.get(
+            self._entry.options.get(
                 CONF_UPDATE_SECONDS, int(DEFAULT_UPDATE_INTERVAL.total_seconds())
             )
         )

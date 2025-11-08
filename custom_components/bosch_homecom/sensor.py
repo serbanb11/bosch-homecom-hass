@@ -346,6 +346,9 @@ class BoschComSensorDhw(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         self.field = field
 
         _LOGGER.debug(
@@ -362,10 +365,7 @@ class BoschComSensorDhw(BoschComSensorBase):
                 actualTemp_value = (entry.get("actualTemp") or {}).get(
                     "value", "unknown"
                 )
-                actualTemp_unit = (entry.get("actualTemp") or {}).get(
-                    "unitOfMeasure", "unknown"
-                )
-                return str(actualTemp_value) + actualTemp_unit
+                return float(actualTemp_value)
         return "unknown"
 
     @property
@@ -497,7 +497,6 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
     """BoschComSensorOutdoorTemp sensor."""
 
     _attr_has_entity_name = True
-    #_attr_state_class = SensorDeviceClass.TEMPERATURE
 
     def __init__(
         self,
@@ -514,6 +513,8 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
             icon="mdi:sun-thermometer",
         )
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         self._attr_translation_key = "OutdoorTemp"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
@@ -529,9 +530,9 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHc outdoorTemp."""
-        return str(
+        return float(
             self.coordinator.data.outdoor_temp.get("value", "unknown")
-        ) + self.coordinator.data.outdoor_temp.get("unitOfMeasure", "unknown")
+        )
 
 
 class BoschComSensorHs(BoschComSensorBase):
@@ -615,13 +616,26 @@ class BoschComSensorHs(BoschComSensorBase):
             )
         ) + (self.coordinator.data.heat_sources.get("collectorInflowTemp") or {}).get(
             "unitOfMeasure", "unknown"
-        )   
+        )
 
         collectorOutflowTemp = str(
             (self.coordinator.data.heat_sources.get("collectorOutflowTemp") or {}).get(
                 "value", "unknown"
             )
         ) + (self.coordinator.data.heat_sources.get("collectorOutflowTemp") or {}).get(
+            "unitOfMeasure", "unknown"
+        )
+
+        actualHeatDemand = (
+            (self.coordinator.data.heat_sources.get("actualHeatDemand") or {})
+            .get("values", ["unknown"])
+        )[0]
+
+        totalWorkingTime = str(
+            (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
+                "value", "unknown"
+            )
+        ) + (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
             "unitOfMeasure", "unknown"
         )
 
@@ -634,6 +648,8 @@ class BoschComSensorHs(BoschComSensorBase):
             "actualModulation": actualModulation,
             "collectorInflowTemp": collectorInflowTemp,
             "collectorOutflowTemp": collectorOutflowTemp,
+            "actualHeatDemand": actualHeatDemand,
+            "totalWorkingTime": totalWorkingTime,
         }
 
         if not len(consumption):
@@ -722,57 +738,6 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
                 result["nbStarts"]           = (entry.get("nbStarts") or {}).get("value", "unknown")
                 return result
         return {}
-
-    #@property
-    #def state(self):
-        """Return BoschComSensorDhw operationMode."""
-        #for entry in self.coordinator.data.dhw_circuits:
-            #if entry.get("id") == "/dhwCircuits/" + self.field:
-                #operationMode_value = (entry.get("operationMode") or {}).get(
-                    #"value", "unknown"
-                #)
-                #actualTemp_value = (
-                    #(entry.get("tempLevel") or {}).get(operationMode_value, {}).get("value", "unknown")
-                #)
-                #actualTemp_unit = (
-                    #(entry.get("tempLevel") or {}).get(operationMode_value, {}).get("unitOfMeasure", "unknown")
-                #)
-                #return str(actualTemp_value) + actualTemp_unit
-        #return "unknown"
-
-    #@property
-    #def extra_state_attributes(self):
-        """Return attributes."""
-
-        #for entry in self.coordinator.data.dhw_circuits:
-            #if entry.get("id") == "/dhwCircuits/" + self.field:
-                #operationMode_value = (entry.get("operationMode") or {}).get(
-                    #"value", "unknown"
-                #)
-                
-                #numberOfStarts_value = (entry.get("nbStarts") or {}).get("value", "unknown")
-                #ariboxTemp_value     = (entry.get("airBoxTemperature") or {}).get("value", "unknown")
-                #fanSpeed_value       = (entry.get("fanSpeed") or {}).get("value", "unknown")
-                #inletTemp_value      = (entry.get("inletTemperature") or {}).get("value", "unknown")
-                #outletTemp_value     = (entry.get("outletTemperature") or {}).get("value", "unknown")
-                #waterFlow_value      = (entry.get("waterFlow") or {}).get("value", "unknown")
-
-                #result = {
-                    #"nbStarts": numberOfStarts_value,
-                    #"airBoxTemperature": ariboxTemp_value,
-                    #"fanSpeed": fanSpeed_value,
-                    #"inletTemperature": inletTemp_value,
-                    #"outletTemperature": outletTemp_value,
-                    #"waterFlow": waterFlow_value,
-                #}
-
-                #for item, temp_item in (entry.get("tempLevel") or {}).items():
-                    #result[item] = (
-                        #temp_item.get("value", "unknown") if temp_item else "unknown"
-                    #)
-
-                #return result
-        #return "unknown"
 
 @dataclass
 class DynamicPathResolver:
