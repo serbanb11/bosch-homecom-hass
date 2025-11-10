@@ -20,7 +20,7 @@ https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&non
 
 ---
 
-#### 3. Open Developer Tools (Network Tab)
+#### 2. Open Developer Tools (Network Tab)
 
 - Press `F12` or right-click > **Inspect**.
 - Go to the **Network** tab.
@@ -29,7 +29,7 @@ https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&non
 
 ---
 
-#### 4. Log In Using Your Credentials
+#### 3. Log In Using Your Credentials
 
 - Enter your **username and password** on the loaded page.
 - Complete any CAPTCHA if required.
@@ -39,7 +39,7 @@ https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&non
 
 ---
 
-#### 5. Extract the Authorization Code
+#### 4. Extract the Authorization Code
 
 - In the **Network tab**, find the request to the redirect URI:
   ```
@@ -56,7 +56,7 @@ https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&non
 
 ---
 
-#### 6. Paste Code Into Home Assistant
+#### 5. Paste Code Into Home Assistant
 
 - Go back to your Home Assistant (or related app).
 - When prompted for an **authorization code**, paste the code you copied.
@@ -185,13 +185,13 @@ A dialog box will popup asking you to input your Bosch HomeCom Easy APP username
    - eheater
    - compressor
 
-- custom actions
-  Fetch Custom Path Service
+## custom actions
+###  Fetch Custom Path Service
   ![Lovelace card](/img/call_example.png)
 
-  Set extra hot water for specific duration
+###  Set extra hot water for specific duration
 
-  Set DHW Temperature for levels eco, low, high
+###  Set DHW Temperature for levels eco, low, high
 
 
 # Lovelace
