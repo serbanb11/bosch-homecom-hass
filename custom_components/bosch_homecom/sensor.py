@@ -564,6 +564,24 @@ class BoschComSensorHs(BoschComSensorBase):
             self._attr_unique_id,
         )
 
+    def seconds_to_readable(seconds):
+        units = [
+            ('year', 365 * 24 * 3600),
+            ('month', 30 * 24 * 3600),
+            ('week', 7 * 24 * 3600),
+            ('day', 24 * 3600),
+            ('hour', 3600),
+        ]
+
+        parts = []
+        for name, length in units:
+            value = seconds // length
+            if value:
+                parts.append(f"{value} {name}{'s' if value > 1 else ''}")
+                seconds %= length
+
+        return " ".join(parts) if parts else "0 hours"
+
     @property
     def state(self):
         """Return BoschComSensorHS type."""
@@ -638,6 +656,8 @@ class BoschComSensorHs(BoschComSensorBase):
             "unitOfMeasure", "unknown"
         )
 
+        totalWorkingTimeReadbale = seconds_to_readable(int((self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get("value", 0) or 0))
+
         result = {
             "numberOfStartsCh": numberOfStarts_dict.get("ch", "unknown"),
             "numberOfStartsDhw": numberOfStarts_dict.get("dhw", "unknown"),
@@ -649,6 +669,7 @@ class BoschComSensorHs(BoschComSensorBase):
             "collectorOutflowTemp": collectorOutflowTemp,
             "actualHeatDemand": actualHeatDemand,
             "totalWorkingTime": totalWorkingTime,
+            "totalWorkingTimeReadbale": totalWorkingTimeReadbale,
         }
 
         if not len(consumption):
