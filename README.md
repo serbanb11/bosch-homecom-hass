@@ -185,6 +185,20 @@ A dialog box will popup asking you to input your Bosch HomeCom Easy APP username
    - eheater
    - compressor
 
+### Extra attribute sensor template k40
+Template for Sensor
+```
+{{ state_attr('sensor.boschcom_k40_<your-id>_heat_source', 'actualSupplyTemperature') | replace('C', '') | float }}
+```
+Advanced options → Availability template:
+```
+{{ states('sensor.boschcom_k40_<your-id>_heat_source') not in ['unknown','unavailable','none',''] }}
+```
+totalWorkingTime
+```
+{{ state_attr('sensor.boschcom_k40_<your-id>_heat_source', 'totalWorkingTime') | replace('s', '') | float / (60*60) }}
+```
+
 ## custom actions
 ###  Fetch Custom Path Service
   ![Lovelace card](/img/call_example.png)
