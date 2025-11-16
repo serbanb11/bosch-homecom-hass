@@ -41,6 +41,7 @@ from .coordinator import (
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
+    Platform.FAN,
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,

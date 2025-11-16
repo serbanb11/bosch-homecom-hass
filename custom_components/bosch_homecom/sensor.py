@@ -24,7 +24,7 @@ from .const import BOSCH_SENSOR_DESCRIPTORS
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=1440)
-
+PARALLEL_UPDATES = 0
 
 async def async_setup_entry(
     hass: core.HomeAssistant,
