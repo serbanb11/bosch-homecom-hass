@@ -546,7 +546,7 @@ class BoschComSensorVentilation(BoschComSensorBase):
 
         for entry in self.coordinator.data.ventilation:
             if entry.get("id") == "/ventilation/" + self.field:
-                maxIndoorAirQualitye_value = (entry.get("maxIndoorAirQuality") or {}).get(
+                maxIndoorAirQuality_value = (entry.get("maxIndoorAirQuality") or {}).get(
                     "value", "unknown"
                 )
                 maxRelativeHumidity_value = (entry.get("maxRelativeHumidity") or {}).get("value", "unknown")
