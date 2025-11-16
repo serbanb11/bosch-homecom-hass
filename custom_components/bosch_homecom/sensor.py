@@ -656,7 +656,7 @@ class BoschComSensorHs(BoschComSensorBase):
             "unitOfMeasure", "unknown"
         )
 
-        totalWorkingTimeReadbale = seconds_to_readable(int((self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get("value", 0) or 0))
+        totalWorkingTimeReadbale = self.seconds_to_readable(int((self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get("value", 0) or 0))
 
         result = {
             "numberOfStartsCh": numberOfStarts_dict.get("ch", "unknown"),
