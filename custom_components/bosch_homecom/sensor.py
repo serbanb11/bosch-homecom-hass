@@ -564,7 +564,7 @@ class BoschComSensorHs(BoschComSensorBase):
             self._attr_unique_id,
         )
 
-    def seconds_to_readable(seconds):
+    def seconds_to_readable(self, seconds):
         units = [
             ('year', 365 * 24 * 3600),
             ('month', 30 * 24 * 3600),
