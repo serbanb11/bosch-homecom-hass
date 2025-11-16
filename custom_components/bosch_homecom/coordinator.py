@@ -278,6 +278,7 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
             heat_sources=data.heat_sources,
             dhw_circuits=data.dhw_circuits,
             heating_circuits=data.heating_circuits,
+            ventilation=data.ventilation,
         )
 
 

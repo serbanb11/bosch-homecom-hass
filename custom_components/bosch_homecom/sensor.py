@@ -77,6 +77,14 @@ async def async_setup_entry(
                         coordinator=coordinator, config_entry=config_entry, field=dhw_id
                     )
                 )
+            # Ventilation
+            for ref in coordinator.data.ventilation:
+                zone_id = ref["id"].split("/")[-1]
+                entities.append(
+                    BoschComSensorVentilation(
+                        coordinator=coordinator, config_entry=config_entry, field=zone_id
+                    )
+                )
             # Heating circuits
             for ref in coordinator.data.heating_circuits:
                 hc_id = ref["id"].split("/")[-1]
@@ -491,6 +499,103 @@ class BoschComSensorHc(BoschComSensorBase):
             "coolingRoomTempSetpoint": "unknown",
         }
 
+class BoschComSensorVentilation(BoschComSensorBase):
+    """BoschComSensorVentilation sensor."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name=field + "_sensor",
+            unique_id=f"{coordinator.unique_id}-{field}-sensor",
+            icon="mdi:fan",
+        )
+        self._attr_translation_key = "ventilation"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field + "_sensor"
+        self._attr_should_poll = False
+        self.field = field
+
+        _LOGGER.debug(
+            "Init BoschComSensorVentilation: name=%s, unique_id=%s",
+            self._attr_name,
+            self._attr_unique_id,
+        )
+
+    @property
+    def state(self):
+        """Return BoschComSensorVentilation fan level."""
+        for entry in self.coordinator.data.ventilation:
+            if entry.get("id") == "/ventilation/" + self.field:
+                return (entry.get("exhaustFanLevel") or {}).get(
+                    "value", "unknown"
+                )
+        return "unknown"
+
+    @property
+    def extra_state_attributes(self):
+        """Return attributes."""
+
+        for entry in self.coordinator.data.ventilation:
+            if entry.get("id") == "/ventilation/" + self.field:
+                maxIndoorAirQualitye_value = (entry.get("maxIndoorAirQuality") or {}).get(
+                    "value", "unknown"
+                )
+                maxRelativeHumidity_value = (entry.get("maxRelativeHumidity") or {}).get("value", "unknown")
+                exhaustTemp_value = (
+                    entry.get("exhaustTemp") or {}
+                ).get("value", "unknown")
+                extractTemp_value = (
+                    entry.get("extractTemp") or {}
+                ).get("value", "unknown")
+                internalAirQuality_value = (
+                    entry.get("internalAirQuality") or {}
+                ).get("value", "unknown")
+                supplyTemp_value = (
+                    entry.get("supplyTemp") or {}
+                ).get("value", "unknown")
+                internalHumidity_value = (
+                    entry.get("internalHumidity") or {}
+                ).get("value", "unknown")
+                outdoorTemp_value = (
+                    entry.get("outdoorTemp") or {}
+                ).get("value", "unknown")
+                summerBypassEnable_value = (
+                    entry.get("summerBypassEnable") or {}
+                ).get("value", "unknown")
+                summerBypassDuration_value = (
+                    entry.get("summerBypassDuration") or {}
+                ).get("value", "unknown")
+                demandindoorAirQuality_value = (
+                    entry.get("demandindoorAirQuality") or {}
+                ).get("value", "unknown")
+                demandrelativeHumidity_value = (
+                    entry.get("demandrelativeHumidity") or {}
+                ).get("value", "unknown")
+
+                return {
+                    "maxIndoorAirQuality": maxIndoorAirQuality_value,
+                    "maxRelativeHumidity": maxRelativeHumidity_value,
+                    "exhaustTemp": exhaustTemp_value,
+                    "extractTemp": extractTemp_value,
+                    "internalAirQuality": internalAirQuality_value,
+                    "supplyTemp": supplyTemp_value,
+                    "internalHumidity": internalHumidity_value,
+                    "outdoorTemp": outdoorTemp_value,
+                    "summerBypassEnable": summerBypassEnable_value,
+                    "summerBypassDuration": summerBypassDuration_value,
+                    "demandindoorAirQuality": demandindoorAirQuality_value,
+                    "demandrelativeHumidity": demandrelativeHumidity_value,
+                }
+        return "unknown"
 
 class BoschComSensorOutdoorTemp(BoschComSensorBase):
     """BoschComSensorOutdoorTemp sensor."""
