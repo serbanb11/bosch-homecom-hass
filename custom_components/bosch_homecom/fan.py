@@ -6,8 +6,6 @@ from typing import Any
 
 from homeassistant import config_entries
 from homeassistant.components.fan import (
-    TURN_OFF,
-    TURN_ON,
     FanEntity,
     FanEntityFeature,
 )
