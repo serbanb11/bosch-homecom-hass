@@ -761,7 +761,7 @@ class BoschComSensorHs(BoschComSensorBase):
             "unitOfMeasure", "unknown"
         )
 
-        totalWorkingTimeReadbale = self.seconds_to_readable(int((self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get("value", 0) or 0))
+        totalWorkingTimeReadable = self.seconds_to_readable(int((self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get("value", 0) or 0))
 
         result = {
             "numberOfStartsCh": numberOfStarts_dict.get("ch", "unknown"),
@@ -774,7 +774,7 @@ class BoschComSensorHs(BoschComSensorBase):
             "collectorOutflowTemp": collectorOutflowTemp,
             "actualHeatDemand": actualHeatDemand,
             "totalWorkingTime": totalWorkingTime,
-            "totalWorkingTimeReadbale": totalWorkingTimeReadbale,
+            "totalWorkingTimeReadable": totalWorkingTimeReadable,
         }
 
         if not len(consumption):
