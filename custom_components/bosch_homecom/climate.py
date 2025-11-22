@@ -47,7 +47,7 @@ async def async_setup_entry(
     async_add_entities(
         BoschComK40Climate(coordinator=coordinator, field="clima")
         for coordinator in coordinators
-        if coordinator.data.device["deviceType"] in ["k30", "k40"]
+        if coordinator.data.device["deviceType"] in ["k30", "k40", "icom"]
     )
 
 

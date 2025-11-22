@@ -28,7 +28,7 @@ async def async_setup_entry(
     coordinators = config_entry.runtime_data
     for coordinator in coordinators:
         device_type = coordinator.data.device.get("deviceType")
-        if device_type in ("k40", "k30"):
+        if device_type in ("k40", "k30", "icom"):
             # DHW circuits
             for ref in coordinator.data.ventilation:
                 zone_id = ref["id"].split("/")[-1]

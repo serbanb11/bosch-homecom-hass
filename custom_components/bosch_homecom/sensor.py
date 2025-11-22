@@ -54,7 +54,7 @@ async def async_setup_entry(
                     coordinator=coordinator, config_entry=config_entry
                 )
             )
-        elif device_type in ("k40", "k30"):
+        elif device_type in ("k40", "k30", "icom"):
             entities.append(
                 BoschComSensorNotificationsK40(
                     coordinator=coordinator, config_entry=config_entry
@@ -68,7 +68,7 @@ async def async_setup_entry(
             )
 
         # ---- K40/K30 (existing) ----
-        if device_type in ("k40", "k30"):
+        if device_type in ("k40", "k30", "icom"):
             # DHW circuits
             for ref in coordinator.data.dhw_circuits:
                 dhw_id = ref["id"].split("/")[-1]
@@ -751,7 +751,7 @@ class BoschComSensorHs(BoschComSensorBase):
         actualHeatDemand = (
             (self.coordinator.data.heat_sources.get("actualHeatDemand") or {})
             .get("values", ["unknown"])
-        )[0]
+        )
 
         totalWorkingTime = str(
             (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
@@ -772,7 +772,9 @@ class BoschComSensorHs(BoschComSensorBase):
             "actualModulation": actualModulation,
             "collectorInflowTemp": collectorInflowTemp,
             "collectorOutflowTemp": collectorOutflowTemp,
-            "actualHeatDemand": actualHeatDemand,
+            "actualHeatDemandCh": actualHeatDemand[0] if len(actualHeatDemand) > 0 else "unknown",
+            "actualHeatDemandDhw": actualHeatDemand[1] if len(actualHeatDemand) > 1 else "unknown",
+            "actualHeatDemandFrost": actualHeatDemand[2] if len(actualHeatDemand) > 2 else "unknown",
             "totalWorkingTime": totalWorkingTime,
             "totalWorkingTimeReadable": totalWorkingTimeReadable,
         }
@@ -780,19 +782,19 @@ class BoschComSensorHs(BoschComSensorBase):
         if not len(consumption):
             result.update(
                 {
-                    "outputProduced": consumption,
-                    "eheater": consumption,
-                    "compressor": consumption,
+                    "totalConsumptionOutputProduced": consumption,
+                    "totalConsumptionEheater": consumption,
+                    "totalConsumptionCompressor": consumption,
                 }
             )
         else:
             result.update(
                 {
-                    "outputProduced": (consumption[0] or {}).get(
+                    "totalConsumptionOutputProduced": (consumption[0] or {}).get(
                         "outputProduced", "unknown"
                     ),
-                    "eheater": (consumption[1] or {}).get("eheater", "unknown"),
-                    "compressor": (consumption[2] or {}).get("compressor", "unknown"),
+                    "totalConsumptionEheater": (consumption[1] or {}).get("eheater", "unknown"),
+                    "totalConsumptionCompressor": (consumption[2] or {}).get("compressor", "unknown"),
                 }
             )
         return result

@@ -35,10 +35,7 @@ async def async_setup_entry(
                             coordinator=coordinator, field=dhw_id
                         )
                     )
-        elif (
-            coordinator.data.device["deviceType"] == "k40"
-            or coordinator.data.device["deviceType"] == "k30"
-        ):
+        elif coordinator.data.device.get("deviceType") in ("k40", "k30", "icom"):
             entities.append(
                 BoschComK40WaterHeater(coordinator=coordinator, field="waterheater")
             )
