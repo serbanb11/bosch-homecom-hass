@@ -75,8 +75,8 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
 
             # Persist refreshed tokens if they changed
             if self.auth_provider:
-                token = self.bhc._options.get("token")
-                refresh = self.bhc._options.get("refresh_token")
+                token = self.bhc.token
+                refresh = self.bhc.refresh_token
                 old_refresh = self.entry.data.get(CONF_REFRESH)
                 if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
@@ -144,8 +144,8 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
 
             # Persist refreshed tokens if they changed
             if self.auth_provider:
-                token = self.bhc._options.get("token")
-                refresh = self.bhc._options.get("refresh_token")
+                token = self.bhc.token
+                refresh = self.bhc.refresh_token
                 old_refresh = self.entry.data.get(CONF_REFRESH)
                 if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
@@ -216,8 +216,8 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
 
             # Persist refreshed tokens if they changed
             if self.auth_provider:
-                token = self.bhc._options.get("token")
-                refresh = self.bhc._options.get("refresh_token")
+                token = self.bhc.token
+                refresh = self.bhc.refresh_token
                 old_refresh = self.entry.data.get(CONF_REFRESH)
                 if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
@@ -293,8 +293,8 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
 
             # Persist refreshed tokens if they changed
             if self.auth_provider:
-                token = self.bhc._options.get("token")
-                refresh = self.bhc._options.get("refresh_token")
+                token = self.bhc.token
+                refresh = self.bhc.refresh_token
                 old_refresh = self.entry.data.get(CONF_REFRESH)
                 if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
