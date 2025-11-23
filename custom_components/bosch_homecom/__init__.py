@@ -7,7 +7,7 @@ import logging
 from datetime import timedelta
 
 from aiohttp.client_exceptions import ClientConnectorError, ClientError
-from homecom_alt import (
+from .homecom_alt import (
     ApiError,
     AuthFailedError,
     ConnectionOptions,

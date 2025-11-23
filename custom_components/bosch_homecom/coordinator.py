@@ -7,7 +7,7 @@ from homeassistant.const import CONF_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homecom_alt import (
+from .homecom_alt import (
     ApiError,
     AuthFailedError,
     BHCDeviceGeneric,
@@ -51,6 +51,7 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
         self.device = device
         self.entry = entry
         self.auth_provider = auth_provider
+        self._update_lock = asyncio.Lock()
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -62,51 +63,36 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
 
     async def _async_update_data(self) -> BHCDeviceGeneric:
         """Update data via library."""
-        if self.auth_provider:
+        async with self._update_lock:
             try:
                 data: BHCDeviceGeneric = await self.bhc.async_update(self.unique_id)
+            except AuthFailedError as error:
+                if self.auth_provider:
+                    self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Auth failed") from error
             except (ApiError, InvalidSensorDataError, RetryError) as error:
                 raise UpdateFailed(error) from error
-            except AuthFailedError:
-                self.entry.async_start_reauth(self.hass)
 
-        # Persist refreshed tokens if they changed
-        try:
-            token = self.bhc.token
-            refresh = self.bhc.refresh_token
-            if token and refresh:
-                cur_refresh = self.entry.data.get(CONF_REFRESH)
-                if not self.auth_provider:
-                    conf_data = dict(self.entry.data)
-                    self.bhc.token = conf_data[CONF_TOKEN]
-                    self.bhc.refresh_token = conf_data[CONF_REFRESH]
-                    try:
-                        data: BHCDeviceGeneric = await self.bhc.async_update(
-                            self.unique_id
-                        )
-                    except (ApiError, InvalidSensorDataError, RetryError) as error:
-                        raise UpdateFailed(error) from error
-                elif refresh != cur_refresh and self.auth_provider:
+            # Persist refreshed tokens if they changed
+            if self.auth_provider:
+                token = self.bhc._options.get("token")
+                refresh = self.bhc._options.get("refresh_token")
+                old_refresh = self.entry.data.get(CONF_REFRESH)
+                if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = token
                     new_data[CONF_REFRESH] = refresh
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
+                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+                    _LOGGER.info(
+                        "Device %s: persisted refreshed tokens refresh=%s token=%s",
+                        self.unique_id, refresh, token
                     )
-            _LOGGER.info(
-                "Device_Id: %s, refresh_token: %s, token: %s",
-                self.unique_id,
-                refresh,
-                token,
-            )
-        except (AttributeError, KeyError):
-            _LOGGER.debug("Failed to persist refreshed tokens")
 
-        return BHCDeviceGeneric(
-            device=self.device,
-            firmware={},
-            notifications=data.notifications,
-        )
+            return BHCDeviceGeneric(
+                device=self.device,
+                firmware={},
+                notifications=data.notifications,
+            )
 
 
 class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
@@ -134,6 +120,7 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
         self.device = device
         self.entry = entry
         self.auth_provider = auth_provider
+        self._update_lock = asyncio.Lock()
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -145,52 +132,39 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
 
     async def _async_update_data(self) -> BHCDeviceRac:
         """Update data via library."""
-        if self.auth_provider:
+        async with self._update_lock:
             try:
                 data: BHCDeviceRac = await self.bhc.async_update(self.unique_id)
+            except AuthFailedError as error:
+                if self.auth_provider:
+                    self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Auth failed") from error
             except (ApiError, InvalidSensorDataError, RetryError) as error:
                 raise UpdateFailed(error) from error
-            except AuthFailedError:
-                self.entry.async_start_reauth(self.hass)
 
-        # Persist refreshed tokens if they changed
-        try:
-            token = self.bhc.token
-            refresh = self.bhc.refresh_token
-            if token and refresh:
-                cur_refresh = self.entry.data.get(CONF_REFRESH)
-                if not self.auth_provider:
-                    conf_data = dict(self.entry.data)
-                    self.bhc.token = conf_data[CONF_TOKEN]
-                    self.bhc.refresh_token = conf_data[CONF_REFRESH]
-                    try:
-                        data: BHCDeviceRac = await self.bhc.async_update(self.unique_id)
-                    except (ApiError, InvalidSensorDataError, RetryError) as error:
-                        raise UpdateFailed(error) from error
-                elif refresh != cur_refresh and self.auth_provider:
+            # Persist refreshed tokens if they changed
+            if self.auth_provider:
+                token = self.bhc._options.get("token")
+                refresh = self.bhc._options.get("refresh_token")
+                old_refresh = self.entry.data.get(CONF_REFRESH)
+                if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = token
                     new_data[CONF_REFRESH] = refresh
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
+                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+                    _LOGGER.info(
+                        "Device %s: persisted refreshed tokens refresh=%s token=%s",
+                        self.unique_id, refresh, token
                     )
-            _LOGGER.info(
-                "Device_Id: %s, refresh_token: %s, token: %s",
-                self.unique_id,
-                refresh,
-                token,
-            )
-        except (AttributeError, KeyError):
-            _LOGGER.debug("Failed to persist refreshed tokens")
 
-        return BHCDeviceRac(
-            device=self.device,
-            firmware={},
-            notifications=data.notifications,
-            stardard_functions=data.stardard_functions,
-            advanced_functions=data.advanced_functions,
-            switch_programs=data.switch_programs,
-        )
+            return BHCDeviceRac(
+                device=self.device,
+                firmware={},
+                notifications=data.notifications,
+                stardard_functions=data.stardard_functions,
+                advanced_functions=data.advanced_functions,
+                switch_programs=data.switch_programs,
+            )
 
 
 class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
@@ -218,6 +192,7 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
         self.device = device
         self.entry = entry
         self.auth_provider = auth_provider
+        self._update_lock = asyncio.Lock()
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -229,57 +204,44 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
 
     async def _async_update_data(self) -> BHCDeviceK40:
         """Update data via library."""
-        if self.auth_provider:
+        async with self._update_lock:
             try:
                 data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
+            except AuthFailedError as error:
+                if self.auth_provider:
+                    self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Auth failed") from error
             except (ApiError, InvalidSensorDataError, RetryError) as error:
                 raise UpdateFailed(error) from error
-            except AuthFailedError as error:
-                raise AuthFailedError(error) from error
 
-        # Persist refreshed tokens if they changed
-        try:
-            token = self.bhc.token
-            refresh = self.bhc.refresh_token
-            if token and refresh:
-                cur_refresh = self.entry.data.get(CONF_REFRESH)
-                if not self.auth_provider:
-                    conf_data = dict(self.entry.data)
-                    self.bhc.token = conf_data[CONF_TOKEN]
-                    self.bhc.refresh_token = conf_data[CONF_REFRESH]
-                    try:
-                        data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
-                    except (ApiError, InvalidSensorDataError, RetryError) as error:
-                        raise UpdateFailed(error) from error
-                elif refresh != cur_refresh and self.auth_provider:
+            # Persist refreshed tokens if they changed
+            if self.auth_provider:
+                token = self.bhc._options.get("token")
+                refresh = self.bhc._options.get("refresh_token")
+                old_refresh = self.entry.data.get(CONF_REFRESH)
+                if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = token
                     new_data[CONF_REFRESH] = refresh
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
+                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+                    _LOGGER.info(
+                        "Device %s: persisted refreshed tokens refresh=%s token=%s",
+                        self.unique_id, refresh, token
                     )
-            _LOGGER.info(
-                "Device_Id: %s, refresh_token: %s, token: %s",
-                self.unique_id,
-                refresh,
-                token,
-            )
-        except (AttributeError, KeyError):
-            _LOGGER.debug("Failed to persist refreshed tokens")
 
-        return BHCDeviceK40(
-            device=self.device,
-            firmware=data.firmware,
-            notifications=data.notifications,
-            holiday_mode=data.holiday_mode,
-            away_mode=data.away_mode,
-            power_limitation=data.power_limitation,
-            outdoor_temp=data.outdoor_temp,
-            heat_sources=data.heat_sources,
-            dhw_circuits=data.dhw_circuits,
-            heating_circuits=data.heating_circuits,
-            ventilation=data.ventilation,
-        )
+            return BHCDeviceK40(
+                device=self.device,
+                firmware=data.firmware,
+                notifications=data.notifications,
+                holiday_mode=data.holiday_mode,
+                away_mode=data.away_mode,
+                power_limitation=data.power_limitation,
+                outdoor_temp=data.outdoor_temp,
+                heat_sources=data.heat_sources,
+                dhw_circuits=data.dhw_circuits,
+                heating_circuits=data.heating_circuits,
+                ventilation=data.ventilation,
+            )
 
 
 class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
@@ -307,6 +269,7 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
         self.device = device
         self.entry = entry
         self.auth_provider = auth_provider
+        self._update_lock = asyncio.Lock()
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -318,47 +281,34 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
 
     async def _async_update_data(self) -> BHCDeviceWddw2:
         """Update data via library."""
-        if self.auth_provider:
+        async with self._update_lock:
             try:
                 data: BHCDeviceWddw2 = await self.bhc.async_update(self.unique_id)
+            except AuthFailedError as error:
+                if self.auth_provider:
+                    self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Auth failed") from error
             except (ApiError, InvalidSensorDataError, RetryError) as error:
                 raise UpdateFailed(error) from error
-            except AuthFailedError as error:
-                raise AuthFailedError(error) from error
 
-        # Persist refreshed tokens if they changed
-        try:
-            token = self.bhc.token
-            refresh = self.bhc.refresh_token
-            if token and refresh:
-                cur_refresh = self.entry.data.get(CONF_REFRESH)
-                if not self.auth_provider:
-                    conf_data = dict(self.entry.data)
-                    self.bhc.token = conf_data[CONF_TOKEN]
-                    self.bhc.refresh_token = conf_data[CONF_REFRESH]
-                    try:
-                        data: BHCDeviceWddw2 = await self.bhc.async_update(self.unique_id)
-                    except (ApiError, InvalidSensorDataError, RetryError) as error:
-                        raise UpdateFailed(error) from error
-                elif refresh != cur_refresh and self.auth_provider:
+            # Persist refreshed tokens if they changed
+            if self.auth_provider:
+                token = self.bhc._options.get("token")
+                refresh = self.bhc._options.get("refresh_token")
+                old_refresh = self.entry.data.get(CONF_REFRESH)
+                if refresh and refresh != old_refresh:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = token
                     new_data[CONF_REFRESH] = refresh
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
+                    self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+                    _LOGGER.info(
+                        "Device %s: persisted refreshed tokens refresh=%s token=%s",
+                        self.unique_id, refresh, token
                     )
-            _LOGGER.info(
-                "Device_Id: %s, refresh_token: %s, token: %s",
-                self.unique_id,
-                refresh,
-                token,
-            )
-        except (AttributeError, KeyError):
-            _LOGGER.debug("Failed to persist refreshed tokens")
 
-        return BHCDeviceWddw2(
-            device=self.device,
-            firmware=data.firmware,
-            notifications=data.notifications,
-            dhw_circuits=data.dhw_circuits,
-        )
+            return BHCDeviceWddw2(
+                device=self.device,
+                firmware=data.firmware,
+                notifications=data.notifications,
+                dhw_circuits=data.dhw_circuits,
+            )

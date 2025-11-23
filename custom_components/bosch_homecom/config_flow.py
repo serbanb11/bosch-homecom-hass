@@ -24,7 +24,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
-from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
+from .homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 import voluptuous as vol
 
 from .const import (
