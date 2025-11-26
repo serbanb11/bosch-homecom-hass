@@ -67,6 +67,12 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
                 old_refresh_token = self.bhc.refresh_token
                 data: BHCDeviceGeneric = await self.bhc.async_update(self.unique_id)
                 new_refresh_token = self.bhc.refresh_token
+                _LOGGER.info(
+                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
+                    self.unique_id,
+                    old_refresh_token,
+                    new_refresh_token,
+                )
                 if old_refresh_token != new_refresh_token:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = self.bhc.token
@@ -146,7 +152,8 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
                 data: BHCDeviceRac = await self.bhc.async_update(self.unique_id)
                 new_refresh_token = self.bhc.refresh_token
                 _LOGGER.info(
-                    "old_refresh_token: %s, new_refresh_token: %s",
+                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
+                    self.unique_id,
                     old_refresh_token,
                     new_refresh_token,
                 )
