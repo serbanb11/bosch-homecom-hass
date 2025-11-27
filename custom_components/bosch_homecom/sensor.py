@@ -772,9 +772,9 @@ class BoschComSensorHs(BoschComSensorBase):
             "actualModulation": actualModulation,
             "collectorInflowTemp": collectorInflowTemp,
             "collectorOutflowTemp": collectorOutflowTemp,
-            "actualHeatDemandCh": actualHeatDemand[0] if len(actualHeatDemand) > 0 else "unknown",
-            "actualHeatDemandDhw": actualHeatDemand[1] if len(actualHeatDemand) > 1 else "unknown",
-            "actualHeatDemandFrost": actualHeatDemand[2] if len(actualHeatDemand) > 2 else "unknown",
+            "actualHeatDemandCh": "ch" in actualHeatDemand,
+            "actualHeatDemandDhw": "dhw" in actualHeatDemand,
+            "actualHeatDemandFrost": "frost" in actualHeatDemand,
             "totalWorkingTime": totalWorkingTime,
             "totalWorkingTimeReadable": totalWorkingTimeReadable,
         }
