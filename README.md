@@ -6,8 +6,6 @@
 
 This project is an integration for Bosch HomeCom Easy enabled appliances. It is not affiliated with either Bosch or Home Assistant.
 
-***At the moment login using username and password is not working due to captch enforced by SingleKey ID. In order to login follow the following flow***<br />
-
 ### Step-by-Step Instructions
 
 #### 1. Open the Authorization URL
@@ -197,6 +195,38 @@ Advanced options → Availability template:
 totalWorkingTime
 ```
 {{ state_attr('sensor.boschcom_k40_<your-id>_heat_source', 'totalWorkingTime') | replace('s', '') | float / (60*60) }}
+```
+Synchronization of the energy logs.
+```
+- sensor:
+    - name: "Wärmepumpe Heizstab Verbrauch"
+      unit_of_measurement: "kWh"
+      device_class: energy
+      state_class: total_increasing
+      state: >
+        {{ states('sensor.warmepumpe_heat_source') | float(0)
+            if state_attr('sensor.warmepumpe_heat_source','totalConsumptionEheater') is none
+            else state_attr('sensor.warmepumpe_heat_source','totalConsumptionEheater') | float(0)
+        }}
+
+- sensor:
+    - name: "Wärmepumpe Kompressor Verbrauch"
+      unit_of_measurement: "kWh"
+      device_class: energy
+      state_class: total_increasing
+      state: >
+        {{ states('sensor.warmepumpe_heat_source') | float(0)
+            if state_attr('sensor.warmepumpe_heat_source','totalConsumptionCompressor') is none
+            else state_attr('sensor.warmepumpe_heat_source','totalConsumptionCompressor') | float(0)
+        }}
+
+- sensor:
+    - name: "Wärmepumpe Produziert"
+      unit_of_measurement: "kWh"
+      device_class: energy
+      state_class: total_increasing
+      state: >
+        {{ state_attr('sensor.warmepumpe_heat_source','totalConsumptionOutputProduced') | float(0) }}
 ```
 
 ## custom actions
