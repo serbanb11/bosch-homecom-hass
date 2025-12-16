@@ -7,7 +7,7 @@ from homeassistant.const import CONF_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homecom_alt import (
+from .homecom_alt import (
     ApiError,
     AuthFailedError,
     BHCDeviceGeneric,
@@ -67,12 +67,26 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
                 old_refresh_token = self.bhc.refresh_token
                 data: BHCDeviceGeneric = await self.bhc.async_update(self.unique_id)
                 new_refresh_token = self.bhc.refresh_token
+                _LOGGER.info(
+                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
+                    self.unique_id,
+                    old_refresh_token,
+                    new_refresh_token,
+                )
                 if old_refresh_token != new_refresh_token:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = self.bhc.token
                     new_data[CONF_REFRESH] = new_refresh_token
                     self.hass.config_entries.async_update_entry(
                         self.entry, data=new_data
+                    )
+                    config_token = self.entry.data.get(CONF_TOKEN)
+                    config_refresh_token = self.entry.data.get(CONF_REFRESH)
+                    _LOGGER.info(
+                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
+                        self.unique_id,
+                        config_token,
+                        config_refresh_token,
                     )
             except (ApiError, InvalidSensorDataError, RetryError) as error:
                 raise UpdateFailed(error) from error
@@ -139,12 +153,25 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
                 old_refresh_token = self.bhc.refresh_token
                 data: BHCDeviceRac = await self.bhc.async_update(self.unique_id)
                 new_refresh_token = self.bhc.refresh_token
+                new_refresh_token = self.bhc.refresh_token
+                _LOGGER.info(
+                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
+                    self.unique_id,
+                    old_refresh_token,
+                    new_refresh_token,
+                )
                 if old_refresh_token != new_refresh_token:
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = self.bhc.token
                     new_data[CONF_REFRESH] = new_refresh_token
                     self.hass.config_entries.async_update_entry(
                         self.entry, data=new_data
+                    )
+                    _LOGGER.info(
+                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
+                        self.unique_id,
+                        config_token,
+                        config_refresh_token,
                     )
             except (ApiError, InvalidSensorDataError, RetryError) as error:
                 raise UpdateFailed(error) from error
@@ -155,6 +182,12 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
             conf_data = dict(self.entry.data)
             self.bhc.token = conf_data[CONF_TOKEN]
             self.bhc.refresh_token = conf_data[CONF_REFRESH]
+            _LOGGER.info(
+                "Device_Id: %s, config_token: %s, config_refresh_token: %s",
+                self.unique_id,
+                conf_data[CONF_TOKEN],
+                conf_data[CONF_REFRESH],
+            )
             try:
                 data: BHCDeviceRac = await self.bhc.async_update(
                     self.unique_id
