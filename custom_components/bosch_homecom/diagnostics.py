@@ -5,10 +5,10 @@ from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_CODE, CONF_TOKEN
 from homeassistant.core import HomeAssistant
 
-TO_REDACT = {CONF_PASSWORD, CONF_USERNAME}
+TO_REDACT = {CONF_PASSWORD, CONF_USERNAME, CONF_CODE, CONF_TOKEN}
 
 
 async def async_get_config_entry_diagnostics(
