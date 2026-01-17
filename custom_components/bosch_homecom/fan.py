@@ -26,6 +26,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
+    entities: list[FanEntity] = []
+
     for coordinator in coordinators:
         device_type = coordinator.data.device.get("deviceType")
         if device_type in ("k40", "k30", "icom"):
@@ -37,6 +39,9 @@ async def async_setup_entry(
                         coordinator=coordinator, config_entry=config_entry, field=zone_id
                     )
                 )
+
+    if entities:
+        async_add_entities(entities)
 
 
 class BoschComDhwFan(CoordinatorEntity, FanEntity):
