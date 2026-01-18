@@ -39,17 +39,27 @@ async def async_setup_entry(
 ) -> None:
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
-    async_add_entities(
-        BoschComRacClimate(coordinator=coordinator, field="clima")
-        for coordinator in coordinators
-        if coordinator.data.device["deviceType"] == "rac"
-    )
-    async_add_entities(
-        BoschComK40Climate(coordinator=coordinator, field="clima")
-        for coordinator in coordinators
-        if coordinator.data.device["deviceType"] in ["k30", "k40", "icom"]
-    )
+    entities: list[ClimateEntity] = []
 
+    for coordinator in coordinators:
+        device_type = coordinator.data.device.get("deviceType")
+
+        if device_type == "rac":
+            entities.append(
+                BoschComRacClimate(
+                    coordinator=coordinator, field="clima"
+                )
+            )
+        elif device_type in ("k40", "k30", "icom"):
+            for ref in coordinator.data.heating_circuits:
+                hc_id = ref["id"].split("/")[-1]
+                entities.append(
+                    BoschComK40Climate(
+                        coordinator=coordinator, field=hc_id
+                    )
+                )
+    if entities:
+        async_add_entities(entities)
 
 class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom climate entity."""
