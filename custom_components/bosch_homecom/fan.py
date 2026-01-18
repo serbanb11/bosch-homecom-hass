@@ -12,7 +12,7 @@ from homeassistant.components.fan import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util.percentage import ordered_list_item_to_percentage, percentage_to_ordered_list_item
+from homeassistant.util.percentage import ordered_list_item_to_percentage
 
 from .coordinator import BoschComModuleCoordinatorK40
 
@@ -36,7 +36,7 @@ async def async_setup_entry(
                 zone_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComDhwFan(
-                        coordinator=coordinator, config_entry=config_entry, field=zone_id
+                        coordinator=coordinator, field=zone_id
                     )
                 )
 
@@ -47,27 +47,31 @@ async def async_setup_entry(
 class BoschComDhwFan(CoordinatorEntity, FanEntity):
     """Representation of a BoschCom fan entity."""
 
-    _attr_has_entity_name = True
-    _attr_name = None
-    _attr_supported_features = (
-        FanEntityFeature.PRESET_MODE
-        | FanEntityFeature.TURN_OFF
-        | FanEntityFeature.TURN_ON
-    )
-
     def __init__(
         self,
         coordinator: BoschComModuleCoordinatorK40,
         field: str,
     ) -> None:
-        """Initialize select entity."""
-        super().__init__(
-            coordinator=coordinator,
-            config_entry=config_entry,
-            name=field + "_fan",
-            unique_id=f"{coordinator.unique_id}-{field}-fan",
-            icon="mdi:fan",
+        """Initialize fan entity."""
+        super().__init__(coordinator)
+        self.field = field
+        self._attr_translation_key = "ventilation"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}-fan"
+        self._attr_name = f"{field}_fan"
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_has_entity_name = True
+        self._attr_supported_features = (
+            FanEntityFeature.PRESET_MODE
+            | FanEntityFeature.TURN_OFF
+            | FanEntityFeature.TURN_ON
         )
+
+        self._operation_mode: str | None = None
+        self._preset_modes: list[str] | None = None
+        self._exhaust_fan_level: str | None = None
+
         self.set_attr()
 
     @callback
@@ -82,7 +86,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         return self._preset_modes
 
     @property
-    def percentage(self) -> Optional[int]:
+    def percentage(self) -> int | None:
         """Return the current speed percentage."""
         return ordered_list_item_to_percentage(ORDERED_NAMED_FAN_SPEEDS, self._exhaustFanLevel)
 
@@ -135,7 +139,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.ventialtion:
+        for entry in self.coordinator.data.ventilation:
             if entry.get("id") == "/ventilation/" + self.field:
                 self._operationMode = safe_get(
                     entry["operationMode"], "value"
