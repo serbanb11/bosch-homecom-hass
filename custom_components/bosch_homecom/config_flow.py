@@ -21,7 +21,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
 )
 
-from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
+from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME, SINGLEKEY_LOGIN_URL
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
@@ -106,13 +106,19 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
                 errors["base"] = "cannot_connect"
                 return self.async_show_form(
-                    step_id="browser", data_schema=BROWSER_AUTH_SCHEMA, errors=errors
+                    step_id="browser",
+                    data_schema=BROWSER_AUTH_SCHEMA,
+                    description_placeholders={"url": SINGLEKEY_LOGIN_URL},
+                    errors=errors,
                 )
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
                 return self.async_show_form(
-                    step_id="browser", data_schema=BROWSER_AUTH_SCHEMA, errors=errors
+                    step_id="browser",
+                    data_schema=BROWSER_AUTH_SCHEMA,
+                    description_placeholders={"url": SINGLEKEY_LOGIN_URL},
+                    errors=errors,
                 )
 
             if asyncio.iscoroutine(devices):
@@ -129,7 +135,10 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_devices()
 
         return self.async_show_form(
-            step_id="browser", data_schema=BROWSER_AUTH_SCHEMA, errors=errors
+            step_id="browser",
+            data_schema=BROWSER_AUTH_SCHEMA,
+            description_placeholders={"url": SINGLEKEY_LOGIN_URL},
+            errors=errors,
         )
 
     async def async_step_devices(
