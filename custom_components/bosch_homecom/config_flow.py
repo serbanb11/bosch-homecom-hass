@@ -21,7 +21,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
 )
 
-from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME, SINGLEKEY_LOGIN_URL
+from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
@@ -35,6 +35,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     MIN_UPDATE_SECONDS,
     MAX_UPDATE_SECONDS,
+    SINGLEKEY_LOGIN_URL,
 )
 
 @dataclass
