@@ -82,6 +82,7 @@ https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&non
   - Buderus Logatherm WLW 186i heat pump with the MX300 communication module
 - **wddw2**
   - Hydronext 5700s with wifi module Bosch 7736505449
+- **IVT Aero Series**
 
 ***Users reported that Bosch Climate Class 3000i and 7000i based on Midea are not working.***
 
@@ -91,7 +92,7 @@ https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&non
 This integration has the following features:
 * Retrieve an authentication token based on username and password from singlekey-id.com
 * Refresh token if expired
-* The state of all entities are updated on each action and every 5 minutes.
+* The state of all entities are updated on each action and every 60 seconds.
 * Using pure async implementation for reduced load on the platform.
 * Read devices notifications
 
