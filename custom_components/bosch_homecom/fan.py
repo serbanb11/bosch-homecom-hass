@@ -136,6 +136,8 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         """Populate attributes with data from the coordinator."""
         def safe_get(data, key, default="unknown"):
             """Return unknown if null."""
+            if data is None:
+                return default
             value = data.get(key)
             return value if value is not None else default
 
