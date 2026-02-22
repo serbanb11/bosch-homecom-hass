@@ -45,21 +45,16 @@ async def async_setup_entry(
         device_type = coordinator.data.device.get("deviceType")
 
         if device_type == "rac":
-            entities.append(
-                BoschComRacClimate(
-                    coordinator=coordinator, field="clima"
-                )
-            )
+            entities.append(BoschComRacClimate(coordinator=coordinator, field="clima"))
         elif device_type in ("k40", "k30", "icom", "rrc2"):
             for ref in coordinator.data.heating_circuits:
                 hc_id = ref["id"].split("/")[-1]
                 entities.append(
-                    BoschComK40Climate(
-                        coordinator=coordinator, field=hc_id
-                    )
+                    BoschComK40Climate(coordinator=coordinator, field=hc_id)
                 )
     if entities:
         async_add_entities(entities)
+
 
 class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom climate entity."""
@@ -105,7 +100,8 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
 
         # Call this in __init__ so data is populated right away, since it's
         # already available in the coordinator data.
-        if not coordinator.data: return
+        if not coordinator.data:
+            return
         self.set_attr()
 
     @callback
@@ -396,7 +392,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         if not data:
             return
 
-        for entry in (data.heating_circuits or []):
+        for entry in data.heating_circuits or []:
             if entry.get("id") == f"/heatingCircuits/{self._attr_name}":
                 self._set_heating_circuits(entry)
                 break

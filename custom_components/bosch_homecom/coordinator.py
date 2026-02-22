@@ -91,9 +91,7 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
                 self.entry.async_start_reauth(self.hass)
 
         try:
-            data: BHCDeviceGeneric = await self.bhc.async_update(
-                self.unique_id
-            )
+            data: BHCDeviceGeneric = await self.bhc.async_update(self.unique_id)
         except (ApiError, InvalidSensorDataError, RetryError) as error:
             raise UpdateFailed(error) from error
 
@@ -169,9 +167,7 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
                 self.entry.async_start_reauth(self.hass)
 
         try:
-            data: BHCDeviceRac = await self.bhc.async_update(
-                self.unique_id
-            )
+            data: BHCDeviceRac = await self.bhc.async_update(self.unique_id)
         except (ApiError, InvalidSensorDataError, RetryError) as error:
             raise UpdateFailed(error) from error
 
@@ -250,9 +246,7 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
                 self.entry.async_start_reauth(self.hass)
 
         try:
-            data: BHCDeviceK40 = await self.bhc.async_update(
-                self.unique_id
-            )
+            data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
         except (ApiError, InvalidSensorDataError, RetryError) as error:
             raise UpdateFailed(error) from error
 
@@ -336,9 +330,7 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
                 self.entry.async_start_reauth(self.hass)
 
         try:
-            data: BHCDeviceWddw2 = await self.bhc.async_update(
-                self.unique_id
-            )
+            data: BHCDeviceWddw2 = await self.bhc.async_update(self.unique_id)
         except (ApiError, InvalidSensorDataError, RetryError) as error:
             raise UpdateFailed(error) from error
 

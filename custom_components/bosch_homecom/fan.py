@@ -5,10 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant import config_entries
-from homeassistant.components.fan import (
-    FanEntity,
-    FanEntityFeature,
-)
+from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -18,6 +15,7 @@ from .coordinator import BoschComModuleCoordinatorK40
 
 PARALLEL_UPDATES = 1
 ORDERED_NAMED_FAN_SPEEDS = ["min", "red", "nom", "max", "dem"]
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -34,11 +32,7 @@ async def async_setup_entry(
             # DHW circuits
             for ref in coordinator.data.ventilation:
                 zone_id = ref["id"].split("/")[-1]
-                entities.append(
-                    BoschComDhwFan(
-                        coordinator=coordinator, field=zone_id
-                    )
-                )
+                entities.append(BoschComDhwFan(coordinator=coordinator, field=zone_id))
 
     if entities:
         async_add_entities(entities)
@@ -88,7 +82,9 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
     @property
     def percentage(self) -> int | None:
         """Return the current speed percentage."""
-        return ordered_list_item_to_percentage(ORDERED_NAMED_FAN_SPEEDS, self._exhaustFanLevel)
+        return ordered_list_item_to_percentage(
+            ORDERED_NAMED_FAN_SPEEDS, self._exhaustFanLevel
+        )
 
     @property
     def speed_count(self) -> int:
@@ -103,22 +99,25 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         """Turn on."""
         if preset_mode is None:
             preset_mode = self._preset_mode
-        await self.coordinator.bhc.async_set_ventilation_mode(self._attr_unique_id, self.field, preset_mode)
+        await self.coordinator.bhc.async_set_ventilation_mode(
+            self._attr_unique_id, self.field, preset_mode
+        )
 
         await self.coordinator.async_request_refresh()
 
-    async def async_set_preset_mode(
-        self,
-        preset_mode: str | None = None
-    ) -> None:
+    async def async_set_preset_mode(self, preset_mode: str | None = None) -> None:
         """Set new preset mode."""
-        await self.coordinator.bhc.async_set_ventilation_mode(self._attr_unique_id, self.field, preset_mode)
+        await self.coordinator.bhc.async_set_ventilation_mode(
+            self._attr_unique_id, self.field, preset_mode
+        )
 
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn off."""
-        await self.coordinator.bhc.async_set_ventilation_mode(self._attr_unique_id, self.field, '"off"')
+        await self.coordinator.bhc.async_set_ventilation_mode(
+            self._attr_unique_id, self.field, '"off"'
+        )
 
         await self.coordinator.async_request_refresh()
 
@@ -134,6 +133,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""
+
         def safe_get(data, key, default="unknown"):
             """Return unknown if null."""
             if data is None:
@@ -143,12 +143,6 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
 
         for entry in self.coordinator.data.ventilation:
             if entry.get("id") == "/ventilation/" + self.field:
-                self._operationMode = safe_get(
-                    entry["operationMode"], "value"
-                )
-                self._preset_modes = safe_get(
-                    entry["operationMode"], "allowedValues"
-                )
-                self._exhaustFanLevel = safe_get(
-                    entry["exhaustFanLevel"], "value"
-                )
+                self._operationMode = safe_get(entry["operationMode"], "value")
+                self._preset_modes = safe_get(entry["operationMode"], "allowedValues")
+                self._exhaustFanLevel = safe_get(entry["exhaustFanLevel"], "value")

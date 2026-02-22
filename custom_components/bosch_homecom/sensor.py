@@ -1,30 +1,38 @@
 """Bosch HomeCom Custom Component."""
+
 from __future__ import annotations
+
+from dataclasses import dataclass
 from datetime import timedelta
+import json
 import logging
 import re
-import json
+from typing import Any, Optional
 
 from homeassistant import config_entries, core
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
+from homeassistant.const import UnitOfTemperature
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac, BoschComModuleCoordinatorWddw2
-
-from dataclasses import dataclass
-from typing import Any, Optional
-
-from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.helpers.entity import EntityCategory
-from homeassistant.const import UnitOfTemperature, PERCENTAGE
-
 from .const import BOSCH_SENSOR_DESCRIPTORS
+from .coordinator import (
+    BoschComModuleCoordinatorK40,
+    BoschComModuleCoordinatorRac,
+    BoschComModuleCoordinatorWddw2,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=1440)
 PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: core.HomeAssistant,
@@ -82,7 +90,9 @@ async def async_setup_entry(
                 zone_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComSensorVentilation(
-                        coordinator=coordinator, config_entry=config_entry, field=zone_id
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field=zone_id,
                     )
                 )
             # Heating circuits
@@ -131,7 +141,9 @@ async def async_setup_entry(
                     ref["id"].split("/")[-1]
                     for ref in coordinator.data.dhw_circuits
                     if re.fullmatch(r"dhw\d", ref["id"].split("/")[-1])
-                ] or [None]  # fallback to single set if not per circuit
+                ] or [
+                    None
+                ]  # fallback to single set if not per circuit
 
                 for desc in wddw2_desc:
                     for dhw_id in dhw_ids:
@@ -146,7 +158,11 @@ async def async_setup_entry(
                             entities.append(
                                 BoschComGenericSensor(
                                     coordinator=coordinator,
-                                    name=desc["name"] if not dhw_id else f"{desc['name']} {dhw_id.upper()}",
+                                    name=(
+                                        desc["name"]
+                                        if not dhw_id
+                                        else f"{desc['name']} {dhw_id.upper()}"
+                                    ),
                                     unique_suffix=unique_suffix,
                                     path=resolved_path,
                                     unit=desc.get("unit"),
@@ -155,7 +171,9 @@ async def async_setup_entry(
                                 )
                             )
                         except Exception:  # keep onboarding even if one fails
-                            _LOGGER.debug("Failed to add generic sensor %s", unique_suffix)
+                            _LOGGER.debug(
+                                "Failed to add generic sensor %s", unique_suffix
+                            )
 
             # NEW: derived sensors (single set; adjust to per-circuit if precisares)
             try:
@@ -191,11 +209,14 @@ async def async_setup_entry(
                 snapshot = dict(obj.__dict__)
             else:
                 snapshot = obj
-            _LOGGER.debug("BOSCH DATA SNAPSHOT (%s):\n%s",
-                          devtype, json.dumps(snapshot, indent=2, ensure_ascii=False))
+            _LOGGER.debug(
+                "BOSCH DATA SNAPSHOT (%s):\n%s",
+                devtype,
+                json.dumps(snapshot, indent=2, ensure_ascii=False),
+            )
         except Exception:
             _LOGGER.exception("Failed to dump coordinator data for %s", devtype)
-            
+
     if entities:
         async_add_entities(entities)
 
@@ -292,6 +313,7 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
             if "dcd" in item and "ccd" in item
         )
 
+
 class BoschComSensorNotificationsWddw2(BoschComSensorBase):
     """BoschComSensor notifications."""
 
@@ -329,6 +351,7 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
             for item in self.coordinator.data.notifications
             if "dcd" in item and "ccd" in item
         )
+
 
 class BoschComSensorDhw(BoschComSensorBase):
     """BoschComSensorDhw sensor."""
@@ -501,6 +524,7 @@ class BoschComSensorHc(BoschComSensorBase):
             "coolingRoomTempSetpoint": "unknown",
         }
 
+
 class BoschComSensorVentilation(BoschComSensorBase):
     """BoschComSensorVentilation sensor."""
 
@@ -548,31 +572,33 @@ class BoschComSensorVentilation(BoschComSensorBase):
 
         for entry in self.coordinator.data.ventilation:
             if entry.get("id") == "/ventilation/" + self.field:
-                maxIndoorAirQuality_value = (entry.get("maxIndoorAirQuality") or {}).get(
+                maxIndoorAirQuality_value = (
+                    entry.get("maxIndoorAirQuality") or {}
+                ).get("value", "unknown")
+                maxRelativeHumidity_value = (
+                    entry.get("maxRelativeHumidity") or {}
+                ).get("value", "unknown")
+                exhaustTemp_value = (entry.get("exhaustTemp") or {}).get(
                     "value", "unknown"
                 )
-                maxRelativeHumidity_value = (entry.get("maxRelativeHumidity") or {}).get("value", "unknown")
-                exhaustTemp_value = (
-                    entry.get("exhaustTemp") or {}
-                ).get("value", "unknown")
-                extractTemp_value = (
-                    entry.get("extractTemp") or {}
-                ).get("value", "unknown")
-                internalAirQuality_value = (
-                    entry.get("internalAirQuality") or {}
-                ).get("value", "unknown")
-                supplyTemp_value = (
-                    entry.get("supplyTemp") or {}
-                ).get("value", "unknown")
-                internalHumidity_value = (
-                    entry.get("internalHumidity") or {}
-                ).get("value", "unknown")
-                outdoorTemp_value = (
-                    entry.get("outdoorTemp") or {}
-                ).get("value", "unknown")
-                summerBypassEnable_value = (
-                    entry.get("summerBypassEnable") or {}
-                ).get("value", "unknown")
+                extractTemp_value = (entry.get("extractTemp") or {}).get(
+                    "value", "unknown"
+                )
+                internalAirQuality_value = (entry.get("internalAirQuality") or {}).get(
+                    "value", "unknown"
+                )
+                supplyTemp_value = (entry.get("supplyTemp") or {}).get(
+                    "value", "unknown"
+                )
+                internalHumidity_value = (entry.get("internalHumidity") or {}).get(
+                    "value", "unknown"
+                )
+                outdoorTemp_value = (entry.get("outdoorTemp") or {}).get(
+                    "value", "unknown"
+                )
+                summerBypassEnable_value = (entry.get("summerBypassEnable") or {}).get(
+                    "value", "unknown"
+                )
                 summerBypassDuration_value = (
                     entry.get("summerBypassDuration") or {}
                 ).get("value", "unknown")
@@ -598,6 +624,7 @@ class BoschComSensorVentilation(BoschComSensorBase):
                     "demandrelativeHumidity": demandrelativeHumidity_value,
                 }
         return "unknown"
+
 
 class BoschComSensorOutdoorTemp(BoschComSensorBase):
     """BoschComSensorOutdoorTemp sensor."""
@@ -636,9 +663,7 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHc outdoorTemp."""
-        return float(
-            self.coordinator.data.outdoor_temp.get("value", "unknown")
-        )
+        return float(self.coordinator.data.outdoor_temp.get("value", "unknown"))
 
 
 class BoschComSensorHs(BoschComSensorBase):
@@ -673,11 +698,11 @@ class BoschComSensorHs(BoschComSensorBase):
 
     def seconds_to_readable(self, seconds):
         units = [
-            ('year', 365 * 24 * 3600),
-            ('month', 30 * 24 * 3600),
-            ('week', 7 * 24 * 3600),
-            ('day', 24 * 3600),
-            ('hour', 3600),
+            ("year", 365 * 24 * 3600),
+            ("month", 30 * 24 * 3600),
+            ("week", 7 * 24 * 3600),
+            ("day", 24 * 3600),
+            ("hour", 3600),
         ]
 
         parts = []
@@ -751,9 +776,8 @@ class BoschComSensorHs(BoschComSensorBase):
         )
 
         actualHeatDemand = (
-            (self.coordinator.data.heat_sources.get("actualHeatDemand") or {})
-            .get("values", ["unknown"])
-        )
+            self.coordinator.data.heat_sources.get("actualHeatDemand") or {}
+        ).get("values", ["unknown"])
 
         totalWorkingTime = str(
             (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
@@ -764,11 +788,17 @@ class BoschComSensorHs(BoschComSensorBase):
         )
 
         systemPressure = (
-            (self.coordinator.data.heat_sources.get("systemPressure") or {})
-            .get("value", ["unknown"])
-        )
+            self.coordinator.data.heat_sources.get("systemPressure") or {}
+        ).get("value", ["unknown"])
 
-        totalWorkingTimeReadable = self.seconds_to_readable(int((self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get("value", 0) or 0))
+        totalWorkingTimeReadable = self.seconds_to_readable(
+            int(
+                (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
+                    "value", 0
+                )
+                or 0
+            )
+        )
 
         result = {
             "numberOfStartsCh": numberOfStarts_dict.get("ch", "unknown"),
@@ -853,7 +883,7 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
             self._attr_name,
             self._attr_unique_id,
         )
-    
+
     @property
     def native_value(self):
         """Return numeric setpoint for the current DHW operationMode."""
@@ -878,19 +908,31 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
                 for item, temp_item in (entry.get("tempLevel") or {}).items():
                     result[item] = (temp_item or {}).get("value", "unknown")
                 # sensores adicionais
-                result["airBoxTemperature"] = (entry.get("airBoxTemperature") or {}).get("value", "unknown")
-                result["inletTemperature"]   = (entry.get("inletTemperature") or {}).get("value", "unknown")
-                result["outletTemperature"]  = (entry.get("outletTemperature") or {}).get("value", "unknown")
-                result["waterFlow"]          = (entry.get("waterFlow") or {}).get("value", "unknown")
-                result["nbStarts"]           = (entry.get("nbStarts") or {}).get("value", "unknown")
+                result["airBoxTemperature"] = (
+                    entry.get("airBoxTemperature") or {}
+                ).get("value", "unknown")
+                result["inletTemperature"] = (entry.get("inletTemperature") or {}).get(
+                    "value", "unknown"
+                )
+                result["outletTemperature"] = (
+                    entry.get("outletTemperature") or {}
+                ).get("value", "unknown")
+                result["waterFlow"] = (entry.get("waterFlow") or {}).get(
+                    "value", "unknown"
+                )
+                result["nbStarts"] = (entry.get("nbStarts") or {}).get(
+                    "value", "unknown"
+                )
                 return result
         return {}
+
 
 @dataclass
 class DynamicPathResolver:
     """Resolve a nested value by following a path of keys.
     Suporta listas de objetos Bosch com campo 'id' tipo '/dhwCircuits/dhw1/...'
     quando o passo anterior é 'dhw_circuits' e o passo atual é 'dhw1'."""
+
     path: list[str]
 
     def get(self, data: dict[str, Any]) -> Any:
@@ -904,7 +946,9 @@ class DynamicPathResolver:
                 wanted = part
                 matched = None
                 for item in cur:
-                    if isinstance(item, dict) and item.get("id", "").endswith("/" + wanted):
+                    if isinstance(item, dict) and item.get("id", "").endswith(
+                        "/" + wanted
+                    ):
                         matched = item
                         break
                 cur = matched
@@ -927,7 +971,17 @@ class DynamicPathResolver:
 class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
     """Generic read-only sensor for Bosch HomeCom values."""
 
-    def __init__(self, coordinator, name: str, unique_suffix: str, path: list[str], *, unit, device_class, state_class: Optional[str]):
+    def __init__(
+        self,
+        coordinator,
+        name: str,
+        unique_suffix: str,
+        path: list[str],
+        *,
+        unit,
+        device_class,
+        state_class: Optional[str],
+    ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
         self._attr_name = name
@@ -960,7 +1014,7 @@ class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
-        #self._attr_device_class = "temperature"
+        # self._attr_device_class = "temperature"
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         self._attr_state_class = "measurement"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -978,7 +1032,15 @@ class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
             prev = None
             for p in path:
                 if isinstance(cur, list) and prev == "dhw_circuits":
-                    cur = next((it for it in cur if isinstance(it, dict) and it.get("id","").endswith("/"+p)), None)
+                    cur = next(
+                        (
+                            it
+                            for it in cur
+                            if isinstance(it, dict)
+                            and it.get("id", "").endswith("/" + p)
+                        ),
+                        None,
+                    )
                 elif isinstance(cur, dict):
                     cur = cur.get(p)
                 else:
@@ -990,8 +1052,8 @@ class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
                 return cur.get("value")
             return cur
 
-        inlet  = _get(["dhw_circuits","dhw1","inletTemperature"])
-        outlet = _get(["dhw_circuits","dhw1","outletTemperature"])
+        inlet = _get(["dhw_circuits", "dhw1", "inletTemperature"])
+        outlet = _get(["dhw_circuits", "dhw1", "outletTemperature"])
 
         if inlet is None or outlet is None:
             return None
@@ -1004,7 +1066,14 @@ class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
 class BoschComHeatingActiveBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Binary derived sensor: heating active heuristic."""
 
-    def __init__(self, coordinator, name: str, unique_suffix: str, *, delta_t_threshold: float = 3.0):
+    def __init__(
+        self,
+        coordinator,
+        name: str,
+        unique_suffix: str,
+        *,
+        delta_t_threshold: float = 3.0,
+    ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
         self._attr_name = name
@@ -1040,13 +1109,23 @@ class BoschComHeatingActiveBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
         # No WDDW2 os nós estão no nível do circuito (sem 'sensor')
         water_flow = _val("waterFlow")
-        inlet      = _val("inletTemperature")
-        outlet     = _val("outletTemperature")
+        inlet = _val("inletTemperature")
+        outlet = _val("outletTemperature")
 
         try:
-            _LOGGER.debug("heating_active: water_flow=%s inlet=%s outlet=%s", water_flow, inlet, outlet)
+            _LOGGER.debug(
+                "heating_active: water_flow=%s inlet=%s outlet=%s",
+                water_flow,
+                inlet,
+                outlet,
+            )
 
-            if water_flow is not None and float(water_flow) > 0 and inlet is not None and outlet is not None:
+            if (
+                water_flow is not None
+                and float(water_flow) > 0
+                and inlet is not None
+                and outlet is not None
+            ):
                 return (float(outlet) - float(inlet)) >= self._delta_t_threshold
 
         except (TypeError, ValueError):

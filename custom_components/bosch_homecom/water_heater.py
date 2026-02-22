@@ -1,17 +1,17 @@
 """Bosch HomeCom Custom Component."""
 
+import re
+from typing import Any
+
 from homeassistant import config_entries
 from homeassistant.components.water_heater import (
     WaterHeaterEntity,
     WaterHeaterEntityFeature,
 )
-from homeassistant.const import UnitOfTemperature, ATTR_TEMPERATURE
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-import re
-
-from typing import Any
 
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorWddw2
 
@@ -31,11 +31,14 @@ async def async_setup_entry(
                 dhw_id = ref["id"].split("/")[-1]
                 if re.fullmatch(r"dhw\d", dhw_id):
                     entities.append(
-                        BoschComWddw2WaterHeater(
-                            coordinator=coordinator, field=dhw_id
-                        )
+                        BoschComWddw2WaterHeater(coordinator=coordinator, field=dhw_id)
                     )
-        elif coordinator.data.device.get("deviceType") in ("k40", "k30", "icom", "rrc2"):
+        elif coordinator.data.device.get("deviceType") in (
+            "k40",
+            "k30",
+            "icom",
+            "rrc2",
+        ):
             entities.append(
                 BoschComK40WaterHeater(coordinator=coordinator, field="waterheater")
             )
@@ -167,7 +170,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
-        
+
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
@@ -193,14 +196,10 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         # pede refresh para refletir no UI
         await self.coordinator.async_request_refresh()
 
-
     def _set_domestic_hot_water_circuits(
         self, domestic_hot_water_circuits: list[dict]
     ) -> None:
         """Populate heating circuits."""
-        operationMode_value = None
-        actualTemp_value = None
-
         for ref in domestic_hot_water_circuits:
             dhw_id = ref["id"].split("/")[-1]
             if dhw_id != self.field:
@@ -217,7 +216,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             self._attr_max_temp = manual.get("maxValue", self._attr_max_temp)
 
             # o setpoint alvo depende do modo atual: tempLevel[mode].value
-            tl = (ref.get("tempLevel") or {})
+            tl = ref.get("tempLevel") or {}
             set_for_mode = (tl.get(op) or {}).get("value")
             if isinstance(set_for_mode, (int, float)):
                 self._attr_target_temperature = set_for_mode

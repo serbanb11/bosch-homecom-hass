@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Final
-from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.const import UnitOfTemperature, UnitOfPressure, UnitOfVolumeFlowRate, PERCENTAGE
 
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import UnitOfTemperature
 
 DOMAIN = "bosch_homecom"
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
@@ -14,8 +14,8 @@ MANUFACTURER: Final = "Bosch"
 
 CONF_UPDATE_SECONDS: Final = "update_seconds"
 CONF_BRAND_BUDERUS: Final = "brand_buderus"
-MIN_UPDATE_SECONDS: Final = 15      # avoids spam
-MAX_UPDATE_SECONDS: Final = 3600   # 1 hour
+MIN_UPDATE_SECONDS: Final = 15  # avoids spam
+MAX_UPDATE_SECONDS: Final = 3600  # 1 hour
 
 MODEL = {
     "rac": "Residential Air Conditioning",

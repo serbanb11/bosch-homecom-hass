@@ -5,39 +5,36 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import timedelta
 import logging
 from typing import Any
 
-from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
-
 from aiohttp import ClientConnectorError
+from homeassistant import config_entries
 from homeassistant.config_entries import (
     SOURCE_REAUTH,
     SOURCE_RECONFIGURE,
     ConfigFlow,
     ConfigFlowResult,
 )
-
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
+from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
 import voluptuous as vol
 
 from .const import (
-    DOMAIN,
     CONF_BRAND_BUDERUS,
     CONF_DEVICES,
     CONF_REFRESH,
     CONF_UPDATE_SECONDS,
     DEFAULT_UPDATE_INTERVAL,
-    MIN_UPDATE_SECONDS,
+    DOMAIN,
     MAX_UPDATE_SECONDS,
+    MIN_UPDATE_SECONDS,
     SINGLEKEY_LOGIN_URL,
 )
+
 
 @dataclass
 class BhcConfig:
@@ -251,6 +248,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+
 class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle Bosch HomeCom options."""
 
@@ -271,13 +269,11 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
 
         schema = vol.Schema(
             {
+                vol.Required(CONF_UPDATE_SECONDS, default=current_seconds): vol.All(
+                    int, vol.Range(min=MIN_UPDATE_SECONDS, max=MAX_UPDATE_SECONDS)
+                ),
                 vol.Required(
-                    CONF_UPDATE_SECONDS,
-                    default=current_seconds
-                ): vol.All(int, vol.Range(min=MIN_UPDATE_SECONDS, max=MAX_UPDATE_SECONDS)),
-                vol.Required(
-                    CONF_BRAND_BUDERUS,
-                    default=current_brand_buderus
+                    CONF_BRAND_BUDERUS, default=current_brand_buderus
                 ): cv.boolean,
             }
         )

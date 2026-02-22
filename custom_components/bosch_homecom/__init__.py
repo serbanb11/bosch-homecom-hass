@@ -31,7 +31,14 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_BRAND_BUDERUS, CONF_REFRESH, DOMAIN, MODEL, CONF_UPDATE_SECONDS, DEFAULT_UPDATE_INTERVAL
+from .const import (
+    CONF_BRAND_BUDERUS,
+    CONF_REFRESH,
+    DOMAIN,
+    MODEL,
+    CONF_UPDATE_SECONDS,
+    DEFAULT_UPDATE_INTERVAL,
+)
 from .coordinator import (
     BoschComModuleCoordinatorGeneric,
     BoschComModuleCoordinatorK40,
@@ -50,6 +57,7 @@ PLATFORMS: list[Platform] = [
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up platform from a ConfigEntry."""
@@ -101,7 +109,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             firmware = await bhc.async_get_firmware(device_id)
         except ApiError as err:
             if "504" in str(err):
-                _LOGGER.warning("Firmware request for %s timed out (504), setting to not_available", device_id)
+                _LOGGER.warning(
+                    "Firmware request for %s timed out (504), setting to not_available",
+                    device_id,
+                )
                 firmware = {"value": "unknown"}
             else:
                 raise
@@ -187,17 +198,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN] = {"coordinators": coordinators}
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
     if CONF_UPDATE_SECONDS not in entry.options:
         new_options = dict(entry.options)
         new_options[CONF_UPDATE_SECONDS] = int(DEFAULT_UPDATE_INTERVAL.total_seconds())
         hass.config_entries.async_update_entry(entry, options=new_options)
-        
+
     def _get_update_interval(entry: ConfigEntry) -> timedelta:
-        seconds = int(entry.options.get(
-            CONF_UPDATE_SECONDS,
-            int(DEFAULT_UPDATE_INTERVAL.total_seconds())
-        ))
+        seconds = int(
+            entry.options.get(
+                CONF_UPDATE_SECONDS, int(DEFAULT_UPDATE_INTERVAL.total_seconds())
+            )
+        )
         return timedelta(seconds=seconds)
 
     # Aplica o intervalo inicial a todos os coordinators

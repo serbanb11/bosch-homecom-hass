@@ -1,11 +1,12 @@
 """Diagnostics support for BHC."""
+
 from __future__ import annotations
 
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_CODE, CONF_TOKEN
+from homeassistant.const import CONF_CODE, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
 TO_REDACT = {CONF_PASSWORD, CONF_USERNAME, CONF_CODE, CONF_TOKEN}
@@ -18,7 +19,7 @@ async def async_get_config_entry_diagnostics(
     device: list[Any] = []
     firmware: list[Any] = []
     notifications: list[Any] = []
-    stardard_functions: list[Any] = []   # (mantém a grafia para compatibilidade)
+    stardard_functions: list[Any] = []  # (mantém a grafia para compatibilidade)
     advanced_functions: list[Any] = []
     switch_programs: list[Any] = []
 
