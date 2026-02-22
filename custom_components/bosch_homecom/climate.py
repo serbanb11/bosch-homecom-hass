@@ -338,7 +338,23 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
             return
 
         await self.coordinator.bhc.async_set_hc_manual_room_setpoint(
-            self._attr_unique_id, self._attr_name, temperature
+            self.coordinator.unique_id, self._attr_name, temperature
+        )
+
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set new hvac mode."""
+        match hvac_mode:
+            case HVACMode.AUTO:
+                payload = "auto"
+            case HVACMode.OFF:
+                payload = "off"
+            case _:
+                return
+
+        await self.coordinator.bhc.async_put_hc_operation_mode(
+            self.coordinator.unique_id, self._attr_name, payload
         )
 
         await self.coordinator.async_request_refresh()
@@ -346,9 +362,13 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
     async def async_set_preset_mode(self, preset_mode) -> None:
         """Set preset mode."""
         if preset_mode == PRESET_NONE:
-            await self.coordinator.bhc.async_put_away_mode(self._attr_unique_id, "off")
+            await self.coordinator.bhc.async_put_away_mode(
+                self.coordinator.unique_id, "off"
+            )
         elif preset_mode == PRESET_AWAY:
-            await self.coordinator.bhc.async_put_away_mode(self._attr_unique_id, "on")
+            await self.coordinator.bhc.async_put_away_mode(
+                self.coordinator.unique_id, "on"
+            )
 
         await self.coordinator.async_request_refresh()
 
