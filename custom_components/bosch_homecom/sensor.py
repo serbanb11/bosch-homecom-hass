@@ -541,13 +541,25 @@ class BoschComSensorHc(BoschComSensorBase):
                     "coolingRoomTempSetpoint": coolingRoomTempSetpoint_value,
                     "maxSupply": (entry.get("maxSupply") or {}).get("value", "unknown"),
                     "minSupply": (entry.get("minSupply") or {}).get("value", "unknown"),
-                    "heatCurveMax": (entry.get("heatCurveMax") or {}).get("value", "unknown"),
-                    "heatCurveMin": (entry.get("heatCurveMin") or {}).get("value", "unknown"),
-                    "supplyTemperatureSetpoint": (entry.get("supplyTemperatureSetpoint") or {}).get("value", "unknown"),
-                    "nightSwitchMode": (entry.get("nightSwitchMode") or {}).get("value", "unknown"),
+                    "heatCurveMax": (entry.get("heatCurveMax") or {}).get(
+                        "value", "unknown"
+                    ),
+                    "heatCurveMin": (entry.get("heatCurveMin") or {}).get(
+                        "value", "unknown"
+                    ),
+                    "supplyTemperatureSetpoint": (
+                        entry.get("supplyTemperatureSetpoint") or {}
+                    ).get("value", "unknown"),
+                    "nightSwitchMode": (entry.get("nightSwitchMode") or {}).get(
+                        "value", "unknown"
+                    ),
                     "control": (entry.get("control") or {}).get("value", "unknown"),
-                    "nightThreshold": (entry.get("nightThreshold") or {}).get("value", "unknown"),
-                    "roomInfluence": (entry.get("roomInfluence") or {}).get("value", "unknown"),
+                    "nightThreshold": (entry.get("nightThreshold") or {}).get(
+                        "value", "unknown"
+                    ),
+                    "roomInfluence": (entry.get("roomInfluence") or {}).get(
+                        "value", "unknown"
+                    ),
                 }
 
         return {

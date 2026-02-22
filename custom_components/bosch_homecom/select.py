@@ -133,10 +133,7 @@ async def async_setup_entry(
                             allowedValues=entry["nightSwitchMode"]["allowedValues"],
                         )
                     )
-                if (
-                    entry.get("control")
-                    and "allowedValues" in entry["control"]
-                ):
+                if entry.get("control") and "allowedValues" in entry["control"]:
                     entities.append(
                         BoschComSelectHcControl(
                             coordinator=coordinator,

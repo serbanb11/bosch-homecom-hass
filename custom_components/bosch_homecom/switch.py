@@ -39,9 +39,7 @@ async def async_setup_entry(
                 if dev.get("childLock") and dev["childLock"].get("value") is not None:
                     dev_id = dev["id"].split("/")[-1]
                     entities.append(
-                        BoschComChildLockSwitch(
-                            coordinator=coordinator, field=dev_id
-                        )
+                        BoschComChildLockSwitch(coordinator=coordinator, field=dev_id)
                     )
     async_add_entities(entities)
 
