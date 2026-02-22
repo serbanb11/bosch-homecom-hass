@@ -73,8 +73,6 @@
                             "max": "Level 4 (Maximum)",
                             "dem": "Demand-based",
                             "time": "Time-based",
-                            "fallAsleep": "Sleep",
-                            "powerVent": "Power ventilation",
                             "party": "Party",
                             "fireplace": "Fireplace"
                         }
@@ -144,8 +142,7 @@
             "hc_heatcool_mode": {
                 "state": {
                     "heat": "Heat",
-                    "cool": "Cool",
-                    "heatCool": "Heat & Cool"
+                    "cool": "Cool"
                 }
             },
             "holiday_mode": {
