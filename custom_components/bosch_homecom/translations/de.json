@@ -55,7 +55,8 @@
                 "title": "Optionen",
                 "description": "Laufzeitoptionen für Bosch HomeCom anpassen.",
                 "data": {
-                    "update_seconds": "Aktualisierungsintervall (Sekunden)"
+                    "update_seconds": "Aktualisierungsintervall (Sekunden)",
+                    "brand_buderus": "Buderus Marke"
                 }
             }
         }

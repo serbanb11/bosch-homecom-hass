@@ -31,7 +31,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_REFRESH, DOMAIN, MODEL, CONF_UPDATE_SECONDS, DEFAULT_UPDATE_INTERVAL
+from .const import CONF_BRAND_BUDERUS, CONF_REFRESH, DOMAIN, MODEL, CONF_UPDATE_SECONDS, DEFAULT_UPDATE_INTERVAL
 from .coordinator import (
     BoschComModuleCoordinatorGeneric,
     BoschComModuleCoordinatorK40,
@@ -57,8 +57,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     token: str | None = entry.data.get(CONF_TOKEN)
     refresh: str | None = entry.data.get(CONF_REFRESH)
 
+    brand = "buderus" if entry.options.get(CONF_BRAND_BUDERUS, False) else "bosch"
+
     if token and refresh:
-        options = ConnectionOptions(token=token, refresh_token=refresh)
+        options = ConnectionOptions(token=token, refresh_token=refresh, brand=brand)
     else:
         _LOGGER.error("No valid credentials provided")
         return False
@@ -74,7 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryAuthFailed from err
 
     coordinator_options = ConnectionOptions(
-        token=bhc.token, refresh_token=bhc.refresh_token
+        token=bhc.token, refresh_token=bhc.refresh_token, brand=brand
     )
     if token != bhc.token or refresh != bhc.refresh_token:
         new_data = dict(entry.data)

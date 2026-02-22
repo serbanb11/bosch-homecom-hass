@@ -13,6 +13,7 @@ DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
 MANUFACTURER: Final = "Bosch"
 
 CONF_UPDATE_SECONDS: Final = "update_seconds"
+CONF_BRAND_BUDERUS: Final = "brand_buderus"
 MIN_UPDATE_SECONDS: Final = 15      # avoids spam
 MAX_UPDATE_SECONDS: Final = 3600   # 1 hour
 

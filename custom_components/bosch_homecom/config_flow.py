@@ -29,6 +29,7 @@ import voluptuous as vol
 
 from .const import (
     DOMAIN,
+    CONF_BRAND_BUDERUS,
     CONF_DEVICES,
     CONF_REFRESH,
     CONF_UPDATE_SECONDS,
@@ -259,15 +260,14 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None) -> FlowResult:
         if user_input is not None:
-            # Guardar opções
             return self.async_create_entry(title="", data=user_input)
 
-        # valor atual das opções (ou default do const)
         current_seconds = int(
             self._entry.options.get(
                 CONF_UPDATE_SECONDS, int(DEFAULT_UPDATE_INTERVAL.total_seconds())
             )
         )
+        current_brand_buderus = self._entry.options.get(CONF_BRAND_BUDERUS, False)
 
         schema = vol.Schema(
             {
@@ -275,6 +275,10 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_UPDATE_SECONDS,
                     default=current_seconds
                 ): vol.All(int, vol.Range(min=MIN_UPDATE_SECONDS, max=MAX_UPDATE_SECONDS)),
+                vol.Required(
+                    CONF_BRAND_BUDERUS,
+                    default=current_brand_buderus
+                ): cv.boolean,
             }
         )
 

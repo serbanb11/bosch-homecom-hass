@@ -55,7 +55,8 @@
                 "title": "Options",
                 "description": "Adjust runtime options for Bosch HomeCom.",
                 "data": {
-                    "update_seconds": "Update interval (seconds)"
+                    "update_seconds": "Update interval (seconds)",
+                    "brand_buderus": "Buderus brand"
                 }
             }
         }
