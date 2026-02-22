@@ -324,6 +324,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
         self._attr_should_poll = False
+        self._attr_hvac_mode = HVACMode.OFF
 
         # Call this in __init__ so data is populated right away, since it's
         # already available in the coordinator data.

@@ -63,7 +63,7 @@ async def async_setup_entry(
         if coordinator.data.device["deviceType"] in ["k30", "k40", "icom", "rrc2"]:
             for entry in coordinator.data.dhw_circuits:
                 dhw_id = entry["id"].split("/")[-1]
-                if entry["operationMode"]:
+                if entry.get("operationMode") and "allowedValues" in entry["operationMode"]:
                     entities.append(
                         BoschComSelectDhwOperationMode(
                             coordinator=coordinator,
@@ -71,7 +71,7 @@ async def async_setup_entry(
                             allowedValues=entry["operationMode"]["allowedValues"],
                         )
                     )
-                if entry["currentTemperatureLevel"]:
+                if entry.get("currentTemperatureLevel") and "allowedValues" in entry["currentTemperatureLevel"]:
                     entities.append(
                         BoschComSelectDhwCurrentTemp(
                             coordinator=coordinator,
@@ -83,7 +83,7 @@ async def async_setup_entry(
                     )
             for entry in coordinator.data.heating_circuits:
                 hc_id = entry["id"].split("/")[-1]
-                if entry["operationMode"]:
+                if entry.get("operationMode") and "allowedValues" in entry["operationMode"]:
                     entities.append(
                         BoschComSelectHcOperationMode(
                             coordinator=coordinator,
@@ -91,7 +91,7 @@ async def async_setup_entry(
                             allowedValues=entry["operationMode"]["allowedValues"],
                         )
                     )
-                if entry["currentSuWiMode"]:
+                if entry.get("currentSuWiMode") and "allowedValues" in entry["currentSuWiMode"]:
                     entities.append(
                         BoschComSelectHcSuwiMode(
                             coordinator=coordinator,
@@ -99,7 +99,7 @@ async def async_setup_entry(
                             allowedValues=entry["currentSuWiMode"]["allowedValues"],
                         )
                     )
-                if entry["heatCoolMode"]:
+                if entry.get("heatCoolMode") and "allowedValues" in entry["heatCoolMode"]:
                     entities.append(
                         BoschComSelectHcHeatcoolMode(
                             coordinator=coordinator,
@@ -107,7 +107,7 @@ async def async_setup_entry(
                             allowedValues=entry["heatCoolMode"]["allowedValues"],
                         )
                     )
-            if coordinator.data.holiday_mode:
+            if coordinator.data.holiday_mode and "allowedValues" in coordinator.data.holiday_mode:
                 entities.append(
                     BoschComSelectHolidayMode(
                         coordinator=coordinator,
@@ -115,7 +115,7 @@ async def async_setup_entry(
                         allowedValues=coordinator.data.holiday_mode["allowedValues"],
                     )
                 )
-            if coordinator.data.away_mode:
+            if coordinator.data.away_mode and "allowedValues" in coordinator.data.away_mode:
                 entities.append(
                     BoschComSelectAwayMode(
                         coordinator=coordinator,

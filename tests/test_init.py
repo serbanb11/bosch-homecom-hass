@@ -62,10 +62,23 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
     """Test config entry setup and unload."""
     entry.add_to_hass(hass)
 
+    rac_data = BHCDeviceRac(
+        device={"deviceId": "123", "deviceType": "rac"},
+        firmware=sensor_data["firmwares"],
+        notifications=sensor_data["notifications"],
+        stardard_functions=sensor_data["stardard_functions"],
+        advanced_functions=sensor_data["advanced_functions"],
+        switch_programs=sensor_data["switch_programs"],
+    )
+
     with patch(
         "custom_components.bosch_homecom.HomeComRac.async_update",
         new_callable=AsyncMock,
-    ) as mock_update, patch(
+        return_value=rac_data,
+    ), patch(
+        "custom_components.bosch_homecom.HomeComRac.get_token",
+        new_callable=AsyncMock,
+    ), patch(
         "custom_components.bosch_homecom.HomeComAlt.create", new_callable=AsyncMock
     ) as mock_create:
         # Mock the BHC instance returned by HomeComAlt.create
@@ -74,16 +87,7 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
         mock_bhc.token = "mock_token"
         mock_bhc.async_get_devices.return_value = devices
         mock_bhc.async_get_firmware.return_value = {"value": "1.0.0"}
-        mock_bhc.async_update.return_value = BHCDeviceRac(
-            device={"deviceId": "123", "deviceType": "rac"},
-            firmware=sensor_data["firmwares"],
-            notifications=sensor_data["notifications"],
-            stardard_functions=sensor_data["stardard_functions"],
-            advanced_functions=sensor_data["advanced_functions"],
-            switch_programs=sensor_data["switch_programs"],
-        )
         mock_create.return_value = mock_bhc
-        mock_update.return_value = mock_bhc
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
