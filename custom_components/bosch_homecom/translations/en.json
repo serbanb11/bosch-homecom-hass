@@ -59,5 +59,148 @@
                 }
             }
         }
+    },
+    "entity": {
+        "fan": {
+            "ventilation": {
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "off": "Off",
+                            "min": "Level 1 (Minimum)",
+                            "red": "Level 2 (Reduced)",
+                            "nom": "Level 3 (Normal)",
+                            "max": "Level 4 (Maximum)",
+                            "dem": "Demand-based",
+                            "time": "Time-based",
+                            "fallAsleep": "Sleep",
+                            "powerVent": "Power ventilation",
+                            "party": "Party",
+                            "fireplace": "Fireplace"
+                        }
+                    }
+                }
+            }
+        },
+        "select": {
+            "airflow_horizontal": {
+                "state": {
+                    "center": "Center",
+                    "left": "Left",
+                    "right": "Right",
+                    "swing": "Swing"
+                }
+            },
+            "airflow_vertical": {
+                "state": {
+                    "auto": "Auto",
+                    "angle1": "Angle 1",
+                    "angle2": "Angle 2",
+                    "angle3": "Angle 3",
+                    "angle4": "Angle 4",
+                    "angle5": "Angle 5",
+                    "swing": "Swing"
+                }
+            },
+            "program": {
+                "state": {
+                    "off": "Off",
+                    "program1": "Program 1",
+                    "program2": "Program 2"
+                }
+            },
+            "dhw_operation_mode": {
+                "state": {
+                    "off": "Off",
+                    "low": "Low (Eco)",
+                    "high": "High (Comfort)",
+                    "eco": "Eco+",
+                    "ownprogram": "Own program",
+                    "manual": "Manual"
+                }
+            },
+            "dhw_current_temp": {
+                "state": {
+                    "off": "Off",
+                    "low": "Low",
+                    "high": "High",
+                    "eco": "Eco"
+                }
+            },
+            "hc_operation_mode": {
+                "state": {
+                    "off": "Off",
+                    "manual": "Manual",
+                    "auto": "Auto"
+                }
+            },
+            "hc_suwi_mode": {
+                "state": {
+                    "forced": "Forced",
+                    "off": "Off",
+                    "cooling": "Cooling"
+                }
+            },
+            "hc_heatcool_mode": {
+                "state": {
+                    "heat": "Heat",
+                    "cool": "Cool",
+                    "heatCool": "Heat & Cool"
+                }
+            },
+            "holiday_mode": {
+                "state": {
+                    "hm1": "Holiday mode 1",
+                    "hm2": "Holiday mode 2",
+                    "hm3": "Holiday mode 3",
+                    "hm4": "Holiday mode 4",
+                    "hm5": "Holiday mode 5",
+                    "hm6": "Holiday mode 6",
+                    "hm7": "Holiday mode 7",
+                    "hm8": "Holiday mode 8"
+                }
+            },
+            "away_mode": {
+                "state": {
+                    "on": "On",
+                    "off": "Off"
+                }
+            }
+        },
+        "sensor": {
+            "hc": {
+                "state": {
+                    "off": "Off",
+                    "manual": "Manual",
+                    "auto": "Auto"
+                }
+            },
+            "ventilation": {
+                "state": {
+                    "off": "Off",
+                    "min": "Level 1 (Minimum)",
+                    "red": "Level 2 (Reduced)",
+                    "nom": "Level 3 (Normal)",
+                    "max": "Level 4 (Maximum)",
+                    "dem": "Demand-based"
+                }
+            }
+        },
+        "water_heater": {
+            "dhw": {
+                "state_attributes": {
+                    "operation_mode": {
+                        "state": {
+                            "off": "Off",
+                            "low": "Low (Eco)",
+                            "high": "High (Comfort)",
+                            "eco": "Eco+",
+                            "manual": "Manual",
+                            "ownprogram": "Own program"
+                        }
+                    }
+                }
+            }
+        }
     }
 }

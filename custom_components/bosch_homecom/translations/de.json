@@ -1,0 +1,206 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "data": {
+                    "username": "SingleKey ID Benutzername",
+                    "password": "SingleKey ID Passwort"
+                },
+                "description": "Geben Sie Ihre SingleKey ID Anmeldedaten ein",
+                "title": "Authentifizierung"
+            },
+            "reauth_confirm": {
+                "description": "Bitte geben Sie den korrekten Benutzernamen und das Passwort für SingleKey ID ein",
+                "data": {
+                    "username": "SingleKey ID Benutzername",
+                    "password": "SingleKey ID Passwort"
+                }
+            },
+            "reconfigure": {
+                "description": "Konfiguration für SingleKey ID aktualisieren.",
+                "data": {
+                    "username": "SingleKey ID Benutzername",
+                    "password": "SingleKey ID Passwort"
+                },
+                "title": "Authentifizierung"
+            },
+            "browser": {
+                "description": "Melden Sie sich im Browser über die [URL]({url}) in der Readme an und erfassen Sie den Code mit den Entwicklertools des Browsers.",
+                "data": {
+                    "code": "SingleKey ID Code"
+                },
+                "title": "Browser-Authentifizierung"
+            }
+        },
+        "error": {
+            "username_required": "Benutzername ist erforderlich.",
+            "code_required": "Verifizierungscode ist erforderlich.",
+            "unknown": "Ein unbekannter Fehler ist aufgetreten.",
+            "cannot_connect": "Verbindung zu Bosch-Servern nicht möglich.",
+            "no_devices_found": "Keine Geräte gefunden.",
+            "no_device_selected": "Sie müssen mindestens ein Gerät auswählen.",
+            "already_configured": "Dieses Konto ist bereits konfiguriert."
+        },
+        "abort": {
+            "already_configured": "Bereits konfiguriert",
+            "device_unsupported": "Das Gerät wird nicht unterstützt.",
+            "reauth_successful": "Erneute Authentifizierung erfolgreich",
+            "reauth_unsuccessful": "Die erneute Authentifizierung war nicht erfolgreich. Bitte entfernen Sie die Integration und richten Sie sie erneut ein.",
+            "reconfigure_successful": "Neukonfiguration erfolgreich"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Optionen",
+                "description": "Laufzeitoptionen für Bosch HomeCom anpassen.",
+                "data": {
+                    "update_seconds": "Aktualisierungsintervall (Sekunden)"
+                }
+            }
+        }
+    },
+    "entity": {
+        "fan": {
+            "ventilation": {
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "off": "Aus",
+                            "min": "Stufe 1 (Minimum)",
+                            "red": "Stufe 2 (Reduziert)",
+                            "nom": "Stufe 3 (Normal)",
+                            "max": "Stufe 4 (Maximum)",
+                            "dem": "Bedarfsgeregelt",
+                            "time": "Zeitgesteuert",
+                            "fallAsleep": "Schlafen",
+                            "powerVent": "Stoßlüftung",
+                            "party": "Party",
+                            "fireplace": "Kamin"
+                        }
+                    }
+                }
+            }
+        },
+        "select": {
+            "airflow_horizontal": {
+                "state": {
+                    "center": "Mitte",
+                    "left": "Links",
+                    "right": "Rechts",
+                    "swing": "Schwenken"
+                }
+            },
+            "airflow_vertical": {
+                "state": {
+                    "auto": "Automatisch",
+                    "angle1": "Winkel 1",
+                    "angle2": "Winkel 2",
+                    "angle3": "Winkel 3",
+                    "angle4": "Winkel 4",
+                    "angle5": "Winkel 5",
+                    "swing": "Schwenken"
+                }
+            },
+            "program": {
+                "state": {
+                    "off": "Aus",
+                    "program1": "Programm 1",
+                    "program2": "Programm 2"
+                }
+            },
+            "dhw_operation_mode": {
+                "state": {
+                    "off": "Aus",
+                    "low": "Niedrig (Eco)",
+                    "high": "Hoch (Komfort)",
+                    "eco": "Eco+",
+                    "ownprogram": "Eigenes Programm",
+                    "manual": "Manuell"
+                }
+            },
+            "dhw_current_temp": {
+                "state": {
+                    "off": "Aus",
+                    "low": "Niedrig",
+                    "high": "Hoch",
+                    "eco": "Eco"
+                }
+            },
+            "hc_operation_mode": {
+                "state": {
+                    "off": "Aus",
+                    "manual": "Manuell",
+                    "auto": "Automatisch"
+                }
+            },
+            "hc_suwi_mode": {
+                "state": {
+                    "forced": "Erzwungen",
+                    "off": "Aus",
+                    "cooling": "Kühlung"
+                }
+            },
+            "hc_heatcool_mode": {
+                "state": {
+                    "heat": "Heizen",
+                    "cool": "Kühlen",
+                    "heatCool": "Heizen & Kühlen"
+                }
+            },
+            "holiday_mode": {
+                "state": {
+                    "hm1": "Urlaubsmodus 1",
+                    "hm2": "Urlaubsmodus 2",
+                    "hm3": "Urlaubsmodus 3",
+                    "hm4": "Urlaubsmodus 4",
+                    "hm5": "Urlaubsmodus 5",
+                    "hm6": "Urlaubsmodus 6",
+                    "hm7": "Urlaubsmodus 7",
+                    "hm8": "Urlaubsmodus 8"
+                }
+            },
+            "away_mode": {
+                "state": {
+                    "on": "An",
+                    "off": "Aus"
+                }
+            }
+        },
+        "sensor": {
+            "hc": {
+                "state": {
+                    "off": "Aus",
+                    "manual": "Manuell",
+                    "auto": "Automatisch"
+                }
+            },
+            "ventilation": {
+                "state": {
+                    "off": "Aus",
+                    "min": "Stufe 1 (Minimum)",
+                    "red": "Stufe 2 (Reduziert)",
+                    "nom": "Stufe 3 (Normal)",
+                    "max": "Stufe 4 (Maximum)",
+                    "dem": "Bedarfsgeregelt"
+                }
+            }
+        },
+        "water_heater": {
+            "dhw": {
+                "state_attributes": {
+                    "operation_mode": {
+                        "state": {
+                            "off": "Aus",
+                            "low": "Niedrig (Eco)",
+                            "high": "Hoch (Komfort)",
+                            "eco": "Eco+",
+                            "manual": "Manuell",
+                            "ownprogram": "Eigenes Programm"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

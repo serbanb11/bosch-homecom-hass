@@ -435,6 +435,8 @@ class BoschComSensorHc(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = ["off", "manual", "auto"]
         self.field = field
 
         _LOGGER.debug(
@@ -449,9 +451,9 @@ class BoschComSensorHc(BoschComSensorBase):
 
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                return (entry.get("operationMode") or {}).get("value", "unknown")
+                return (entry.get("operationMode") or {}).get("value")
 
-        return "unknown"
+        return None
 
     @property
     def extra_state_attributes(self):
@@ -522,6 +524,8 @@ class BoschComSensorVentilation(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = ["off", "min", "red", "nom", "max", "dem"]
         self.field = field
 
         _LOGGER.debug(
@@ -535,10 +539,8 @@ class BoschComSensorVentilation(BoschComSensorBase):
         """Return BoschComSensorVentilation fan level."""
         for entry in self.coordinator.data.ventilation:
             if entry.get("id") == "/ventilation/" + self.field:
-                return (entry.get("exhaustFanLevel") or {}).get(
-                    "value", "unknown"
-                )
-        return "unknown"
+                return (entry.get("exhaustFanLevel") or {}).get("value")
+        return None
 
     @property
     def extra_state_attributes(self):
