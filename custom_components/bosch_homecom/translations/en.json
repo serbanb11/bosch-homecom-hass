@@ -62,6 +62,11 @@
         }
     },
     "entity": {
+        "climate": {
+            "zone": {
+                "name": "Zone"
+            }
+        },
         "fan": {
             "ventilation": {
                 "state_attributes": {
@@ -163,6 +168,12 @@
                     "on": "On",
                     "off": "Off"
                 }
+            },
+            "hc_night_switch_mode": {
+                "name": "HC Night Switch Mode"
+            },
+            "hc_control": {
+                "name": "HC Control"
             }
         },
         "sensor": {
@@ -173,6 +184,15 @@
                     "auto": "Auto"
                 }
             },
+            "indoor_humidity": {
+                "name": "Indoor Humidity"
+            },
+            "flame_indication": {
+                "name": "Flame Indication"
+            },
+            "energy_history": {
+                "name": "Energy History"
+            },
             "ventilation": {
                 "state": {
                     "off": "Off",
@@ -182,6 +202,11 @@
                     "max": "Level 4 (Maximum)",
                     "dem": "Demand-based"
                 }
+            }
+        },
+        "switch": {
+            "child_lock": {
+                "name": "Child Lock"
             }
         },
         "water_heater": {

@@ -118,6 +118,33 @@ async def async_setup_entry(
                     ),
                 ]
             )
+            # Indoor humidity
+            if coordinator.data.indoor_humidity:
+                entities.append(
+                    BoschComSensorIndoorHumidity(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field="indoor_humidity",
+                    )
+                )
+            # Flame indication
+            if coordinator.data.flame_indication:
+                entities.append(
+                    BoschComSensorFlameIndication(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field="flame_indication",
+                    )
+                )
+            # Energy history
+            if coordinator.data.energy_history:
+                entities.append(
+                    BoschComSensorEnergyHistory(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field="energy_history",
+                    )
+                )
 
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
         elif device_type == "wddw2":
@@ -512,6 +539,15 @@ class BoschComSensorHc(BoschComSensorBase):
                     "manualRoomSetpoint": manualRoomSetpoint_value,
                     "currentRoomSetpoint": currentRoomSetpoint_value,
                     "coolingRoomTempSetpoint": coolingRoomTempSetpoint_value,
+                    "maxSupply": (entry.get("maxSupply") or {}).get("value", "unknown"),
+                    "minSupply": (entry.get("minSupply") or {}).get("value", "unknown"),
+                    "heatCurveMax": (entry.get("heatCurveMax") or {}).get("value", "unknown"),
+                    "heatCurveMin": (entry.get("heatCurveMin") or {}).get("value", "unknown"),
+                    "supplyTemperatureSetpoint": (entry.get("supplyTemperatureSetpoint") or {}).get("value", "unknown"),
+                    "nightSwitchMode": (entry.get("nightSwitchMode") or {}).get("value", "unknown"),
+                    "control": (entry.get("control") or {}).get("value", "unknown"),
+                    "nightThreshold": (entry.get("nightThreshold") or {}).get("value", "unknown"),
+                    "roomInfluence": (entry.get("roomInfluence") or {}).get("value", "unknown"),
                 }
 
         return {
@@ -522,6 +558,15 @@ class BoschComSensorHc(BoschComSensorBase):
             "manualRoomSetpoint": "unknown",
             "currentRoomSetpoint": "unknown",
             "coolingRoomTempSetpoint": "unknown",
+            "maxSupply": "unknown",
+            "minSupply": "unknown",
+            "heatCurveMax": "unknown",
+            "heatCurveMin": "unknown",
+            "supplyTemperatureSetpoint": "unknown",
+            "nightSwitchMode": "unknown",
+            "control": "unknown",
+            "nightThreshold": "unknown",
+            "roomInfluence": "unknown",
         }
 
 
@@ -1132,3 +1177,113 @@ class BoschComHeatingActiveBinarySensor(CoordinatorEntity, BinarySensorEntity):
             return False
 
         return False
+
+
+class BoschComSensorIndoorHumidity(BoschComSensorBase):
+    """BoschCom indoor humidity sensor."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize indoor humidity sensor."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name=field,
+            unique_id=f"{coordinator.unique_id}-{field}",
+            icon="mdi:water-percent",
+        )
+        self._attr_translation_key = "indoor_humidity"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._attr_should_poll = False
+        self._attr_device_class = SensorDeviceClass.HUMIDITY
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "%"
+
+    @property
+    def state(self):
+        """Return indoor humidity value."""
+        humidity = self.coordinator.data.indoor_humidity
+        if isinstance(humidity, dict):
+            return humidity.get("value")
+        return humidity
+
+
+class BoschComSensorFlameIndication(BoschComSensorBase):
+    """BoschCom flame indication sensor."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize flame indication sensor."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name=field,
+            unique_id=f"{coordinator.unique_id}-{field}",
+            icon="mdi:fire",
+        )
+        self._attr_translation_key = "flame_indication"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._attr_should_poll = False
+
+    @property
+    def state(self):
+        """Return flame indication value."""
+        flame = self.coordinator.data.flame_indication
+        if isinstance(flame, dict):
+            return flame.get("value")
+        return flame
+
+
+class BoschComSensorEnergyHistory(BoschComSensorBase):
+    """BoschCom energy history sensor."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize energy history sensor."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            name=field,
+            unique_id=f"{coordinator.unique_id}-{field}",
+            icon="mdi:lightning-bolt",
+        )
+        self._attr_translation_key = "energy_history"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._attr_should_poll = False
+
+    @property
+    def state(self):
+        """Return energy history value."""
+        energy = self.coordinator.data.energy_history
+        if isinstance(energy, dict):
+            return energy.get("value")
+        return energy
+
+    @property
+    def extra_state_attributes(self):
+        """Return energy history details as attributes."""
+        energy = self.coordinator.data.energy_history
+        if isinstance(energy, dict):
+            return {k: v for k, v in energy.items() if k != "value"}
+        return {}

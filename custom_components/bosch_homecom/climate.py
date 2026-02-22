@@ -52,6 +52,12 @@ async def async_setup_entry(
                 entities.append(
                     BoschComK40Climate(coordinator=coordinator, field=hc_id)
                 )
+        if device_type in ("k40", "k30", "icom", "rrc2"):
+            for ref in coordinator.data.zones or []:
+                zone_id = ref["id"].split("/")[-1]
+                entities.append(
+                    BoschComZoneClimate(coordinator=coordinator, field=zone_id)
+                )
     if entities:
         async_add_entities(entities)
 
@@ -419,3 +425,67 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
 
         away = (data.away_mode or {}).get("value")
         self._attr_preset_mode = PRESET_AWAY if away == "on" else PRESET_NONE
+
+
+class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
+    """Representation of a BoschCom zone climate entity."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_hvac_modes = [HVACMode.HEAT]
+    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+    ) -> None:
+        """Initialize zone climate entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "zone"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._attr_should_poll = False
+        self._attr_hvac_mode = HVACMode.HEAT
+        self.field = field
+
+        self.set_attr()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.set_attr()
+        self.async_write_ha_state()
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set new target temperature."""
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
+            return
+
+        await self.coordinator.bhc.async_set_zone_manual_temp_heating(
+            self.coordinator.unique_id, self.field, temperature
+        )
+
+        await self.coordinator.async_request_refresh()
+
+    def set_attr(self) -> None:
+        """Populate attributes with data from the coordinator."""
+        data = self.coordinator.data
+        if not data:
+            return
+
+        for entry in data.zones or []:
+            if entry.get("id", "").endswith(f"/{self.field}"):
+                temp_actual = (entry.get("temperatureActual") or {}).get("value")
+                if temp_actual is not None:
+                    self._attr_current_temperature = temp_actual
+
+                manual_temp = entry.get("manualTemperatureHeating") or {}
+                target = manual_temp.get("value")
+                if target is not None:
+                    self._attr_target_temperature = target
+                self._attr_min_temp = manual_temp.get("minValue", 5)
+                self._attr_max_temp = manual_temp.get("maxValue", 30)
+                break
