@@ -411,7 +411,11 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                 case "currentRoomSetpoint":
                     self._attr_target_temperature = heating_circuits[key]["value"]
                 case "roomTemp":
-                    self._attr_current_temperature = heating_circuits[key]["value"]
+                    room_temp = heating_circuits[key]["value"]
+                    if isinstance(room_temp, (int, float)) and -40 <= room_temp <= 60:
+                        self._attr_current_temperature = room_temp
+                    else:
+                        self._attr_current_temperature = None
                 case "actualHumidity":
                     self._attr_current_humidity = heating_circuits[key]["value"]
 
@@ -427,7 +431,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                 break
 
         away = (data.away_mode or {}).get("value")
-        self._attr_preset_mode = PRESET_AWAY if away == "on" else PRESET_NONE
+        self._attr_preset_mode = PRESET_AWAY if away in ("on", "true") else PRESET_NONE
 
 
 class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):

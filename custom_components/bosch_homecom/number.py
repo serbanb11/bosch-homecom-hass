@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from homeassistant import config_entries, core
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.core import callback
@@ -28,9 +26,7 @@ async def async_setup_entry(
             for cp in coordinator.data.charge_points or []:
                 cp_id = cp["id"].split("/")[-1]
                 entities.append(
-                    BoschComCommodulePriceNumber(
-                        coordinator=coordinator, cp_id=cp_id
-                    )
+                    BoschComCommodulePriceNumber(coordinator=coordinator, cp_id=cp_id)
                 )
     async_add_entities(entities)
 

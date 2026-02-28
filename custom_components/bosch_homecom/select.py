@@ -740,13 +740,14 @@ class BoschComSelectHolidayMode(CoordinatorEntity, SelectEntity):
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
 
-        return self.coordinator.data.holiday_mode["values"]
+        values = self.coordinator.data.holiday_mode.get("values") or []
+        return values[0] if values else None
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-
-        self._attr_current_option = self.coordinator.data.holiday_mode["values"]
+        values = self.coordinator.data.holiday_mode.get("values") or []
+        self._attr_current_option = values[0] if values else None
         self.async_write_ha_state()
 
 

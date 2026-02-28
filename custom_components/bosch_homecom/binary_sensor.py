@@ -26,9 +26,7 @@ async def async_setup_entry(
     entities = []
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "commodule":
-            entities.append(
-                BoschComCommoduleNetworkSensor(coordinator=coordinator)
-            )
+            entities.append(BoschComCommoduleNetworkSensor(coordinator=coordinator))
     async_add_entities(entities)
 
 

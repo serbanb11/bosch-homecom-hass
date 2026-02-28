@@ -112,16 +112,16 @@ pip install pytest pytest-cov pytest-homeassistant-custom-component coverage ruf
 
 ### Running Tests
 
-**Tests must pass before any change is considered complete.** Always run the full test suite after making changes and fix any failures before finishing.
+**All tox environments must pass before any change is considered complete.** Always run `tox` after making changes and fix any failures before finishing.
 
 ```bash
 # Activate venv first
 source venv/bin/activate
 
-# Run tests with coverage (REQUIRED after every change)
-pytest --cov=custom_components --cov-report=term-missing tests
+# Run ALL checks (REQUIRED after every change)
+tox
 
-# Via tox
+# Individual environments (for targeted debugging only)
 tox -e py312    # tests
 tox -e lint     # flake8 + isort + black
 tox -e type     # mypy
@@ -131,9 +131,9 @@ tox -e type     # mypy
 
 1. Activate the venv (`source venv/bin/activate`)
 2. Make code changes
-3. Run `pytest` — all tests must pass
-4. If tests fail, fix the issues and re-run until green
-5. Never consider a task done with failing tests
+3. Run `tox` — all environments (py312, lint, type) must pass
+4. If any environment fails, fix the issues and re-run until green
+5. Never consider a task done with failing tox
 
 ### Test Structure
 

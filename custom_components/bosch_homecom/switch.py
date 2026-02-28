@@ -50,14 +50,10 @@ async def async_setup_entry(
             for cp in coordinator.data.charge_points or []:
                 cp_id = cp["id"].split("/")[-1]
                 entities.append(
-                    BoschComCommoduleLockSwitch(
-                        coordinator=coordinator, cp_id=cp_id
-                    )
+                    BoschComCommoduleLockSwitch(coordinator=coordinator, cp_id=cp_id)
                 )
                 entities.append(
-                    BoschComCommoduleAuthSwitch(
-                        coordinator=coordinator, cp_id=cp_id
-                    )
+                    BoschComCommoduleAuthSwitch(coordinator=coordinator, cp_id=cp_id)
                 )
                 entities.append(
                     BoschComCommoduleRfidSecureSwitch(
@@ -179,7 +175,11 @@ class BoschComChildLockSwitch(CoordinatorEntity, SwitchEntity):
                 child_lock = dev.get("childLock") or {}
                 value = child_lock.get("value")
                 if value is not None:
-                    return bool(value) if isinstance(value, bool) else value == "on"
+                    return (
+                        bool(value)
+                        if isinstance(value, bool)
+                        else value in ("on", "true")
+                    )
         return None
 
     @callback
@@ -191,7 +191,9 @@ class BoschComChildLockSwitch(CoordinatorEntity, SwitchEntity):
                 value = child_lock.get("value")
                 if value is not None:
                     self._attr_is_on = (
-                        bool(value) if isinstance(value, bool) else value == "on"
+                        bool(value)
+                        if isinstance(value, bool)
+                        else value in ("on", "true")
                     )
         self.async_write_ha_state()
 

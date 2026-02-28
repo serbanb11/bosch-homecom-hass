@@ -839,9 +839,7 @@ class BoschComSensorHs(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHS type."""
-        return (self.coordinator.data.heat_sources.get("pumpType") or {}).get(
-            "value", "unknown"
-        )
+        return (self.coordinator.data.heat_sources.get("pumpType") or {}).get("value")
 
     @property
     def extra_state_attributes(self):
@@ -1348,22 +1346,36 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
         self._attr_should_poll = False
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "kWh"
+        self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def state(self):
-        """Return energy history value."""
+        """Return latest day total gas consumption."""
         energy = self.coordinator.data.energy_history
-        if isinstance(energy, dict):
-            return energy.get("value")
-        return energy
+        if not isinstance(energy, dict):
+            return None
+        values = energy.get("value")
+        if not isinstance(values, list) or not values:
+            return None
+        latest = values[-1]
+        if not isinstance(latest, dict):
+            return None
+        g_ch = latest.get("gCh", 0) or 0
+        g_hw = latest.get("gHw", 0) or 0
+        return round(g_ch + g_hw, 2)
 
     @property
     def extra_state_attributes(self):
         """Return energy history details as attributes."""
         energy = self.coordinator.data.energy_history
-        if isinstance(energy, dict):
-            return {k: v for k, v in energy.items() if k != "value"}
-        return {}
+        if not isinstance(energy, dict):
+            return {}
+        values = energy.get("value")
+        if not isinstance(values, list):
+            return {}
+        return {"history": values}
 
 
 # ---- Commodule (EV Charger) sensors ----
