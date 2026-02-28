@@ -53,7 +53,6 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-fan"
         self._attr_name = f"{field}_fan"
-        self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_has_entity_name = True
         self._attr_supported_features = (
@@ -62,9 +61,9 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
             | FanEntityFeature.TURN_ON
         )
 
-        self._operation_mode: str | None = None
+        self._operationMode: str | None = None
         self._preset_modes: list[str] | None = None
-        self._exhaust_fan_level: str | None = None
+        self._exhaustFanLevel: str | None = None
 
         self.set_attr()
 
@@ -98,9 +97,9 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
     ) -> None:
         """Turn on."""
         if preset_mode is None:
-            preset_mode = self._preset_mode
+            preset_mode = self._operationMode
         await self.coordinator.bhc.async_set_ventilation_mode(
-            self._attr_unique_id, self.field, preset_mode
+            self.coordinator.unique_id, self.field, preset_mode
         )
 
         await self.coordinator.async_request_refresh()
@@ -108,7 +107,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
     async def async_set_preset_mode(self, preset_mode: str | None = None) -> None:
         """Set new preset mode."""
         await self.coordinator.bhc.async_set_ventilation_mode(
-            self._attr_unique_id, self.field, preset_mode
+            self.coordinator.unique_id, self.field, preset_mode
         )
 
         await self.coordinator.async_request_refresh()
@@ -116,7 +115,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
     async def async_turn_off(self) -> None:
         """Turn off."""
         await self.coordinator.bhc.async_set_ventilation_mode(
-            self._attr_unique_id, self.field, '"off"'
+            self.coordinator.unique_id, self.field, "off"
         )
 
         await self.coordinator.async_request_refresh()
@@ -124,7 +123,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
     @property
     def is_on(self) -> bool:
         """Return true if fan is on."""
-        return self._exhaustFanLevel != '"off"'
+        return self._exhaustFanLevel != "off"
 
     @property
     def preset_mode(self) -> str | None:
@@ -143,6 +142,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
 
         for entry in self.coordinator.data.ventilation:
             if entry.get("id") == "/ventilation/" + self.field:
-                self._operationMode = safe_get(entry["operationMode"], "value")
-                self._preset_modes = safe_get(entry["operationMode"], "allowedValues")
-                self._exhaustFanLevel = safe_get(entry["exhaustFanLevel"], "value")
+                op_mode = entry.get("operationMode")
+                self._operationMode = safe_get(op_mode, "value")
+                self._preset_modes = safe_get(op_mode, "allowedValues")
+                self._exhaustFanLevel = safe_get(entry.get("exhaustFanLevel"), "value")
