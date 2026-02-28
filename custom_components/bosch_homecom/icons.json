@@ -5,9 +5,51 @@
           "default": "mdi:air-conditioner"
         }
       },
+      "binary_sensor": {
+        "wb_network": {
+          "default": "mdi:ethernet"
+        }
+      },
+      "number": {
+        "wb_price": {
+          "default": "mdi:currency-eur"
+        }
+      },
+      "sensor": {
+        "wb_state": {
+          "default": "mdi:ev-station"
+        },
+        "wb_power": {
+          "default": "mdi:flash"
+        },
+        "wb_energy_total": {
+          "default": "mdi:lightning-bolt"
+        },
+        "wb_temperature": {
+          "default": "mdi:thermometer"
+        },
+        "wb_phases": {
+          "default": "mdi:sine-wave"
+        },
+        "wb_phase_sensor": {
+          "default": "mdi:sine-wave"
+        },
+        "wb_chargelog": {
+          "default": "mdi:history"
+        }
+      },
       "switch": {
         "plasmacluster": {
           "default": "mdi:air-purifier"
+        },
+        "wb_locked": {
+          "default": "mdi:lock"
+        },
+        "wb_auth": {
+          "default": "mdi:shield-key"
+        },
+        "wb_rfid_secure": {
+          "default": "mdi:card-account-details"
         }
       },
       "text": {

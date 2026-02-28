@@ -12,6 +12,7 @@ from homecom_alt import (
     AuthFailedError,
     ConnectionOptions,
     HomeComAlt,
+    HomeComCommodule,
     HomeComGeneric,
     HomeComK40,
     HomeComRac,
@@ -40,6 +41,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
 )
 from .coordinator import (
+    BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorGeneric,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
@@ -47,8 +49,10 @@ from .coordinator import (
 )
 
 PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
     Platform.CLIMATE,
     Platform.FAN,
+    Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,
@@ -65,7 +69,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     token: str | None = entry.data.get(CONF_TOKEN)
     refresh: str | None = entry.data.get(CONF_REFRESH)
 
-    brand = "buderus" if entry.options.get(CONF_BRAND_BUDERUS, False) else "bosch"
+    brand_buderus = entry.data.get(
+        CONF_BRAND_BUDERUS, entry.options.get(CONF_BRAND_BUDERUS, False)
+    )
+    brand = "buderus" if brand_buderus else "bosch"
 
     if token and refresh:
         options = ConnectionOptions(token=token, refresh_token=refresh, brand=brand)
@@ -152,6 +159,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 BoschComModuleCoordinatorWddw2(
                     hass,
                     HomeComWddw2(
+                        websession, coordinator_options, device_id, auth_provider
+                    ),
+                    device,
+                    firmware,
+                    entry,
+                    auth_provider,
+                )
+            )
+        elif device["deviceType"] == "commodule":
+            coordinators.append(
+                BoschComModuleCoordinatorCommodule(
+                    hass,
+                    HomeComCommodule(
                         websession, coordinator_options, device_id, auth_provider
                     ),
                     device,

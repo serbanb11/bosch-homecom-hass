@@ -23,6 +23,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import BOSCH_SENSOR_DESCRIPTORS
 from .coordinator import (
+    BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
     BoschComModuleCoordinatorWddw2,
@@ -225,6 +226,70 @@ async def async_setup_entry(
                 )
             except Exception:
                 _LOGGER.debug("Failed to add DHW Heating Active binary sensor")
+
+        # ---- Commodule (EV Charger) ----
+        elif device_type == "commodule":
+            for cp in coordinator.data.charge_points or []:
+                cp_id = cp["id"].split("/")[-1]
+                telemetry = cp.get("telemetry") or {}
+                entities.append(
+                    BoschComCommoduleStateSensor(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        cp_id=cp_id,
+                    )
+                )
+                if telemetry.get("actualPower") is not None:
+                    entities.append(
+                        BoschComCommodulePowerSensor(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            cp_id=cp_id,
+                        )
+                    )
+                if telemetry.get("energyTotal") is not None:
+                    entities.append(
+                        BoschComCommoduleEnergySensor(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            cp_id=cp_id,
+                        )
+                    )
+                if telemetry.get("temp") is not None:
+                    entities.append(
+                        BoschComCommoduleTempSensor(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            cp_id=cp_id,
+                        )
+                    )
+                if telemetry.get("phases") is not None:
+                    entities.append(
+                        BoschComCommodulePhasesSensor(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            cp_id=cp_id,
+                        )
+                    )
+                # Per-phase sensors from telemetry.sensor
+                sensor_data = telemetry.get("sensor") or {}
+                for phase_key in sensor_data:
+                    entities.append(
+                        BoschComCommodulePhaseSensor(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            cp_id=cp_id,
+                            phase_key=phase_key,
+                        )
+                    )
+                if cp.get("chargelog") is not None:
+                    entities.append(
+                        BoschComCommoduleChargelogSensor(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            cp_id=cp_id,
+                        )
+                    )
 
     for coordinator in coordinators:
         devtype = (coordinator.data.device or {}).get("deviceType")
@@ -1298,4 +1363,237 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         energy = self.coordinator.data.energy_history
         if isinstance(energy, dict):
             return {k: v for k, v in energy.items() if k != "value"}
+        return {}
+
+
+# ---- Commodule (EV Charger) sensors ----
+
+
+class _CommoduleSensorBase(CoordinatorEntity, SensorEntity):
+    """Base class for commodule charge point sensors."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorCommodule,
+        config_entry: config_entries.ConfigEntry,
+        cp_id: str,
+        unique_suffix: str,
+        icon: str | None = None,
+    ) -> None:
+        """Initialize commodule sensor."""
+        super().__init__(coordinator)
+        self.config_entry = config_entry
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{cp_id}-{unique_suffix}"
+        self._attr_icon = icon
+        self._cp_id = cp_id
+
+    def _get_cp(self) -> dict | None:
+        """Get charge point data."""
+        for cp in self.coordinator.data.charge_points or []:
+            if cp["id"].split("/")[-1] == self._cp_id:
+                return cp
+        return None
+
+    def _get_telemetry(self) -> dict:
+        """Get telemetry data for charge point."""
+        cp = self._get_cp()
+        if cp is None:
+            return {}
+        return cp.get("telemetry") or {}
+
+
+class BoschComCommoduleStateSensor(_CommoduleSensorBase):
+    """Commodule wallbox state sensor."""
+
+    def __init__(self, coordinator, config_entry, cp_id) -> None:
+        """Initialize state sensor."""
+        super().__init__(
+            coordinator, config_entry, cp_id, "wb_state", icon="mdi:ev-station"
+        )
+        self._attr_translation_key = "wb_state"
+        self._attr_name = f"{cp_id}_state"
+
+    @property
+    def state(self):
+        """Return wallbox state."""
+        telemetry = self._get_telemetry()
+        return (telemetry.get("wbState") or {}).get("value")
+
+
+class BoschComCommodulePowerSensor(_CommoduleSensorBase):
+    """Commodule actual power sensor."""
+
+    def __init__(self, coordinator, config_entry, cp_id) -> None:
+        """Initialize power sensor."""
+        super().__init__(coordinator, config_entry, cp_id, "wb_power")
+        self._attr_translation_key = "wb_power"
+        self._attr_name = f"{cp_id}_power"
+        self._attr_device_class = SensorDeviceClass.POWER
+        self._attr_native_unit_of_measurement = "kW"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self):
+        """Return actual power."""
+        telemetry = self._get_telemetry()
+        val = (telemetry.get("actualPower") or {}).get("value")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
+class BoschComCommoduleEnergySensor(_CommoduleSensorBase):
+    """Commodule total energy sensor."""
+
+    def __init__(self, coordinator, config_entry, cp_id) -> None:
+        """Initialize energy sensor."""
+        super().__init__(coordinator, config_entry, cp_id, "wb_energy_total")
+        self._attr_translation_key = "wb_energy_total"
+        self._attr_name = f"{cp_id}_energy_total"
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_native_unit_of_measurement = "kWh"
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    @property
+    def native_value(self):
+        """Return total energy."""
+        telemetry = self._get_telemetry()
+        val = (telemetry.get("energyTotal") or {}).get("value")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
+class BoschComCommoduleTempSensor(_CommoduleSensorBase):
+    """Commodule temperature sensor."""
+
+    def __init__(self, coordinator, config_entry, cp_id) -> None:
+        """Initialize temperature sensor."""
+        super().__init__(coordinator, config_entry, cp_id, "wb_temperature")
+        self._attr_translation_key = "wb_temperature"
+        self._attr_name = f"{cp_id}_temperature"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self):
+        """Return temperature."""
+        telemetry = self._get_telemetry()
+        val = (telemetry.get("temp") or {}).get("value")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
+class BoschComCommodulePhasesSensor(_CommoduleSensorBase):
+    """Commodule phases sensor."""
+
+    def __init__(self, coordinator, config_entry, cp_id) -> None:
+        """Initialize phases sensor."""
+        super().__init__(
+            coordinator, config_entry, cp_id, "wb_phases", icon="mdi:sine-wave"
+        )
+        self._attr_translation_key = "wb_phases"
+        self._attr_name = f"{cp_id}_phases"
+
+    @property
+    def state(self):
+        """Return number of phases."""
+        telemetry = self._get_telemetry()
+        return (telemetry.get("phases") or {}).get("value")
+
+
+class BoschComCommodulePhaseSensor(_CommoduleSensorBase):
+    """Commodule per-phase sensor (voltage/current)."""
+
+    def __init__(self, coordinator, config_entry, cp_id, phase_key) -> None:
+        """Initialize per-phase sensor."""
+        super().__init__(
+            coordinator,
+            config_entry,
+            cp_id,
+            f"wb_phase_{phase_key}",
+            icon="mdi:sine-wave",
+        )
+        self._attr_translation_key = "wb_phase_sensor"
+        self._attr_name = f"{cp_id}_{phase_key}"
+        self._phase_key = phase_key
+
+    @property
+    def state(self):
+        """Return phase value."""
+        telemetry = self._get_telemetry()
+        sensor_data = telemetry.get("sensor") or {}
+        phase = sensor_data.get(self._phase_key)
+        if isinstance(phase, dict):
+            return phase.get("value")
+        return phase
+
+    @property
+    def extra_state_attributes(self):
+        """Return phase details."""
+        telemetry = self._get_telemetry()
+        sensor_data = telemetry.get("sensor") or {}
+        phase = sensor_data.get(self._phase_key)
+        if isinstance(phase, dict):
+            return {k: v for k, v in phase.items() if k != "value"}
+        return {}
+
+
+class BoschComCommoduleChargelogSensor(_CommoduleSensorBase):
+    """Commodule charge log sensor."""
+
+    def __init__(self, coordinator, config_entry, cp_id) -> None:
+        """Initialize chargelog sensor."""
+        super().__init__(
+            coordinator, config_entry, cp_id, "wb_chargelog", icon="mdi:history"
+        )
+        self._attr_translation_key = "wb_chargelog"
+        self._attr_name = f"{cp_id}_chargelog"
+
+    @property
+    def state(self):
+        """Return number of charge sessions."""
+        cp = self._get_cp()
+        if cp is None:
+            return None
+        chargelog = cp.get("chargelog")
+        if isinstance(chargelog, list):
+            return len(chargelog)
+        if isinstance(chargelog, dict):
+            sessions = chargelog.get("sessions") or chargelog.get("values") or []
+            if isinstance(sessions, list):
+                return len(sessions)
+        return None
+
+    @property
+    def extra_state_attributes(self):
+        """Return last session details."""
+        cp = self._get_cp()
+        if cp is None:
+            return {}
+        chargelog = cp.get("chargelog")
+        sessions = None
+        if isinstance(chargelog, list):
+            sessions = chargelog
+        elif isinstance(chargelog, dict):
+            sessions = chargelog.get("sessions") or chargelog.get("values") or []
+        if sessions and isinstance(sessions, list) and len(sessions) > 0:
+            last = sessions[-1]
+            if isinstance(last, dict):
+                return {"last_session": last}
         return {}

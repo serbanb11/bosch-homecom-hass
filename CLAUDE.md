@@ -88,15 +88,37 @@ All entities:
 
 ## Build and Test
 
+### Virtual Environment (REQUIRED)
+
+**Always use the project venv for all commands.** Create it once, then activate before running anything:
+
+```bash
+# Create venv (first time only)
+python3 -m venv venv
+
+# Activate venv (every session)
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements_test.txt
+# or if no requirements file:
+pip install pytest pytest-cov pytest-homeassistant-custom-component coverage ruff black isort homecom_alt tenacity
+```
+
 ### Dependencies
 
-- Runtime: `homecom_alt>=1.4.16`
+- Runtime: `homecom_alt>=1.5.3`
 - Test: `pytest`, `pytest-cov`, `pytest-homeassistant-custom-component`, `coverage`, `ruff`, `black`, `isort`
 
 ### Running Tests
 
+**Tests must pass before any change is considered complete.** Always run the full test suite after making changes and fix any failures before finishing.
+
 ```bash
-# Run tests with coverage
+# Activate venv first
+source venv/bin/activate
+
+# Run tests with coverage (REQUIRED after every change)
 pytest --cov=custom_components --cov-report=term-missing tests
 
 # Via tox
@@ -104,6 +126,14 @@ tox -e py312    # tests
 tox -e lint     # flake8 + isort + black
 tox -e type     # mypy
 ```
+
+### Test Workflow
+
+1. Activate the venv (`source venv/bin/activate`)
+2. Make code changes
+3. Run `pytest` — all tests must pass
+4. If tests fail, fix the issues and re-run until green
+5. Never consider a task done with failing tests
 
 ### Test Structure
 

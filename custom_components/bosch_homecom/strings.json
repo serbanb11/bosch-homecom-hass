@@ -4,7 +4,8 @@
             "user": {
                 "data": {
                     "username": "SingleKey ID username",
-                    "password": "SingleKey ID password"
+                    "password": "SingleKey ID password",
+                    "brand_buderus": "Buderus brand"
                 },
                 "description": "Enter your SingleKey ID Credentials",
                 "title": "Authentication"
@@ -202,11 +203,51 @@
                     "max": "Level 4 (Maximum)",
                     "dem": "Demand-based"
                 }
+            },
+            "wb_state": {
+                "name": "Wallbox State"
+            },
+            "wb_power": {
+                "name": "Wallbox Power"
+            },
+            "wb_energy_total": {
+                "name": "Wallbox Energy Total"
+            },
+            "wb_temperature": {
+                "name": "Wallbox Temperature"
+            },
+            "wb_phases": {
+                "name": "Wallbox Phases"
+            },
+            "wb_phase_sensor": {
+                "name": "Wallbox Phase"
+            },
+            "wb_chargelog": {
+                "name": "Wallbox Charge Log"
+            }
+        },
+        "binary_sensor": {
+            "wb_network": {
+                "name": "Wallbox Network"
+            }
+        },
+        "number": {
+            "wb_price": {
+                "name": "Electricity Price"
             }
         },
         "switch": {
             "child_lock": {
                 "name": "Child Lock"
+            },
+            "wb_locked": {
+                "name": "Wallbox Locked"
+            },
+            "wb_auth": {
+                "name": "Wallbox Auth"
+            },
+            "wb_rfid_secure": {
+                "name": "Wallbox RFID Secure"
             }
         },
         "water_heater": {

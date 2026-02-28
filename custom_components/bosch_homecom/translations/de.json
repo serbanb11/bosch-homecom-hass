@@ -202,11 +202,51 @@
                     "max": "Stufe 4 (Maximum)",
                     "dem": "Bedarfsgeregelt"
                 }
+            },
+            "wb_state": {
+                "name": "Wallbox Status"
+            },
+            "wb_power": {
+                "name": "Wallbox Leistung"
+            },
+            "wb_energy_total": {
+                "name": "Wallbox Energie Gesamt"
+            },
+            "wb_temperature": {
+                "name": "Wallbox Temperatur"
+            },
+            "wb_phases": {
+                "name": "Wallbox Phasen"
+            },
+            "wb_phase_sensor": {
+                "name": "Wallbox Phase"
+            },
+            "wb_chargelog": {
+                "name": "Wallbox Ladeprotokoll"
+            }
+        },
+        "binary_sensor": {
+            "wb_network": {
+                "name": "Wallbox Netzwerk"
+            }
+        },
+        "number": {
+            "wb_price": {
+                "name": "Strompreis"
             }
         },
         "switch": {
             "child_lock": {
                 "name": "Kindersicherung"
+            },
+            "wb_locked": {
+                "name": "Wallbox Gesperrt"
+            },
+            "wb_auth": {
+                "name": "Wallbox Authentifizierung"
+            },
+            "wb_rfid_secure": {
+                "name": "Wallbox RFID Sicher"
             }
         },
         "water_heater": {

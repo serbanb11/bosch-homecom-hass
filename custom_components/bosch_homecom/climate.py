@@ -367,13 +367,16 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode) -> None:
         """Set preset mode."""
+        is_rrc2 = self.coordinator.device.get("deviceType") == "rrc2"
         if preset_mode == PRESET_NONE:
+            value = "false" if is_rrc2 else "off"
             await self.coordinator.bhc.async_put_away_mode(
-                self.coordinator.unique_id, "off"
+                self.coordinator.unique_id, value
             )
         elif preset_mode == PRESET_AWAY:
+            value = "true" if is_rrc2 else "on"
             await self.coordinator.bhc.async_put_away_mode(
-                self.coordinator.unique_id, "on"
+                self.coordinator.unique_id, value
             )
 
         await self.coordinator.async_request_refresh()

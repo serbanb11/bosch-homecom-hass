@@ -10,10 +10,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homecom_alt import (
     ApiError,
     AuthFailedError,
+    BHCDeviceCommodule,
     BHCDeviceGeneric,
     BHCDeviceK40,
     BHCDeviceRac,
     BHCDeviceWddw2,
+    HomeComCommodule,
     HomeComK40,
     HomeComRac,
     HomeComWddw2,
@@ -344,4 +346,82 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
             firmware=data.firmware,
             notifications=data.notifications,
             dhw_circuits=data.dhw_circuits,
+        )
+
+
+class BoschComModuleCoordinatorCommodule(DataUpdateCoordinator[BHCDeviceCommodule]):
+    """A coordinator to manage the fetching of BoschCom data."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        bhc: HomeComCommodule,
+        device: list,
+        firmware: dict,
+        entry: ConfigEntry,
+        auth_provider: bool,
+    ) -> None:
+        """Initialize coordinator."""
+        super().__init__(
+            hass,
+            logger=_LOGGER,
+            name=DOMAIN,
+            update_interval=DEFAULT_UPDATE_INTERVAL,
+            always_update=True,
+        )
+        self.bhc = bhc
+        self.unique_id = device["deviceId"]
+        self.device = device
+        self.entry = entry
+        self.auth_provider = auth_provider
+
+        self.device_info = DeviceInfo(
+            serial_number=self.unique_id,
+            identifiers={(DOMAIN, self.unique_id)},
+            name="Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
+            sw_version=firmware["value"],
+            manufacturer=MANUFACTURER,
+        )
+
+    async def _async_update_data(self) -> BHCDeviceCommodule:
+        """Update data via library."""
+        if self.auth_provider:
+            try:
+                old_refresh_token = self.bhc.refresh_token
+                await self.bhc.get_token()
+                new_refresh_token = self.bhc.refresh_token
+                new_refresh_token = self.bhc.refresh_token
+                _LOGGER.debug(
+                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
+                    self.unique_id,
+                    old_refresh_token,
+                    new_refresh_token,
+                )
+                if old_refresh_token != new_refresh_token:
+                    new_data = dict(self.entry.data)
+                    new_data[CONF_TOKEN] = self.bhc.token
+                    new_data[CONF_REFRESH] = new_refresh_token
+                    self.hass.config_entries.async_update_entry(
+                        self.entry, data=new_data
+                    )
+                    _LOGGER.debug(
+                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
+                        self.unique_id,
+                        self.entry.data.get(CONF_TOKEN),
+                        self.entry.data.get(CONF_REFRESH),
+                    )
+            except AuthFailedError:
+                self.entry.async_start_reauth(self.hass)
+
+        try:
+            data: BHCDeviceCommodule = await self.bhc.async_update(self.unique_id)
+        except (ApiError, InvalidSensorDataError, RetryError) as error:
+            raise UpdateFailed(error) from error
+
+        return BHCDeviceCommodule(
+            device=self.device,
+            firmware=data.firmware,
+            notifications=data.notifications,
+            charge_points=data.charge_points,
+            eth0_state=data.eth0_state,
         )

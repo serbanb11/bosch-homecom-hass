@@ -33,6 +33,7 @@ from .const import (
     MAX_UPDATE_SECONDS,
     MIN_UPDATE_SECONDS,
     SINGLEKEY_LOGIN_URL,
+    SINGLEKEY_LOGIN_URL_BUDERUS,
 )
 
 
@@ -48,7 +49,14 @@ class BhcConfig:
 
 _LOGGER = logging.getLogger(__name__)
 
-AUTH_SCHEMA = vol.Schema({vol.Required(CONF_USERNAME): cv.string})
+BRAND_OPTIONS = ["bosch", "buderus"]
+
+AUTH_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_USERNAME): cv.string,
+        vol.Required(CONF_BRAND_BUDERUS, default=False): cv.boolean,
+    }
+)
 
 BROWSER_AUTH_SCHEMA = vol.Schema({vol.Required(CONF_CODE): cv.string})
 
@@ -78,16 +86,29 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=AUTH_SCHEMA, errors=errors
         )
 
+    def _get_login_url(self) -> str:
+        """Return the correct login URL based on brand selection."""
+        if self.data and self.data.get(CONF_BRAND_BUDERUS, False):
+            return SINGLEKEY_LOGIN_URL_BUDERUS
+        return SINGLEKEY_LOGIN_URL
+
     async def async_step_browser(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle a flow initialized by the user."""
         errors: dict[str, str] = {}
+        login_url = self._get_login_url()
+        brand = (
+            "buderus"
+            if self.data and self.data.get(CONF_BRAND_BUDERUS, False)
+            else "bosch"
+        )
 
         if user_input is not None:
             try:
                 options = ConnectionOptions(
                     code=user_input.get(CONF_CODE),
+                    brand=brand,
                 )
 
                 websession = async_get_clientsession(self.hass)
@@ -107,7 +128,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(
                     step_id="browser",
                     data_schema=BROWSER_AUTH_SCHEMA,
-                    description_placeholders={"url": SINGLEKEY_LOGIN_URL},
+                    description_placeholders={"url": login_url},
                     errors=errors,
                 )
             except Exception:
@@ -116,7 +137,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(
                     step_id="browser",
                     data_schema=BROWSER_AUTH_SCHEMA,
-                    description_placeholders={"url": SINGLEKEY_LOGIN_URL},
+                    description_placeholders={"url": login_url},
                     errors=errors,
                 )
 
@@ -136,7 +157,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="browser",
             data_schema=BROWSER_AUTH_SCHEMA,
-            description_placeholders={"url": SINGLEKEY_LOGIN_URL},
+            description_placeholders={"url": login_url},
             errors=errors,
         )
 

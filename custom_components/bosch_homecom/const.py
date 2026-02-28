@@ -24,6 +24,7 @@ MODEL = {
     "wddw2": "Bosch Water Heater",
     "icom": "Bosch Heat Pump",
     "rrc2": "Bosch Thermostat",
+    "commodule": "Bosch EV Charger",
 }
 
 ATTR_NOTIFICATIONS = "notifications"
@@ -41,6 +42,8 @@ ATTR_TIMERS_ON = "timersOn"
 ATTR_TIMERS_OFF = "timersOff"
 
 SINGLEKEY_LOGIN_URL = "https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.bosch.tt.dashtt.pointt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bsch"
+
+SINGLEKEY_LOGIN_URL_BUDERUS = "https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.buderus.tt.dashtt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bud"
 
 CONF_DEVICES: Final = "devices"
 CONF_REFRESH: Final = "refresh"
