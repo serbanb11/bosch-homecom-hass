@@ -485,14 +485,25 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
 
         for entry in data.zones or []:
             if entry.get("id", "").endswith(f"/{self.field}"):
+
                 temp_actual = (entry.get("temperatureActual") or {}).get("value")
                 if temp_actual is not None:
                     self._attr_current_temperature = temp_actual
 
-                manual_temp = entry.get("manualTemperatureHeating") or {}
-                target = manual_temp.get("value")
-                if target is not None:
-                    self._attr_target_temperature = target
-                self._attr_min_temp = manual_temp.get("minValue", 5)
-                self._attr_max_temp = manual_temp.get("maxValue", 30)
+                temp_data = self._get_temperature_data(entry)
+
+                self._attr_target_temperature = temp_data.get("value")
+                self._attr_min_temp = temp_data.get("minValue", 5)
+                self._attr_max_temp = temp_data.get("maxValue", 30)
+                self._attr_target_temperature_step = temp_data.get("stepSize", 0.5)
+
                 break
+
+    def _get_temperature_data(self, entry: dict) -> dict:
+        """Return the correct temperature object based on user mode."""
+        user_mode = (entry.get("userMode") or {}).get("value")
+
+        if user_mode == "manual":
+            return entry.get("manualTemperatureHeating") or {}
+
+        return entry.get("tempSetpoint") or {}
