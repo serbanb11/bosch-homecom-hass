@@ -138,13 +138,14 @@ async def async_setup_entry(
                     )
                 )
             # Energy history
-            entities.append(
-                BoschComSensorEnergyHistory(
-                    coordinator=coordinator,
-                    config_entry=config_entry,
-                    field="energy_history",
+            if coordinator.data.energy_history:
+                entities.append(
+                    BoschComSensorEnergyHistory(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field="energy_history",
+                    )
                 )
-            )
 
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
         elif device_type == "wddw2":
@@ -1345,18 +1346,9 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
         self._attr_should_poll = False
-        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "kWh"
         self._attr_device_class = SensorDeviceClass.ENERGY
-
-    @property
-    def available(self) -> bool:
-        """Return True if energy history data is present."""
-        energy = self.coordinator.data.energy_history if self.coordinator.data else None
-        if not isinstance(energy, dict):
-            return False
-        values = energy.get("value")
-        return isinstance(values, list) and len(values) > 0
 
     @property
     def state(self):
