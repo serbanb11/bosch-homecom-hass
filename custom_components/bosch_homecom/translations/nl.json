@@ -1,0 +1,269 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "data": {
+                    "username": "SingleKey ID gebruikersnaam",
+                    "password": "SingleKey ID wachtwoord"
+                },
+                "description": "Voer je SingleKey ID inloggegevens in.",
+                "title": "Authenticatie"
+            },
+            "reauth_confirm": {
+                "description": "Voer de juiste gebruikersnaam en het juiste wachtwoord in voor SingleKey ID.",
+                "data": {
+                    "username": "SingleKey ID gebruikersnaam",
+                    "password": "SingleKey ID wachtwoord"
+                }
+            },
+            "reconfigure": {
+                "description": "Werk de configuratie voor SingleKey ID bij.",
+                "data": {
+                    "username": "SingleKey ID gebruikersnaam",
+                    "password": "SingleKey ID wachtwoord"
+                },
+                "title": "Authenticatie"
+            },
+            "browser": {
+                "description": "Log in via de browser met de [URL]({url}) in de README en haal de code op via de ontwikkelaarstools van de browser.",
+                "data": {
+                    "code": "SingleKey ID-code"
+                },
+                "title": "Browser Authenticatie"
+            }
+        },
+        "error": {
+            "username_required": "Gebruikersnaam is verplicht.",
+            "code_required": "Verificatiecode is verplicht.",
+            "unknown": "Er is een onbekende fout opgetreden.",
+            "cannot_connect": "Kan geen verbinding maken met de Bosch-servers.",
+            "no_devices_found": "Geen apparaten gevonden.",
+            "no_device_selected": "Selecteer minimaal één apparaat.",
+            "already_configured": "Dit account is al ingesteld."
+        },
+        "abort": {
+            "already_configured": "Al ingesteld",
+            "device_unsupported": "Dit apparaat wordt niet ondersteund.",
+            "reauth_successful": "Opnieuw inloggen gelukt.",
+            "reauth_unsuccessful": "Opnieuw inloggen is mislukt. Verwijder de koppeling en stel deze opnieuw in.",
+            "reconfigure_successful": "Opnieuw instellen gelukt."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Opties",
+                "description": "Pas de instellingen voor Bosch HomeCom aan.",
+                "data": {
+                    "update_seconds": "Update-interval (seconden)",
+                    "brand_buderus": "Buderus merk"
+                }
+            }
+        }
+    },
+    "entity": {
+        "climate": {
+            "zone": {
+                "name": "Zone"
+            }
+        },
+        "fan": {
+            "ventilation": {
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "off": "Uit",
+                            "min": "Niveau 1 (Minimaal)",
+                            "red": "Niveau 2 (Verminderd)",
+                            "nom": "Niveau 3 (Normaal)",
+                            "max": "Niveau 4 (Maximaal)",
+                            "dem": "Vraaggestuurd",
+                            "time": "Tijdgestuurd",
+                            "party": "Feest",
+                            "fireplace": "Open haard"
+                        }
+                    }
+                }
+            }
+        },
+        "select": {
+            "airflow_horizontal": {
+                "state": {
+                    "center": "Midden",
+                    "left": "Links",
+                    "right": "Rechts",
+                    "swing": "Heen en weer"
+                }
+            },
+            "airflow_vertical": {
+                "state": {
+                    "auto": "Automatisch",
+                    "angle1": "Hoek 1",
+                    "angle2": "Hoek 2",
+                    "angle3": "Hoek 3",
+                    "angle4": "Hoek 4",
+                    "angle5": "Hoek 5",
+                    "swing": "Heen en weer"
+                }
+            },
+            "program": {
+                "state": {
+                    "off": "Uit",
+                    "program1": "Programma 1",
+                    "program2": "Programma 2"
+                }
+            },
+            "dhw_operation_mode": {
+                "state": {
+                    "off": "Uit",
+                    "low": "Laag (Eco)",
+                    "high": "Hoog (Comfort)",
+                    "eco": "Eco+",
+                    "ownprogram": "Eigen programma",
+                    "manual": "Handmatig"
+                }
+            },
+            "dhw_current_temp": {
+                "state": {
+                    "off": "Uit",
+                    "low": "Laag",
+                    "high": "Hoog",
+                    "eco": "Eco"
+                }
+            },
+            "hc_operation_mode": {
+                "state": {
+                    "off": "Uit",
+                    "manual": "Handmatig",
+                    "auto": "Automatisch"
+                }
+            },
+            "hc_suwi_mode": {
+                "state": {
+                    "forced": "Geforceerd",
+                    "off": "Uit",
+                    "cooling": "Koelen"
+                }
+            },
+            "hc_heatcool_mode": {
+                "state": {
+                    "heat": "Verwarmen",
+                    "cool": "Koelen"
+                }
+            },
+            "holiday_mode": {
+                "state": {
+                    "hm1": "Vakantiemodus 1",
+                    "hm2": "Vakantiemodus 2",
+                    "hm3": "Vakantiemodus 3",
+                    "hm4": "Vakantiemodus 4",
+                    "hm5": "Vakantiemodus 5",
+                    "hm6": "Vakantiemodus 6",
+                    "hm7": "Vakantiemodus 7",
+                    "hm8": "Vakantiemodus 8"
+                }
+            },
+            "away_mode": {
+                "state": {
+                    "on": "Aan",
+                    "off": "Uit"
+                }
+            },
+            "hc_night_switch_mode": {
+                "name": "HC Nacht Schakelmodus"
+            },
+            "hc_control": {
+                "name": "HC Besturing"
+            }
+        },
+        "sensor": {
+            "hc": {
+                "state": {
+                    "off": "Uit",
+                    "manual": "Handmatig",
+                    "auto": "Automatisch"
+                }
+            },
+            "indoor_humidity": {
+                "name": "Binnenluchtvochtigheid"
+            },
+            "flame_indication": {
+                "name": "Vlamindicatie"
+            },
+            "energy_history": {
+                "name": "Energiegeschiedenis"
+            },
+            "ventilation": {
+                "state": {
+                    "off": "Uit",
+                    "min": "Niveau 1 (Minimaal)",
+                    "red": "Niveau 2 (Verminderd)",
+                    "nom": "Niveau 3 (Normaal)",
+                    "max": "Niveau 4 (Maximaal)",
+                    "dem": "Vraaggestuurd"
+                }
+            },
+            "wb_state": {
+                "name": "Wallbox Status"
+            },
+            "wb_power": {
+                "name": "Wallbox Vermogen"
+            },
+            "wb_energy_total": {
+                "name": "Wallbox Totale Energie"
+            },
+            "wb_temperature": {
+                "name": "Wallbox Temperatuur"
+            },
+            "wb_phases": {
+                "name": "Wallbox Fasen"
+            },
+            "wb_phase_sensor": {
+                "name": "Wallbox Fase"
+            },
+            "wb_chargelog": {
+                "name": "Wallbox Laadlogboek"
+            }
+        },
+        "binary_sensor": {
+            "wb_network": {
+                "name": "Wallbox Netwerk"
+            }
+        },
+        "number": {
+            "wb_price": {
+                "name": "Stroomprijs"
+            }
+        },
+        "switch": {
+            "child_lock": {
+                "name": "Kinderbeveiliging"
+            },
+            "wb_locked": {
+                "name": "Wallbox Vergrendeld"
+            },
+            "wb_auth": {
+                "name": "Wallbox Auth"
+            },
+            "wb_rfid_secure": {
+                "name": "Wallbox RFID Beveiligd"
+            }
+        },
+        "water_heater": {
+            "dhw": {
+                "state_attributes": {
+                    "operation_mode": {
+                        "state": {
+                            "off": "Uit",
+                            "low": "Laag (Eco)",
+                            "high": "Hoog (Comfort)",
+                            "eco": "Eco+",
+                            "manual": "Handmatig",
+                            "ownprogram": "Eigen programma"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

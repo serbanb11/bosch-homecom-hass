@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import re
@@ -1346,7 +1346,7 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
         self._attr_should_poll = False
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "kWh"
         self._attr_device_class = SensorDeviceClass.ENERGY
 
@@ -1365,6 +1365,28 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         g_ch = latest.get("gCh", 0) or 0
         g_hw = latest.get("gHw", 0) or 0
         return round(g_ch + g_hw, 2)
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Return the start of the latest recorded day."""
+        energy = self.coordinator.data.energy_history
+        if not isinstance(energy, dict):
+            return None
+        values = energy.get("value")
+        if not isinstance(values, list) or not values:
+            return None
+        latest = values[-1]
+        if not isinstance(latest, dict):
+            return None
+        date_str = latest.get("d")
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%d-%m-%Y").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            return None
 
     @property
     def extra_state_attributes(self):
