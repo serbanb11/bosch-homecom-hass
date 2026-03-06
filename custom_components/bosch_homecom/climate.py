@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from homeassistant import config_entries
 from homeassistant.components.climate import (
@@ -440,8 +440,10 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
     _attr_has_entity_name = True
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_hvac_modes = [HVACMode.HEAT]
-    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+    _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+    )
 
     def __init__(
         self,
@@ -457,6 +459,8 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.HEAT
         self.field = field
+        self._manual_temp: float | None = None
+        self._clock_temp: float | None = None
 
         self.set_attr()
 
@@ -471,8 +475,32 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
+        self._attr_target_temperature = temperature
+        self.async_write_ha_state()
+
         await self.coordinator.bhc.async_set_zone_manual_temp_heating(
             self.coordinator.unique_id, self.field, temperature
+        )
+
+        await self.coordinator.async_request_refresh()
+
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set new hvac mode (zone user mode)."""
+        mode: Literal["manual", "clock"] = "manual"
+
+        if hvac_mode == HVACMode.AUTO:
+            mode = "clock"
+
+        self._attr_hvac_mode = hvac_mode
+        if hvac_mode == HVACMode.HEAT and self._manual_temp is not None:
+            self._attr_target_temperature = self._manual_temp
+        elif hvac_mode == HVACMode.AUTO and self._clock_temp is not None:
+            self._attr_target_temperature = self._clock_temp
+        self.async_write_ha_state()
+
+        await self.coordinator.bhc.async_set_zone_user_mode(
+            self.coordinator.unique_id, self.field, mode
         )
 
         await self.coordinator.async_request_refresh()
@@ -490,14 +518,29 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
                 if temp_actual is not None:
                     self._attr_current_temperature = temp_actual
 
+                hvac_mode = self._get_hvac_mode(entry)
                 temp_data = self._get_temperature_data(entry)
 
+                manual_data = entry.get("manualTemperatureHeating") or {}
+                clock_data = entry.get("tempSetpoint") or {}
+                if manual_data.get("value") is not None:
+                    self._manual_temp = manual_data["value"]
+                if clock_data.get("value") is not None:
+                    self._clock_temp = clock_data["value"]
+
+                self._attr_hvac_mode = hvac_mode
                 self._attr_target_temperature = temp_data.get("value")
                 self._attr_min_temp = temp_data.get("minValue", 5)
                 self._attr_max_temp = temp_data.get("maxValue", 30)
                 self._attr_target_temperature_step = temp_data.get("stepSize", 0.5)
-
                 break
+
+    def _get_hvac_mode(self, entry: dict) -> HVACMode:
+        """Return the correct HVAC mode based on user mode."""
+        user_mode = (entry.get("userMode") or {}).get("value")
+        if user_mode == "clock":
+            return HVACMode.AUTO
+        return HVACMode.HEAT
 
     def _get_temperature_data(self, entry: dict) -> dict:
         """Return the correct temperature object based on user mode."""
