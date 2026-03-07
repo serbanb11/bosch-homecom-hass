@@ -14,8 +14,9 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 | **RAC** | Climate Class 3000i\*, 5000i, 6000i |
 | **K30 / K40** | Bosch boilers, Buderus Logatherm WLW 186i (MX300) |
 | **ICOM** | IVT Aero Series heat pumps |
-| **RRC2** | Bosch thermostats |
+| **RRC2** | Bosch thermostats (CT200) |
 | **WDDW2** | Hydronext 5700s water heaters |
+| **Commodule** | Wallbox 7000i EV chargers |
 
 \* Midea-based Climate Class 3000i and 7000i are **not** supported.
 
@@ -48,16 +49,20 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 > **Tip:** Use a private/incognito window and complete setup quickly -- the code is single-use and expires fast.
 
+> **Tip:** If you're having trouble capturing the authorization code, try using Microsoft Edge -- some users have reported more consistent results with its Developer Tools.
+
 ## What You Get
 
-| Platform | RAC | K30/K40/ICOM/RRC2 | WDDW2 |
-|----------|-----|---------------------|-------|
-| Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | -- |
-| Water Heater | -- | Operation mode | Operation mode + target temp |
-| Select | Airflow, programs | DHW/HC modes, away, holiday | -- |
-| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp | Notifications, temperatures, flow |
-| Switch | Plasmacluster | -- | -- |
-| Fan | -- | Ventilation zones | -- |
+| Platform | RAC | K30/K40/ICOM/RRC2 | WDDW2 | Commodule |
+|----------|-----|---------------------|-------|-----------|
+| Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | -- | -- |
+| Water Heater | -- | Operation mode | Operation mode + target temp | -- |
+| Select | Airflow, programs | DHW/HC modes, away, holiday | -- | -- |
+| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
+| Switch | Plasmacluster | -- | -- | Lock, auth, RFID secure |
+| Fan | -- | Ventilation zones | -- | -- |
+| Binary Sensor | -- | -- | -- | Network connectivity |
+| Number | -- | -- | -- | Electricity price |
 
 ## Documentation
 

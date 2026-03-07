@@ -441,9 +441,7 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
-    _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-    )
+    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
     def __init__(
         self,
@@ -483,7 +481,6 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         )
 
         await self.coordinator.async_request_refresh()
-
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new hvac mode (zone user mode)."""

@@ -1382,9 +1382,7 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         if not date_str:
             return None
         try:
-            return datetime.strptime(date_str, "%d-%m-%Y").replace(
-                tzinfo=timezone.utc
-            )
+            return datetime.strptime(date_str, "%d-%m-%Y").replace(tzinfo=timezone.utc)
         except ValueError:
             return None
 
