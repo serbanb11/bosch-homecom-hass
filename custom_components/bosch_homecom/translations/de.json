@@ -78,6 +78,8 @@
                             "nom": "Stufe 3 (Normal)",
                             "max": "Stufe 4 (Maximum)",
                             "dem": "Bedarfsgeregelt",
+                            "powerVent": "Intensivlüftung",
+                            "fallAsleep": "Schlafen",
                             "time": "Zeitgesteuert",
                             "party": "Party",
                             "fireplace": "Kamin"
