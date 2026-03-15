@@ -1,5 +1,7 @@
 """Bosch HomeCom Custom Component."""
 
+from __future__ import annotations
+
 import re
 from typing import Any
 
@@ -14,6 +16,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorWddw2
+
+
+def _parse_temp_unit(unit_str: str | None) -> str:
+    """Map API unitOfMeasure string to HA temperature unit."""
+    if unit_str == "F":
+        return UnitOfTemperature.FAHRENHEIT
+    return UnitOfTemperature.CELSIUS
 
 
 async def async_setup_entry(
@@ -50,7 +59,6 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
     _attr_operation_list = ["Eco+", "Eco", "Comfort", "Program", "Off"]
 
@@ -111,6 +119,9 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
                         ]
                     case "actualTemp":
                         self._attr_current_temperature = ref[key]["value"]
+                        self._attr_temperature_unit = _parse_temp_unit(
+                            ref[key].get("unitOfMeasure")
+                        )
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""
@@ -121,7 +132,6 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     """Representation of a BoschComWddw2 water heater entity."""
 
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = (
         WaterHeaterEntityFeature.OPERATION_MODE
         | WaterHeaterEntityFeature.TARGET_TEMPERATURE
@@ -214,6 +224,10 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             manual = (ref.get("tempLevel") or {}).get("manual") or {}
             self._attr_min_temp = manual.get("minValue", self._attr_min_temp)
             self._attr_max_temp = manual.get("maxValue", self._attr_max_temp)
+
+            unit_str = manual.get("unitOfMeasure")
+            if unit_str:
+                self._attr_temperature_unit = _parse_temp_unit(unit_str)
 
             # o setpoint alvo depende do modo atual: tempLevel[mode].value
             tl = ref.get("tempLevel") or {}

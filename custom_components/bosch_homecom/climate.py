@@ -32,6 +32,13 @@ from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinator
 PARALLEL_UPDATES = 1
 
 
+def _parse_temp_unit(unit_str: str | None) -> str:
+    """Map API unitOfMeasure string to HA temperature unit."""
+    if unit_str == "F":
+        return UnitOfTemperature.FAHRENHEIT
+    return UnitOfTemperature.CELSIUS
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: config_entries.ConfigEntry,
@@ -67,7 +74,6 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_fan_modes = [FAN_AUTO, FAN_DIFFUSE, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
     _attr_hvac_modes = [
         HVACMode.OFF,
@@ -270,6 +276,9 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
                     self._attr_target_temperature = ref["value"]
                     self._attr_target_temperature_high = ref.get("maxValue", 30)
                     self._attr_target_temperature_low = ref.get("minValue", 16)
+                    self._attr_temperature_unit = _parse_temp_unit(
+                        ref.get("unitOfMeasure")
+                    )
                 case "roomTemperature":
                     self._attr_current_temperature = ref["value"]
                 case _:
@@ -304,7 +313,6 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [
         HVACMode.OFF,
         HVACMode.AUTO,
@@ -410,6 +418,9 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                             self._attr_hvac_action = HVACAction.COOLING
                 case "currentRoomSetpoint":
                     self._attr_target_temperature = heating_circuits[key]["value"]
+                    self._attr_temperature_unit = _parse_temp_unit(
+                        heating_circuits[key].get("unitOfMeasure")
+                    )
                 case "roomTemp":
                     room_temp = heating_circuits[key]["value"]
                     if isinstance(room_temp, (int, float)) and -40 <= room_temp <= 60:
@@ -439,7 +450,6 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
@@ -511,9 +521,13 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         for entry in data.zones or []:
             if entry.get("id", "").endswith(f"/{self.field}"):
 
-                temp_actual = (entry.get("temperatureActual") or {}).get("value")
+                temp_actual_node = entry.get("temperatureActual") or {}
+                temp_actual = temp_actual_node.get("value")
                 if temp_actual is not None:
                     self._attr_current_temperature = temp_actual
+                    self._attr_temperature_unit = _parse_temp_unit(
+                        temp_actual_node.get("unitOfMeasure")
+                    )
 
                 hvac_mode = self._get_hvac_mode(entry)
                 temp_data = self._get_temperature_data(entry)

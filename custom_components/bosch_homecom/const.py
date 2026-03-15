@@ -6,7 +6,6 @@ from datetime import timedelta
 from typing import Final
 
 from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.const import UnitOfTemperature
 
 DOMAIN = "bosch_homecom"
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
@@ -63,7 +62,7 @@ BOSCH_SENSOR_DESCRIPTORS = {
             "path": ["dhw_circuits", "dhw1", "airBoxTemperature"],
             "name": "Air Box Temperature",
             "device_class": SensorDeviceClass.TEMPERATURE,
-            "unit": UnitOfTemperature.CELSIUS,
+            "unit": None,
             "state_class": "measurement",
         },
         {
@@ -71,7 +70,7 @@ BOSCH_SENSOR_DESCRIPTORS = {
             "path": ["dhw_circuits", "dhw1", "inletTemperature"],
             "name": "DHW Inlet Temperature",
             "device_class": SensorDeviceClass.TEMPERATURE,
-            "unit": UnitOfTemperature.CELSIUS,
+            "unit": None,
             "state_class": "measurement",
         },
         {
@@ -79,7 +78,7 @@ BOSCH_SENSOR_DESCRIPTORS = {
             "path": ["dhw_circuits", "dhw1", "outletTemperature"],
             "name": "DHW Outlet Temperature",
             "device_class": SensorDeviceClass.TEMPERATURE,
-            "unit": UnitOfTemperature.CELSIUS,
+            "unit": None,
             "state_class": "measurement",
         },
         {

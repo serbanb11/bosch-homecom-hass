@@ -489,9 +489,13 @@ class BoschComSensorDhw(BoschComSensorBase):
         """Return BoschComSensorDhw operationMode."""
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                actualTemp_value = (entry.get("actualTemp") or {}).get(
-                    "value", "unknown"
-                )
+                actual_temp = entry.get("actualTemp") or {}
+                unit_str = actual_temp.get("unitOfMeasure")
+                if unit_str == "F":
+                    self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+                else:
+                    self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+                actualTemp_value = actual_temp.get("value", "unknown")
                 return float(actualTemp_value)
         return "unknown"
 
@@ -790,7 +794,13 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHc outdoorTemp."""
-        return float(self.coordinator.data.outdoor_temp.get("value", "unknown"))
+        outdoor = self.coordinator.data.outdoor_temp
+        unit_str = outdoor.get("unitOfMeasure")
+        if unit_str == "F":
+            self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+        else:
+            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        return float(outdoor.get("value", "unknown"))
 
 
 class BoschComSensorHs(BoschComSensorBase):
@@ -1016,6 +1026,11 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
             if entry.get("id") == f"/dhwCircuits/{self.field}":
                 mode = (entry.get("operationMode") or {}).get("value")
                 node = (entry.get("tempLevel") or {}).get(mode) or {}
+                unit_str = node.get("unitOfMeasure")
+                if unit_str == "F":
+                    self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+                else:
+                    self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
                 val = node.get("value")
                 try:
                     return float(val)  # -> 45.0
@@ -1060,7 +1075,8 @@ class DynamicPathResolver:
 
     path: list[str]
 
-    def get(self, data: dict[str, Any]) -> Any:
+    def _resolve(self, data: dict[str, Any]) -> Any:
+        """Walk the path and return the raw node (dict or scalar)."""
         cur: Any = data
         prev_key: Optional[str] = None
 
@@ -1085,6 +1101,15 @@ class DynamicPathResolver:
             if cur is None:
                 return None
             prev_key = part
+
+        return cur
+
+    def get_node(self, data: dict[str, Any]) -> Any:
+        """Return the raw resolved node without extracting 'value'."""
+        return self._resolve(data)
+
+    def get(self, data: dict[str, Any]) -> Any:
+        cur = self._resolve(data)
 
         # Muitos nós Bosch têm {"value": X, "unitOfMeasure": "..."}
         if isinstance(cur, dict) and "value" in cur:
@@ -1126,6 +1151,14 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
         elif hasattr(data, "__dict__"):
             data = data.__dict__
         value = self._resolver.get(data)
+        if self._attr_device_class == SensorDeviceClass.TEMPERATURE:
+            node = self._resolver.get_node(data)
+            if isinstance(node, dict):
+                unit_str = node.get("unitOfMeasure")
+                if unit_str == "F":
+                    self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+                elif unit_str == "C":
+                    self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         return value
 
 
@@ -1177,8 +1210,39 @@ class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
                 return cur.get("value")
             return cur
 
+        def _get_node(path: list[str]):
+            cur = data
+            prev = None
+            for p in path:
+                if isinstance(cur, list) and prev == "dhw_circuits":
+                    cur = next(
+                        (
+                            it
+                            for it in cur
+                            if isinstance(it, dict)
+                            and it.get("id", "").endswith("/" + p)
+                        ),
+                        None,
+                    )
+                elif isinstance(cur, dict):
+                    cur = cur.get(p)
+                else:
+                    return None
+                if cur is None:
+                    return None
+                prev = p
+            return cur
+
         inlet = _get(["dhw_circuits", "dhw1", "inletTemperature"])
         outlet = _get(["dhw_circuits", "dhw1", "outletTemperature"])
+
+        outlet_node = _get_node(["dhw_circuits", "dhw1", "outletTemperature"])
+        if isinstance(outlet_node, dict):
+            unit_str = outlet_node.get("unitOfMeasure")
+            if unit_str == "F":
+                self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+            else:
+                self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
 
         if inlet is None or outlet is None:
             return None
