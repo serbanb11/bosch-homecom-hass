@@ -231,7 +231,10 @@ async def async_setup_entry(
         elif device_type == "commodule":
             for cp in coordinator.data.charge_points or []:
                 cp_id = cp["id"].split("/")[-1]
-                telemetry = cp.get("telemetry") or {}
+                raw_telemetry = cp.get("telemetry") or {}
+                telemetry = raw_telemetry.get("values", raw_telemetry)
+                if not isinstance(telemetry, dict):
+                    telemetry = {}
                 entities.append(
                     BoschComCommoduleStateSensor(
                         coordinator=coordinator,
@@ -272,7 +275,9 @@ async def async_setup_entry(
                         )
                     )
                 # Per-phase sensors from telemetry.sensor
-                sensor_data = telemetry.get("sensor") or {}
+                sensor_data = telemetry.get("sensor")
+                if not isinstance(sensor_data, dict):
+                    sensor_data = {}
                 for phase_key in sensor_data:
                     entities.append(
                         BoschComCommodulePhaseSensor(
@@ -1435,7 +1440,11 @@ class _CommoduleSensorBase(CoordinatorEntity, SensorEntity):
         cp = self._get_cp()
         if cp is None:
             return {}
-        return cp.get("telemetry") or {}
+        raw = cp.get("telemetry") or {}
+        telemetry = raw.get("values", raw)
+        if not isinstance(telemetry, dict):
+            return {}
+        return telemetry
 
 
 class BoschComCommoduleStateSensor(_CommoduleSensorBase):
@@ -1453,7 +1462,7 @@ class BoschComCommoduleStateSensor(_CommoduleSensorBase):
     def state(self):
         """Return wallbox state."""
         telemetry = self._get_telemetry()
-        return (telemetry.get("wbState") or {}).get("value")
+        return telemetry.get("wbState")
 
 
 class BoschComCommodulePowerSensor(_CommoduleSensorBase):
@@ -1472,7 +1481,7 @@ class BoschComCommodulePowerSensor(_CommoduleSensorBase):
     def native_value(self):
         """Return actual power."""
         telemetry = self._get_telemetry()
-        val = (telemetry.get("actualPower") or {}).get("value")
+        val = telemetry.get("actualPower")
         if val is not None:
             try:
                 return float(val)
@@ -1497,7 +1506,7 @@ class BoschComCommoduleEnergySensor(_CommoduleSensorBase):
     def native_value(self):
         """Return total energy."""
         telemetry = self._get_telemetry()
-        val = (telemetry.get("energyTotal") or {}).get("value")
+        val = telemetry.get("energyTotal")
         if val is not None:
             try:
                 return float(val)
@@ -1522,7 +1531,7 @@ class BoschComCommoduleTempSensor(_CommoduleSensorBase):
     def native_value(self):
         """Return temperature."""
         telemetry = self._get_telemetry()
-        val = (telemetry.get("temp") or {}).get("value")
+        val = telemetry.get("temp")
         if val is not None:
             try:
                 return float(val)
@@ -1546,7 +1555,7 @@ class BoschComCommodulePhasesSensor(_CommoduleSensorBase):
     def state(self):
         """Return number of phases."""
         telemetry = self._get_telemetry()
-        return (telemetry.get("phases") or {}).get("value")
+        return telemetry.get("phases")
 
 
 class BoschComCommodulePhaseSensor(_CommoduleSensorBase):

@@ -38,6 +38,14 @@
           "default": "mdi:history"
         }
       },
+      "button": {
+        "wb_start_charging": {
+          "default": "mdi:play"
+        },
+        "wb_pause_charging": {
+          "default": "mdi:pause"
+        }
+      },
       "switch": {
         "plasmacluster": {
           "default": "mdi:air-purifier"

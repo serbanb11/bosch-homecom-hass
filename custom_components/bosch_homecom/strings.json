@@ -236,6 +236,14 @@
                 "name": "Electricity Price"
             }
         },
+        "button": {
+            "wb_start_charging": {
+                "name": "Start Charging"
+            },
+            "wb_pause_charging": {
+                "name": "Pause Charging"
+            }
+        },
         "switch": {
             "child_lock": {
                 "name": "Child Lock"

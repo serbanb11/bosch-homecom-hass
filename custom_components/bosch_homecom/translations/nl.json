@@ -235,6 +235,14 @@
                 "name": "Stroomprijs"
             }
         },
+        "button": {
+            "wb_start_charging": {
+                "name": "Laden starten"
+            },
+            "wb_pause_charging": {
+                "name": "Laden pauzeren"
+            }
+        },
         "switch": {
             "child_lock": {
                 "name": "Kinderbeveiliging"

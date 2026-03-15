@@ -237,6 +237,14 @@
                 "name": "Strompreis"
             }
         },
+        "button": {
+            "wb_start_charging": {
+                "name": "Laden starten"
+            },
+            "wb_pause_charging": {
+                "name": "Laden pausieren"
+            }
+        },
         "switch": {
             "child_lock": {
                 "name": "Kindersicherung"
