@@ -468,7 +468,6 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.HEAT
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
-        self._attr_current_temperature = None
         self.field = field
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None
