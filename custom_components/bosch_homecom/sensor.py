@@ -1493,7 +1493,6 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
             config_entry=config_entry,
             name=field,
             unique_id=f"{coordinator.unique_id}-{field}",
-            icon="mdi:gas-cylinder",
         )
         self._attr_translation_key = "energy_history_hourly"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
