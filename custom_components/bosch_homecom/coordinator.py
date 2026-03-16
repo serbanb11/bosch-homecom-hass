@@ -267,6 +267,7 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
             zones=data.zones,
             flame_indication=data.flame_indication,
             energy_history=data.energy_history,
+            hourly_energy_history=data.hourly_energy_history,
             indoor_humidity=data.indoor_humidity,
             devices=data.devices,
         )
