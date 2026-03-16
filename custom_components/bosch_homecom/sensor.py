@@ -1421,8 +1421,8 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
 
     @property
     def state(self):
-        """Return latest day total gas consumption."""
-        energy = self.coordinator.data.energy_history
+        """Return latest hour total energy consumption."""
+        energy = self.coordinator.data.hourly_energy_history
         if not isinstance(energy, dict):
             return None
         values = energy.get("value")
@@ -1437,8 +1437,8 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
 
     @property
     def last_reset(self) -> datetime | None:
-        """Return the start of the latest recorded day."""
-        energy = self.coordinator.data.energy_history
+        """Return the start of the latest recorded hour."""
+        energy = self.coordinator.data.hourly_energy_history
         if not isinstance(energy, dict):
             return None
         values = energy.get("value")
@@ -1448,17 +1448,19 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         if not isinstance(latest, dict):
             return None
         date_str = latest.get("d")
-        if not date_str:
+        time_str = latest.get("h")
+        if not date_str or time_str is None:
             return None
         try:
-            return datetime.strptime(date_str, "%d-%m-%Y").replace(tzinfo=timezone.utc)
+            datetime_str = f"{date_str} {time_str:02d}:00:00"
+            return datetime.strptime(datetime_str, "%d-%m-%Y %H:%M:%S").replace(tzinfo=timezone.utc)
         except ValueError:
             return None
 
     @property
     def extra_state_attributes(self):
         """Return energy history details as attributes."""
-        energy = self.coordinator.data.energy_history
+        energy = self.coordinator.data.hourly_energy_history
         if not isinstance(energy, dict):
             return {}
         values = energy.get("value")
