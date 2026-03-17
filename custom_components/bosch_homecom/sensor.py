@@ -1426,7 +1426,7 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "kWh"
-        self._attr_device_class = SensorDeviceClass.GAS
+        self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def state(self):
@@ -1498,9 +1498,9 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
         self._attr_should_poll = False
-        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         self._attr_native_unit_of_measurement = "kWh"
-        self._attr_device_class = SensorDeviceClass.GAS
+        self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def state(self):
