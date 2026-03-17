@@ -1425,8 +1425,14 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_name = field
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
-        self._attr_native_unit_of_measurement = "kWh"
-        self._attr_device_class = SensorDeviceClass.ENERGY
+
+        user_unit = self.coordinator.data.energy_gas_unit.get("value", "kWh")
+        if user_unit == "m3":
+            self._attr_native_unit_of_measurement = "m³"
+        else:
+            self._attr_native_unit_of_measurement = "kWh"
+
+        self._attr_device_class = SensorDeviceClass.GAS
 
     @property
     def state(self):
@@ -1499,8 +1505,14 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         self._attr_name = field
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-        self._attr_native_unit_of_measurement = "kWh"
-        self._attr_device_class = SensorDeviceClass.ENERGY
+
+        user_unit = self.coordinator.data.energy_gas_unit.get("value", "kWh")
+        if user_unit == "m3":
+            self._attr_native_unit_of_measurement = "m³"
+        else:
+            self._attr_native_unit_of_measurement = "kWh"
+
+        self._attr_device_class = SensorDeviceClass.GAS
 
     @property
     def state(self):
@@ -1524,35 +1536,35 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         g_hw = latest.get("gHw", 0) or 0
         return round(g_ch + g_hw, 2)
 
-    @property
-    def last_reset(self) -> datetime | None:
-        """Return the start of the latest recorded hour."""
-        energy = self.coordinator.data.hourly_energy_history
-        if not isinstance(energy, dict):
-            return None
-        values = energy.get("value")
-        if not isinstance(values, list) or not values:
-            return None
-        first = values[0]
-        if not isinstance(first, dict):
-            return None
-        entries = first.get("entries")
-        if not isinstance(entries, list) or not entries:
-            return None
-        latest = entries[-1]
-        if not isinstance(latest, dict):
-            return None
-        date_str = latest.get("d")
-        hour_str = latest.get("h")
-        if not date_str or hour_str is None:
-            return None
-        try:
-            datetime_str = f"{date_str} {hour_str}:00:00"
-            return datetime.strptime(datetime_str, "%d-%m-%Y %H:%M:%S").replace(
-                tzinfo=timezone.utc
-            )
-        except ValueError:
-            return None
+    # @property
+    # def last_reset(self) -> datetime | None:
+    #     """Return the start of the latest recorded hour."""
+    #     energy = self.coordinator.data.hourly_energy_history
+    #     if not isinstance(energy, dict):
+    #         return None
+    #     values = energy.get("value")
+    #     if not isinstance(values, list) or not values:
+    #         return None
+    #     first = values[0]
+    #     if not isinstance(first, dict):
+    #         return None
+    #     entries = first.get("entries")
+    #     if not isinstance(entries, list) or not entries:
+    #         return None
+    #     latest = entries[-1]
+    #     if not isinstance(latest, dict):
+    #         return None
+    #     date_str = latest.get("d")
+    #     hour_str = latest.get("h")
+    #     if not date_str or hour_str is None:
+    #         return None
+    #     try:
+    #         datetime_str = f"{date_str} {hour_str}:00:00"
+    #         return datetime.strptime(datetime_str, "%d-%m-%Y %H:%M:%S").replace(
+    #             tzinfo=timezone.utc
+    #         )
+    #     except ValueError:
+    #         return None
 
     @property
     def extra_state_attributes(self):
