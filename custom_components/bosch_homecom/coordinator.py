@@ -69,7 +69,6 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
                 old_refresh_token = self.bhc.refresh_token
                 await self.bhc.get_token()
                 new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
                 _LOGGER.debug(
                     "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
                     self.unique_id,
@@ -91,6 +90,7 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
                     )
             except AuthFailedError:
                 self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Re-authentication required")
 
         try:
             data: BHCDeviceGeneric = await self.bhc.async_update(self.unique_id)
@@ -145,7 +145,6 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
                 old_refresh_token = self.bhc.refresh_token
                 await self.bhc.get_token()
                 new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
                 _LOGGER.debug(
                     "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
                     self.unique_id,
@@ -167,6 +166,7 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
                     )
             except AuthFailedError:
                 self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Re-authentication required")
 
         try:
             data: BHCDeviceRac = await self.bhc.async_update(self.unique_id)
@@ -224,7 +224,6 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
                 old_refresh_token = self.bhc.refresh_token
                 await self.bhc.get_token()
                 new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
                 _LOGGER.debug(
                     "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
                     self.unique_id,
@@ -246,6 +245,7 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
                     )
             except AuthFailedError:
                 self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Re-authentication required")
 
         try:
             data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
@@ -314,7 +314,6 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
                 old_refresh_token = self.bhc.refresh_token
                 await self.bhc.get_token()
                 new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
                 _LOGGER.debug(
                     "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
                     self.unique_id,
@@ -336,6 +335,7 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
                     )
             except AuthFailedError:
                 self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Re-authentication required")
 
         try:
             data: BHCDeviceWddw2 = await self.bhc.async_update(self.unique_id)
@@ -391,7 +391,6 @@ class BoschComModuleCoordinatorCommodule(DataUpdateCoordinator[BHCDeviceCommodul
                 old_refresh_token = self.bhc.refresh_token
                 await self.bhc.get_token()
                 new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
                 _LOGGER.debug(
                     "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
                     self.unique_id,
@@ -413,6 +412,7 @@ class BoschComModuleCoordinatorCommodule(DataUpdateCoordinator[BHCDeviceCommodul
                     )
             except AuthFailedError:
                 self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Re-authentication required")
 
         try:
             data: BHCDeviceCommodule = await self.bhc.async_update(self.unique_id)

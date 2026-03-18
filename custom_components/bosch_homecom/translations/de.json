@@ -56,7 +56,8 @@
                 "description": "Laufzeitoptionen für Bosch HomeCom anpassen.",
                 "data": {
                     "update_seconds": "Aktualisierungsintervall (Sekunden)",
-                    "brand_buderus": "Buderus Marke"
+                    "brand_buderus": "Buderus Marke",
+                    "wb_label": "Wallbox Bezeichnung"
                 }
             }
         }
@@ -235,6 +236,9 @@
         "number": {
             "wb_price": {
                 "name": "Strompreis"
+            },
+            "wb_charge_limit": {
+                "name": "Ladestromlimit"
             }
         },
         "button": {

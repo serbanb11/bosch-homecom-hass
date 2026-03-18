@@ -7,6 +7,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import CONF_WB_LABEL, DEFAULT_WB_LABEL
 from .coordinator import BoschComModuleCoordinatorCommodule
 
 PARALLEL_UPDATES = 1
@@ -59,7 +60,10 @@ class BoschComCommoduleStartChargingButton(CoordinatorEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Start charging."""
         device_id = self._coordinator.data.device["deviceId"]
-        await self._coordinator.bhc.async_cp_start_charging(device_id, self._cp_id)
+        label = self._coordinator.entry.options.get(CONF_WB_LABEL, DEFAULT_WB_LABEL)
+        await self._coordinator.bhc.async_cp_start_charging(
+            device_id, self._cp_id, label
+        )
         await self._coordinator.async_request_refresh()
 
 
@@ -85,5 +89,8 @@ class BoschComCommodulePauseChargingButton(CoordinatorEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Pause charging."""
         device_id = self._coordinator.data.device["deviceId"]
-        await self._coordinator.bhc.async_cp_pause_charging(device_id, self._cp_id)
+        label = self._coordinator.entry.options.get(CONF_WB_LABEL, DEFAULT_WB_LABEL)
+        await self._coordinator.bhc.async_cp_pause_charging(
+            device_id, self._cp_id, label
+        )
         await self._coordinator.async_request_refresh()

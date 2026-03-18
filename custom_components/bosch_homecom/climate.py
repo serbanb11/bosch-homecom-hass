@@ -74,6 +74,7 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_fan_modes = [FAN_AUTO, FAN_DIFFUSE, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
     _attr_hvac_modes = [
         HVACMode.OFF,
@@ -313,6 +314,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [
         HVACMode.OFF,
         HVACMode.AUTO,
@@ -450,6 +452,7 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 

@@ -57,7 +57,8 @@
                 "description": "Adjust runtime options for Bosch HomeCom.",
                 "data": {
                     "update_seconds": "Update interval (seconds)",
-                    "brand_buderus": "Buderus brand"
+                    "brand_buderus": "Buderus brand",
+                    "wb_label": "Wallbox label"
                 }
             }
         }
@@ -234,6 +235,9 @@
         "number": {
             "wb_price": {
                 "name": "Electricity Price"
+            },
+            "wb_charge_limit": {
+                "name": "Charging Limit"
             }
         },
         "button": {

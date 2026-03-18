@@ -28,7 +28,9 @@ from .const import (
     CONF_DEVICES,
     CONF_REFRESH,
     CONF_UPDATE_SECONDS,
+    CONF_WB_LABEL,
     DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_WB_LABEL,
     DOMAIN,
     MAX_UPDATE_SECONDS,
     MIN_UPDATE_SECONDS,
@@ -287,6 +289,7 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
             )
         )
         current_brand_buderus = self._entry.options.get(CONF_BRAND_BUDERUS, False)
+        current_wb_label = self._entry.options.get(CONF_WB_LABEL, DEFAULT_WB_LABEL)
 
         schema = vol.Schema(
             {
@@ -296,6 +299,7 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(
                     CONF_BRAND_BUDERUS, default=current_brand_buderus
                 ): cv.boolean,
+                vol.Optional(CONF_WB_LABEL, default=current_wb_label): cv.string,
             }
         )
 

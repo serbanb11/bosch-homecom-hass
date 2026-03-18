@@ -204,7 +204,9 @@ class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
             ),
             None,
         )
-        return airFlowHorizontal["allowedValues"]
+        if airFlowHorizontal is None:
+            return []
+        return airFlowHorizontal.get("allowedValues", [])
 
     @property
     def current_option(self) -> str | None:
@@ -217,7 +219,9 @@ class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
             ),
             None,
         )
-        return airFlowHorizontal["value"]
+        if airFlowHorizontal is None:
+            return None
+        return airFlowHorizontal.get("value")
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -230,7 +234,8 @@ class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
             ),
             None,
         )
-        self._attr_current_option = airFlowHorizontal["value"]
+        if airFlowHorizontal is not None:
+            self._attr_current_option = airFlowHorizontal.get("value")
         self.async_write_ha_state()
 
 
@@ -272,7 +277,9 @@ class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
             ),
             None,
         )
-        return airFlowVertical["allowedValues"]
+        if airFlowVertical is None:
+            return []
+        return airFlowVertical.get("allowedValues", [])
 
     @property
     def current_option(self) -> str | None:
@@ -285,7 +292,9 @@ class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
             ),
             None,
         )
-        return airFlowVertical["value"]
+        if airFlowVertical is None:
+            return None
+        return airFlowVertical.get("value")
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -298,7 +307,8 @@ class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
             ),
             None,
         )
-        self._attr_current_option = airFlowVertical["value"]
+        if airFlowVertical is not None:
+            self._attr_current_option = airFlowVertical.get("value")
         self.async_write_ha_state()
 
 
