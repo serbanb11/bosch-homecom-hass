@@ -1538,7 +1538,7 @@ class BoschComCommodulePowerSensor(_CommoduleSensorBase):
         self._attr_translation_key = "wb_power"
         self._attr_name = f"{cp_id}_power"
         self._attr_device_class = SensorDeviceClass.POWER
-        self._attr_native_unit_of_measurement = "kW"
+        self._attr_native_unit_of_measurement = "W"
         self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
