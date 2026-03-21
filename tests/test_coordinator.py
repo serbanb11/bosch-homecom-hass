@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -147,12 +147,134 @@ async def test_async_update_data_retry_error(hass, entry, bhc, device, firmware)
 
 @pytest.mark.asyncio
 async def test_async_update_data_auth_failed_error(hass, entry, bhc, device, firmware):
-    """Test data update with AuthFailedError."""
+    """Test async_update auth failure starts reauth and raises UpdateFailed."""
     entry.add_to_hass(hass)
     coordinator = BoschComModuleCoordinatorRac(
         hass, bhc, device, firmware, entry, False
     )
-    bhc.async_update = Mock(side_effect=AuthFailedError("error_status"))
+    bhc.async_update = AsyncMock(side_effect=AuthFailedError("error_status"))
+    entry.async_start_reauth = Mock()
 
-    with pytest.raises(AuthFailedError):
+    with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+    entry.async_start_reauth.assert_called_once_with(hass)
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_refresh_auth_failed(
+    hass, entry, bhc, device, firmware
+):
+    """Test refresh auth failure starts reauth and stops the update."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    bhc.get_token = AsyncMock(side_effect=AuthFailedError("error_status"))
+    bhc.async_update = AsyncMock()
+    entry.async_start_reauth = Mock()
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    entry.async_start_reauth.assert_called_once_with(hass)
+    bhc.async_update.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_persists_rotated_tokens(
+    hass, entry, bhc, device, firmware
+):
+    """Test auth refresh persists changed tokens."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+
+    async def mutate_tokens():
+        bhc.token = "new_token"
+        bhc.refresh_token = "new_refresh"
+
+    bhc.get_token = AsyncMock(side_effect=mutate_tokens)
+    bhc.async_update = AsyncMock(
+        return_value=BHCDeviceRac(
+            device=device,
+            firmware=firmware,
+            notifications=[],
+            stardard_functions=[],
+            advanced_functions=[],
+            switch_programs=[],
+        )
+    )
+
+    assert entry.data[CONF_TOKEN] == "mock_token"
+    assert entry.data[CONF_REFRESH] == "mock_refresh"
+
+    await coordinator._async_update_data()
+
+    assert entry.data[CONF_TOKEN] == "new_token"
+    assert entry.data[CONF_REFRESH] == "new_refresh"
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_persists_access_token_only_change(
+    hass, entry, bhc, device, firmware
+):
+    """Test persistence when only access token changes (refresh stays same)."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+
+    async def mutate_access_token():
+        bhc.token = "new_token"
+
+    bhc.get_token = AsyncMock(side_effect=mutate_access_token)
+    bhc.async_update = AsyncMock(
+        return_value=BHCDeviceRac(
+            device=device,
+            firmware=firmware,
+            notifications=[],
+            stardard_functions=[],
+            advanced_functions=[],
+            switch_programs=[],
+        )
+    )
+
+    await coordinator._async_update_data()
+
+    assert entry.data[CONF_TOKEN] == "new_token"
+    assert entry.data[CONF_REFRESH] == "mock_refresh"
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_no_persist_when_unchanged(
+    hass, entry, bhc, device, firmware
+):
+    """Test no persistence write when tokens match stored values."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    bhc.get_token = AsyncMock(return_value=None)
+    bhc.async_update = AsyncMock(
+        return_value=BHCDeviceRac(
+            device=device,
+            firmware=firmware,
+            notifications=[],
+            stardard_functions=[],
+            advanced_functions=[],
+            switch_programs=[],
+        )
+    )
+
+    with patch(
+        "custom_components.bosch_homecom.coordinator."
+        "BoschComModuleCoordinatorBase._async_update_data",
+        wraps=coordinator._async_update_data,
+    ):
+        await coordinator._async_update_data()
+
+    # Tokens unchanged, so entry data should still be the original
+    assert entry.data[CONF_TOKEN] == "mock_token"
+    assert entry.data[CONF_REFRESH] == "mock_refresh"

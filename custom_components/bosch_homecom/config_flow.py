@@ -119,9 +119,21 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
                 # await async_check_credentials(self.hass, user_input)
             except (ApiError, AuthFailedError, ClientConnectorError, TimeoutError):
                 errors["base"] = "cannot_connect"
+                return self.async_show_form(
+                    step_id="browser",
+                    data_schema=BROWSER_AUTH_SCHEMA,
+                    description_placeholders={"url": login_url},
+                    errors=errors,
+                )
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
+                return self.async_show_form(
+                    step_id="browser",
+                    data_schema=BROWSER_AUTH_SCHEMA,
+                    description_placeholders={"url": login_url},
+                    errors=errors,
+                )
 
             try:
                 devices = await bhc.async_get_devices()
@@ -179,21 +191,20 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self.data.update(user_input)
             self.data[CONF_DEVICES] = user_input
-            await self.async_set_unique_id(user_input.get(CONF_USERNAME))
-            self._abort_if_unique_id_configured(
-                {CONF_USERNAME: user_input.get(CONF_USERNAME)}
-            )
 
             if self.source == SOURCE_REAUTH:
                 return self.async_update_reload_and_abort(
                     self._get_reauth_entry(),
                     data_updates=self.data,
                 )
-            if self.source in SOURCE_RECONFIGURE:
+            if self.source == SOURCE_RECONFIGURE:
                 return self.async_update_reload_and_abort(
                     self._get_reconfigure_entry(),
                     data_updates=self.data,
                 )
+            username = self.data.get(CONF_USERNAME)
+            await self.async_set_unique_id(username)
+            self._abort_if_unique_id_configured({CONF_USERNAME: username})
             # User is done, create the config entry.
             return self.async_create_entry(title="Bosch HomeCom", data=self.data)
 
