@@ -5,18 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import timedelta
+from typing import Any
 
 from aiohttp.client_exceptions import ClientConnectorError, ClientError
 from homecom_alt import (
     ApiError,
     AuthFailedError,
     ConnectionOptions,
-    HomeComAlt,
-    HomeComCommodule,
-    HomeComGeneric,
-    HomeComK40,
-    HomeComRac,
-    HomeComWddw2,
 )
 
 from homeassistant.config_entries import ConfigEntry
@@ -35,10 +30,18 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import (
     CONF_BRAND_BUDERUS,
     CONF_REFRESH,
-    DOMAIN,
-    MODEL,
     CONF_UPDATE_SECONDS,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    MODEL,
+)
+from .client import (
+    PersistentHomeComAlt as HomeComAlt,
+    PersistentHomeComCommodule as HomeComCommodule,
+    PersistentHomeComGeneric as HomeComGeneric,
+    PersistentHomeComK40 as HomeComK40,
+    PersistentHomeComRac as HomeComRac,
+    PersistentHomeComWddw2 as HomeComWddw2,
 )
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
@@ -66,7 +69,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up platform from a ConfigEntry."""
-    coordinators: list[any] = []
+    coordinators: list[Any] = []
     token: str | None = entry.data.get(CONF_TOKEN)
     refresh: str | None = entry.data.get(CONF_REFRESH)
 
@@ -82,9 +85,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
     websession = async_get_clientsession(hass)
 
-    bhc = await HomeComAlt.create(websession, options, True)
-
     try:
+        bhc = HomeComAlt(websession, options, True, hass, entry)
         devices = await bhc.async_get_devices()
     except (ApiError, ClientError, ClientConnectorError, TimeoutError) as err:
         raise ConfigEntryNotReady from err
@@ -134,7 +136,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 BoschComModuleCoordinatorRac(
                     hass,
                     HomeComRac(
-                        websession, coordinator_options, device_id, auth_provider
+                        websession,
+                        coordinator_options,
+                        device_id,
+                        auth_provider,
+                        hass,
+                        entry,
                     ),
                     device,
                     firmware,
@@ -147,7 +154,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 BoschComModuleCoordinatorK40(
                     hass,
                     HomeComK40(
-                        websession, coordinator_options, device_id, auth_provider
+                        websession,
+                        coordinator_options,
+                        device_id,
+                        auth_provider,
+                        hass,
+                        entry,
                     ),
                     device,
                     firmware,
@@ -160,7 +172,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 BoschComModuleCoordinatorWddw2(
                     hass,
                     HomeComWddw2(
-                        websession, coordinator_options, device_id, auth_provider
+                        websession,
+                        coordinator_options,
+                        device_id,
+                        auth_provider,
+                        hass,
+                        entry,
                     ),
                     device,
                     firmware,
@@ -173,7 +190,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 BoschComModuleCoordinatorCommodule(
                     hass,
                     HomeComCommodule(
-                        websession, coordinator_options, device_id, auth_provider
+                        websession,
+                        coordinator_options,
+                        device_id,
+                        auth_provider,
+                        hass,
+                        entry,
                     ),
                     device,
                     firmware,
@@ -186,7 +208,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 BoschComModuleCoordinatorGeneric(
                     hass,
                     HomeComGeneric(
-                        websession, coordinator_options, device_id, auth_provider
+                        websession,
+                        coordinator_options,
+                        device_id,
+                        auth_provider,
+                        hass,
+                        entry,
                     ),
                     device,
                     firmware,

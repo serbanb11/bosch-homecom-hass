@@ -4,14 +4,15 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
-from homecom_alt import BHCDeviceRac
+from homecom_alt import AuthFailedError, BHCDeviceRac
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.bosch_homecom import PLATFORMS
+from custom_components.bosch_homecom import PLATFORMS, async_setup_entry
 from custom_components.bosch_homecom.const import (
     CONF_DEVICES,
     CONF_REFRESH,
@@ -78,10 +79,8 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
     ), patch(
         "custom_components.bosch_homecom.HomeComRac.get_token",
         new_callable=AsyncMock,
-    ), patch(
-        "custom_components.bosch_homecom.HomeComAlt.create", new_callable=AsyncMock
-    ) as mock_create:
-        # Mock the BHC instance returned by HomeComAlt.create
+    ), patch("custom_components.bosch_homecom.HomeComAlt") as mock_create:
+        # Mock the BHC instance returned by HomeComAlt(...)
         mock_bhc = AsyncMock()
         mock_bhc.refresh_token = "mock_refresh"
         mock_bhc.token = "mock_token"
@@ -113,3 +112,16 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
 async def test_async_setup(hass):
     """Test the component gets setup."""
     assert await async_setup_component(hass, DOMAIN, {}) is True
+
+
+@pytest.mark.asyncio
+async def test_entry_setup_auth_failed_during_create(hass, entry):
+    """Test config entry setup fails cleanly when auth bootstrap fails."""
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.bosch_homecom.HomeComAlt",
+        side_effect=AuthFailedError("boom"),
+    ):
+        with pytest.raises(ConfigEntryAuthFailed):
+            await async_setup_entry(hass, entry)

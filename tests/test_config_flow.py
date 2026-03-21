@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from homeassistant import config_entries, setup
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.data_entry_flow import FlowResultType
 from homecom_alt import ApiError, AuthFailedError
 import pytest
@@ -160,6 +161,31 @@ async def test_async_step_browser_invalid(hass, side_effect):
 
 
 @pytest.mark.asyncio
+async def test_async_step_browser_create_failure_returns_form(hass):
+    """Test browser auth failure during HomeComAlt.create."""
+    await setup.async_setup_component(hass, "persistent_notification", {})
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    with patch(
+        "custom_components.bosch_homecom.config_flow.async_get_clientsession",
+        return_value=AsyncMock(),
+    ), patch(
+        "custom_components.bosch_homecom.config_flow.HomeComAlt.create",
+        new_callable=AsyncMock,
+        side_effect=AuthFailedError("boom"),
+    ):
+        await flow.async_step_user(user_input={CONF_USERNAME: "test-user"})
+        result = await flow.async_step_browser(user_input={CONF_CODE: "invalid_code"})
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "browser"
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.asyncio
 async def test_async_step_devices_success(hass):
     """Test the browser step with valid credentials."""
     await setup.async_setup_component(hass, "persistent_notification", {})
@@ -224,6 +250,44 @@ async def test_async_step_devices_success(hass):
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Bosch HomeCom"
+
+
+@pytest.mark.asyncio
+async def test_async_step_devices_aborts_for_duplicate_username(hass):
+    """Test device selection aborts when username is already configured."""
+    existing_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test-user",
+        unique_id="test-user",
+        data={CONF_USERNAME: "test-user", CONF_DEVICES: {"123_generic": True}},
+    )
+    existing_entry.add_to_hass(hass)
+
+    await setup.async_setup_component(hass, "persistent_notification", {})
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    with patch(
+        "custom_components.bosch_homecom.config_flow.async_get_clientsession",
+        return_value=AsyncMock(),
+    ), patch(
+        "custom_components.bosch_homecom.config_flow.HomeComAlt.create",
+        new_callable=AsyncMock,
+    ) as mock_create:
+        mock_bhc = AsyncMock()
+        mock_bhc.async_get_devices.return_value = [
+            {"deviceId": "123", "deviceType": "generic"}
+        ]
+        mock_bhc.refresh_token = "mock_refresh"
+        mock_bhc.token = "mock_token"
+        mock_create.return_value = mock_bhc
+
+        await flow.async_step_user(user_input={CONF_USERNAME: "test-user"})
+        await flow.async_step_browser(user_input={CONF_CODE: "valid_code"})
+        with pytest.raises(AbortFlow, match="already_configured"):
+            await flow.async_step_devices(user_input={"123_generic": True})
 
 
 @pytest.mark.asyncio
