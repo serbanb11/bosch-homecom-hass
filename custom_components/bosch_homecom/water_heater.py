@@ -59,6 +59,7 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
     _attr_operation_list = ["Eco+", "Eco", "Comfort", "Program", "Off"]
 
@@ -132,6 +133,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     """Representation of a BoschComWddw2 water heater entity."""
 
     _attr_has_entity_name = True
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = (
         WaterHeaterEntityFeature.OPERATION_MODE
         | WaterHeaterEntityFeature.TARGET_TEMPERATURE

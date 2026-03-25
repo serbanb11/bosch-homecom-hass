@@ -18,7 +18,7 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 | **WDDW2** | Hydronext 5700s water heaters |
 | **Commodule** | Wallbox 7000i EV chargers |
 
-\* Midea-based Climate Class 3000i and 7000i are **not** supported.
+:exclamation: **Any Midea-based AC or air purifier are **not** supported by this integration. If you see no devices after setup then those devices are not supported and you should use matter instead.**
 
 ## Installation
 

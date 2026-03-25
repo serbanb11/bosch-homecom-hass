@@ -46,6 +46,8 @@ SINGLEKEY_LOGIN_URL_BUDERUS = "https://singlekey-id.com/auth/connect/authorize?s
 
 CONF_DEVICES: Final = "devices"
 CONF_REFRESH: Final = "refresh"
+CONF_WB_LABEL: Final = "wb_label"
+DEFAULT_WB_LABEL: Final = "Wallbox"
 
 BOSCH_SENSOR_DESCRIPTORS = {
     "wddw2": [
