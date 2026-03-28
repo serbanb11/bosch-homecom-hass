@@ -1,6 +1,10 @@
 """HomeCom coordinator."""
 
+from __future__ import annotations
+
+from abc import abstractmethod
 import logging
+from typing import TypeVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TOKEN
@@ -15,10 +19,7 @@ from homecom_alt import (
     BHCDeviceK40,
     BHCDeviceRac,
     BHCDeviceWddw2,
-    HomeComCommodule,
-    HomeComK40,
     HomeComRac,
-    HomeComWddw2,
     InvalidSensorDataError,
 )
 from tenacity import RetryError
@@ -27,9 +28,18 @@ from .const import CONF_REFRESH, DEFAULT_UPDATE_INTERVAL, DOMAIN, MANUFACTURER
 
 _LOGGER = logging.getLogger(__name__)
 
+T = TypeVar(
+    "T",
+    BHCDeviceGeneric,
+    BHCDeviceRac,
+    BHCDeviceK40,
+    BHCDeviceWddw2,
+    BHCDeviceCommodule,
+)
 
-class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
-    """A coordinator to manage the fetching of BoschCom data."""
+
+class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
+    """Base coordinator with shared auth and device metadata logic."""
 
     def __init__(
         self,
@@ -62,41 +72,48 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
             manufacturer=MANUFACTURER,
         )
 
-    async def _async_update_data(self) -> BHCDeviceGeneric:
+    async def _async_update_data(self) -> T:
         """Update data via library."""
         if self.auth_provider:
             try:
-                old_refresh_token = self.bhc.refresh_token
                 await self.bhc.get_token()
-                new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
-                _LOGGER.debug(
-                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
-                    self.unique_id,
-                    old_refresh_token,
-                    new_refresh_token,
-                )
-                if old_refresh_token != new_refresh_token:
+                if self.bhc.token != self.entry.data.get(
+                    CONF_TOKEN
+                ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
                     new_data = dict(self.entry.data)
                     new_data[CONF_TOKEN] = self.bhc.token
-                    new_data[CONF_REFRESH] = new_refresh_token
+                    new_data[CONF_REFRESH] = self.bhc.refresh_token
                     self.hass.config_entries.async_update_entry(
                         self.entry, data=new_data
                     )
                     _LOGGER.debug(
-                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
+                        "Device_Id: %s, persisted refreshed auth tokens",
                         self.unique_id,
-                        self.entry.data.get(CONF_TOKEN),
-                        self.entry.data.get(CONF_REFRESH),
                     )
             except AuthFailedError:
                 self.entry.async_start_reauth(self.hass)
+                raise UpdateFailed("Re-authentication required")
 
         try:
-            data: BHCDeviceGeneric = await self.bhc.async_update(self.unique_id)
+            data = await self.bhc.async_update(self.unique_id)
+        except AuthFailedError:
+            self.entry.async_start_reauth(self.hass)
+            raise UpdateFailed("Re-authentication required")
         except (ApiError, InvalidSensorDataError, RetryError) as error:
             raise UpdateFailed(error) from error
 
+        return self._build_device_data(data)
+
+    @abstractmethod
+    def _build_device_data(self, data: T) -> T:
+        """Build device-specific data object from raw API response."""
+
+
+class BoschComModuleCoordinatorGeneric(BoschComModuleCoordinatorBase[BHCDeviceGeneric]):
+    """A coordinator to manage the fetching of BoschCom data."""
+
+    def _build_device_data(self, data: BHCDeviceGeneric) -> BHCDeviceGeneric:
+        """Build generic device data."""
         return BHCDeviceGeneric(
             device=self.device,
             firmware={},
@@ -104,75 +121,11 @@ class BoschComModuleCoordinatorGeneric(DataUpdateCoordinator[BHCDeviceGeneric]):
         )
 
 
-class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
+class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
     """A coordinator to manage the fetching of BoschCom data."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        bhc: HomeComRac,
-        device: list,
-        firmware: dict,
-        entry: ConfigEntry,
-        auth_provider: bool,
-    ) -> None:
-        """Initialize coordinator."""
-        super().__init__(
-            hass,
-            logger=_LOGGER,
-            name=DOMAIN,
-            update_interval=DEFAULT_UPDATE_INTERVAL,
-            always_update=True,
-        )
-        self.bhc = bhc
-        self.unique_id = device["deviceId"]
-        self.device = device
-        self.entry = entry
-        self.auth_provider = auth_provider
-
-        self.device_info = DeviceInfo(
-            serial_number=self.unique_id,
-            identifiers={(DOMAIN, self.unique_id)},
-            name="Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
-            sw_version=firmware["value"],
-            manufacturer=MANUFACTURER,
-        )
-
-    async def _async_update_data(self) -> BHCDeviceRac:
-        """Update data via library."""
-        if self.auth_provider:
-            try:
-                old_refresh_token = self.bhc.refresh_token
-                await self.bhc.get_token()
-                new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
-                _LOGGER.debug(
-                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
-                    self.unique_id,
-                    old_refresh_token,
-                    new_refresh_token,
-                )
-                if old_refresh_token != new_refresh_token:
-                    new_data = dict(self.entry.data)
-                    new_data[CONF_TOKEN] = self.bhc.token
-                    new_data[CONF_REFRESH] = new_refresh_token
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
-                    )
-                    _LOGGER.debug(
-                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
-                        self.unique_id,
-                        self.entry.data.get(CONF_TOKEN),
-                        self.entry.data.get(CONF_REFRESH),
-                    )
-            except AuthFailedError:
-                self.entry.async_start_reauth(self.hass)
-
-        try:
-            data: BHCDeviceRac = await self.bhc.async_update(self.unique_id)
-        except (ApiError, InvalidSensorDataError, RetryError) as error:
-            raise UpdateFailed(error) from error
-
+    def _build_device_data(self, data: BHCDeviceRac) -> BHCDeviceRac:
+        """Build RAC device data."""
         return BHCDeviceRac(
             device=self.device,
             firmware={},
@@ -183,75 +136,11 @@ class BoschComModuleCoordinatorRac(DataUpdateCoordinator[BHCDeviceRac]):
         )
 
 
-class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
+class BoschComModuleCoordinatorK40(BoschComModuleCoordinatorBase[BHCDeviceK40]):
     """A coordinator to manage the fetching of BoschCom data."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        bhc: HomeComK40,
-        device: list,
-        firmware: dict,
-        entry: ConfigEntry,
-        auth_provider: bool,
-    ) -> None:
-        """Initialize coordinator."""
-        super().__init__(
-            hass,
-            logger=_LOGGER,
-            name=DOMAIN,
-            update_interval=DEFAULT_UPDATE_INTERVAL,
-            always_update=True,
-        )
-        self.bhc = bhc
-        self.unique_id = device["deviceId"]
-        self.device = device
-        self.entry = entry
-        self.auth_provider = auth_provider
-
-        self.device_info = DeviceInfo(
-            serial_number=self.unique_id,
-            identifiers={(DOMAIN, self.unique_id)},
-            name="Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
-            sw_version=firmware["value"],
-            manufacturer=MANUFACTURER,
-        )
-
-    async def _async_update_data(self) -> BHCDeviceK40:
-        """Update data via library."""
-        if self.auth_provider:
-            try:
-                old_refresh_token = self.bhc.refresh_token
-                await self.bhc.get_token()
-                new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
-                _LOGGER.debug(
-                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
-                    self.unique_id,
-                    old_refresh_token,
-                    new_refresh_token,
-                )
-                if old_refresh_token != new_refresh_token:
-                    new_data = dict(self.entry.data)
-                    new_data[CONF_TOKEN] = self.bhc.token
-                    new_data[CONF_REFRESH] = new_refresh_token
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
-                    )
-                    _LOGGER.debug(
-                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
-                        self.unique_id,
-                        self.entry.data.get(CONF_TOKEN),
-                        self.entry.data.get(CONF_REFRESH),
-                    )
-            except AuthFailedError:
-                self.entry.async_start_reauth(self.hass)
-
-        try:
-            data: BHCDeviceK40 = await self.bhc.async_update(self.unique_id)
-        except (ApiError, InvalidSensorDataError, RetryError) as error:
-            raise UpdateFailed(error) from error
-
+    def _build_device_data(self, data: BHCDeviceK40) -> BHCDeviceK40:
+        """Build K40 device data."""
         return BHCDeviceK40(
             device=self.device,
             firmware=data.firmware,
@@ -274,75 +163,11 @@ class BoschComModuleCoordinatorK40(DataUpdateCoordinator[BHCDeviceK40]):
         )
 
 
-class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
+class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw2]):
     """A coordinator to manage the fetching of BoschCom data."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        bhc: HomeComWddw2,
-        device: list,
-        firmware: dict,
-        entry: ConfigEntry,
-        auth_provider: bool,
-    ) -> None:
-        """Initialize coordinator."""
-        super().__init__(
-            hass,
-            logger=_LOGGER,
-            name=DOMAIN,
-            update_interval=DEFAULT_UPDATE_INTERVAL,
-            always_update=True,
-        )
-        self.bhc = bhc
-        self.unique_id = device["deviceId"]
-        self.device = device
-        self.entry = entry
-        self.auth_provider = auth_provider
-
-        self.device_info = DeviceInfo(
-            serial_number=self.unique_id,
-            identifiers={(DOMAIN, self.unique_id)},
-            name="Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
-            sw_version=firmware["value"],
-            manufacturer=MANUFACTURER,
-        )
-
-    async def _async_update_data(self) -> BHCDeviceWddw2:
-        """Update data via library."""
-        if self.auth_provider:
-            try:
-                old_refresh_token = self.bhc.refresh_token
-                await self.bhc.get_token()
-                new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
-                _LOGGER.debug(
-                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
-                    self.unique_id,
-                    old_refresh_token,
-                    new_refresh_token,
-                )
-                if old_refresh_token != new_refresh_token:
-                    new_data = dict(self.entry.data)
-                    new_data[CONF_TOKEN] = self.bhc.token
-                    new_data[CONF_REFRESH] = new_refresh_token
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
-                    )
-                    _LOGGER.debug(
-                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
-                        self.unique_id,
-                        self.entry.data.get(CONF_TOKEN),
-                        self.entry.data.get(CONF_REFRESH),
-                    )
-            except AuthFailedError:
-                self.entry.async_start_reauth(self.hass)
-
-        try:
-            data: BHCDeviceWddw2 = await self.bhc.async_update(self.unique_id)
-        except (ApiError, InvalidSensorDataError, RetryError) as error:
-            raise UpdateFailed(error) from error
-
+    def _build_device_data(self, data: BHCDeviceWddw2) -> BHCDeviceWddw2:
+        """Build WDDW2 device data."""
         return BHCDeviceWddw2(
             device=self.device,
             firmware=data.firmware,
@@ -351,75 +176,13 @@ class BoschComModuleCoordinatorWddw2(DataUpdateCoordinator[BHCDeviceWddw2]):
         )
 
 
-class BoschComModuleCoordinatorCommodule(DataUpdateCoordinator[BHCDeviceCommodule]):
+class BoschComModuleCoordinatorCommodule(
+    BoschComModuleCoordinatorBase[BHCDeviceCommodule]
+):
     """A coordinator to manage the fetching of BoschCom data."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        bhc: HomeComCommodule,
-        device: list,
-        firmware: dict,
-        entry: ConfigEntry,
-        auth_provider: bool,
-    ) -> None:
-        """Initialize coordinator."""
-        super().__init__(
-            hass,
-            logger=_LOGGER,
-            name=DOMAIN,
-            update_interval=DEFAULT_UPDATE_INTERVAL,
-            always_update=True,
-        )
-        self.bhc = bhc
-        self.unique_id = device["deviceId"]
-        self.device = device
-        self.entry = entry
-        self.auth_provider = auth_provider
-
-        self.device_info = DeviceInfo(
-            serial_number=self.unique_id,
-            identifiers={(DOMAIN, self.unique_id)},
-            name="Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
-            sw_version=firmware["value"],
-            manufacturer=MANUFACTURER,
-        )
-
-    async def _async_update_data(self) -> BHCDeviceCommodule:
-        """Update data via library."""
-        if self.auth_provider:
-            try:
-                old_refresh_token = self.bhc.refresh_token
-                await self.bhc.get_token()
-                new_refresh_token = self.bhc.refresh_token
-                new_refresh_token = self.bhc.refresh_token
-                _LOGGER.debug(
-                    "Device_Id: %s, old_refresh_token: %s, new_refresh_token: %s",
-                    self.unique_id,
-                    old_refresh_token,
-                    new_refresh_token,
-                )
-                if old_refresh_token != new_refresh_token:
-                    new_data = dict(self.entry.data)
-                    new_data[CONF_TOKEN] = self.bhc.token
-                    new_data[CONF_REFRESH] = new_refresh_token
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
-                    )
-                    _LOGGER.debug(
-                        "Device_Id: %s, config_token: %s, config_refresh_token: %s",
-                        self.unique_id,
-                        self.entry.data.get(CONF_TOKEN),
-                        self.entry.data.get(CONF_REFRESH),
-                    )
-            except AuthFailedError:
-                self.entry.async_start_reauth(self.hass)
-
-        try:
-            data: BHCDeviceCommodule = await self.bhc.async_update(self.unique_id)
-        except (ApiError, InvalidSensorDataError, RetryError) as error:
-            raise UpdateFailed(error) from error
-
+    def _build_device_data(self, data: BHCDeviceCommodule) -> BHCDeviceCommodule:
+        """Build commodule device data."""
         return BHCDeviceCommodule(
             device=self.device,
             firmware=data.firmware,

@@ -19,6 +19,8 @@ def _make_commodule_coordinator(charge_points):
     coordinator.device_info = {"identifiers": {("bosch_homecom", "wb123")}}
     coordinator.bhc = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
+    coordinator.entry = MagicMock()
+    coordinator.entry.options = {}
     coordinator.data = BHCDeviceCommodule(
         device={"deviceId": "wb123", "deviceType": "commodule"},
         firmware={"value": "1.0.0"},
@@ -138,7 +140,9 @@ async def test_start_charging_press(charge_points):
 
     await button.async_press()
 
-    coordinator.bhc.async_cp_start_charging.assert_awaited_once_with("wb123", "cp1")
+    coordinator.bhc.async_cp_start_charging.assert_awaited_once_with(
+        "wb123", "cp1", "Wallbox"
+    )
     coordinator.async_request_refresh.assert_awaited_once()
 
 
@@ -150,7 +154,9 @@ async def test_pause_charging_press(charge_points):
 
     await button.async_press()
 
-    coordinator.bhc.async_cp_pause_charging.assert_awaited_once_with("wb123", "cp1")
+    coordinator.bhc.async_cp_pause_charging.assert_awaited_once_with(
+        "wb123", "cp1", "Wallbox"
+    )
     coordinator.async_request_refresh.assert_awaited_once()
 
 
@@ -180,3 +186,31 @@ async def test_multiple_charge_points():
         "wb123-cp2-start_charging",
         "wb123-cp2-pause_charging",
     }
+
+
+async def test_start_charging_custom_label(charge_points):
+    """Test that start charging uses the configured wallbox label."""
+    coordinator = _make_commodule_coordinator(charge_points)
+    coordinator.entry.options = {"wb_label": "MyWallbox"}
+
+    button = BoschComCommoduleStartChargingButton(coordinator=coordinator, cp_id="cp1")
+
+    await button.async_press()
+
+    coordinator.bhc.async_cp_start_charging.assert_awaited_once_with(
+        "wb123", "cp1", "MyWallbox"
+    )
+
+
+async def test_pause_charging_custom_label(charge_points):
+    """Test that pause charging uses the configured wallbox label."""
+    coordinator = _make_commodule_coordinator(charge_points)
+    coordinator.entry.options = {"wb_label": "MyWallbox"}
+
+    button = BoschComCommodulePauseChargingButton(coordinator=coordinator, cp_id="cp1")
+
+    await button.async_press()
+
+    coordinator.bhc.async_cp_pause_charging.assert_awaited_once_with(
+        "wb123", "cp1", "MyWallbox"
+    )

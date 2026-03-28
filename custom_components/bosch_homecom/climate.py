@@ -74,6 +74,7 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_fan_modes = [FAN_AUTO, FAN_DIFFUSE, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
     _attr_hvac_modes = [
         HVACMode.OFF,
@@ -313,6 +314,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [
         HVACMode.OFF,
         HVACMode.AUTO,
@@ -335,7 +337,6 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         self._attr_name = field
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.OFF
-        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
         # Call this in __init__ so data is populated right away, since it's
         # already available in the coordinator data.
@@ -451,6 +452,7 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
@@ -467,7 +469,6 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         self._attr_name = field
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.HEAT
-        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self.field = field
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None

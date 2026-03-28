@@ -56,7 +56,8 @@
                 "description": "Pas de instellingen voor Bosch HomeCom aan.",
                 "data": {
                     "update_seconds": "Update-interval (seconden)",
-                    "brand_buderus": "Buderus merk"
+                    "brand_buderus": "Buderus merk",
+                    "wb_label": "Wallbox label"
                 }
             }
         }
@@ -233,6 +234,9 @@
         "number": {
             "wb_price": {
                 "name": "Stroomprijs"
+            },
+            "wb_charge_limit": {
+                "name": "Laadlimiet"
             }
         },
         "button": {

@@ -9,7 +9,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_CODE, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-TO_REDACT = {CONF_PASSWORD, CONF_USERNAME, CONF_CODE, CONF_TOKEN}
+from .const import CONF_REFRESH
+
+TO_REDACT = {CONF_PASSWORD, CONF_USERNAME, CONF_CODE, CONF_TOKEN, CONF_REFRESH}
 
 
 async def async_get_config_entry_diagnostics(
