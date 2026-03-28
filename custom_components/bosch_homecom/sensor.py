@@ -1425,12 +1425,7 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_name = field
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
-
-        user_unit = self.coordinator.data.energy_gas_unit.get("value", "kWh")
-        if user_unit == "m3":
-            self._attr_native_unit_of_measurement = "m³"
-        else:
-            self._attr_native_unit_of_measurement = "kWh"
+        self._attr_native_unit_of_measurement = "kWh"
 
         self._attr_device_class = SensorDeviceClass.GAS
 
@@ -1505,12 +1500,7 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         self._attr_name = field
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
-
-        user_unit = self.coordinator.data.energy_gas_unit.get("value", "kWh")
-        if user_unit == "m3":
-            self._attr_native_unit_of_measurement = "m³"
-        else:
-            self._attr_native_unit_of_measurement = "kWh"
+        self._attr_native_unit_of_measurement = "kWh"
 
         self._attr_device_class = SensorDeviceClass.GAS
 
