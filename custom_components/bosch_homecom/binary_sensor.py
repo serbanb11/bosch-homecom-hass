@@ -48,21 +48,36 @@ class BoschComCommoduleNetworkSensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-eth0-state"
         self._coordinator = coordinator
 
+    @staticmethod
+    def _get_state_value(state: dict | None) -> str | None:
+        """Extract value from a state dict."""
+        if isinstance(state, dict):
+            return state.get("value")
+        return None
+
     @property
     def is_on(self) -> bool | None:
-        """Get network connectivity status."""
-        eth0 = self._coordinator.data.eth0_state
-        if eth0 is None:
+        """Get network connectivity status (eth0 or wifi)."""
+        eth0 = self._get_state_value(self._coordinator.data.eth0_state)
+        wifi = self._get_state_value(self._coordinator.data.wifi_state)
+        if eth0 is None and wifi is None:
             return None
-        value = eth0.get("value") if isinstance(eth0, dict) else None
-        return value == "on"
+        return eth0 == "on" or wifi == "on"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str | None]:
+        """Return which network interfaces are active."""
+        eth0 = self._get_state_value(self._coordinator.data.eth0_state)
+        wifi = self._get_state_value(self._coordinator.data.wifi_state)
+        return {"eth0": eth0, "wifi": wifi}
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        eth0 = self._coordinator.data.eth0_state
-        if eth0 is not None and isinstance(eth0, dict):
-            self._attr_is_on = eth0.get("value") == "on"
-        else:
+        eth0 = self._get_state_value(self._coordinator.data.eth0_state)
+        wifi = self._get_state_value(self._coordinator.data.wifi_state)
+        if eth0 is None and wifi is None:
             self._attr_is_on = None
+        else:
+            self._attr_is_on = eth0 == "on" or wifi == "on"
         self.async_write_ha_state()

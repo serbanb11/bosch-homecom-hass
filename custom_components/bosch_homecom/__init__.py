@@ -216,7 +216,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     entry.runtime_data = coordinators
-    hass.data[DOMAIN] = {"coordinators": coordinators}
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -252,6 +251,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
+def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
+    """Find the coordinator that owns a Bosch device ID."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        for c in getattr(entry, "runtime_data", None) or []:
+            if c.device["deviceId"] == device_id:
+                return c
+    return None
+
+
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Add custom action."""
 
@@ -259,14 +267,7 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Service to change temperature."""
         for entity in call.data["entity_id"]:
             device_id = entity.split("_")[2]
-            coordinator = next(
-                (
-                    c
-                    for c in hass.data.get(DOMAIN).get("coordinators")
-                    if c.device["deviceId"] == device_id
-                ),
-                None,
-            )
+            coordinator = _find_coordinator_by_device_id(hass, device_id)
             if not coordinator:
                 _LOGGER.error("Coordinator not found for entity %s", entity)
                 return
@@ -287,14 +288,7 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Service to control extrahot water service."""
         for entity in call.data["entity_id"]:
             device_id = entity.split("_")[2]
-            coordinator = next(
-                (
-                    c
-                    for c in hass.data.get(DOMAIN).get("coordinators")
-                    if c.device["deviceId"] == device_id
-                ),
-                None,
-            )
+            coordinator = _find_coordinator_by_device_id(hass, device_id)
             if not coordinator:
                 _LOGGER.error("Coordinator not found for entity %s", entity)
                 return
@@ -318,9 +312,13 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def get_custom_path_service(call: ServiceCall) -> ServiceResponse:
         """Service to query any endpoint."""
-        coordinator = hass.data.get(DOMAIN).get("coordinators")[0]
+        device_id = str(call.data.get("device_id"))
+        coordinator = _find_coordinator_by_device_id(hass, device_id)
+        if coordinator is None:
+            _LOGGER.error("Coordinator not found for device %s", device_id)
+            return {}
         result = await coordinator.bhc.async_action_universal_get(
-            str(call.data.get("device_id")),
+            device_id,
             call.data.get("path"),
         )
         return result or {}

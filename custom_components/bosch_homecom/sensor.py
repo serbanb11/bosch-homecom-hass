@@ -1776,36 +1776,73 @@ class BoschComCommoduleChargelogSensor(_CommoduleSensorBase):
         )
         self._attr_translation_key = "wb_chargelog"
         self._attr_name = f"{cp_id}_chargelog"
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_native_unit_of_measurement = "kWh"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
 
-    @property
-    def state(self):
-        """Return number of charge sessions."""
+    def _get_sessions(self):
+        """Get charge sessions list (newest first)."""
         cp = self._get_cp()
         if cp is None:
-            return None
+            return []
         chargelog = cp.get("chargelog")
         if isinstance(chargelog, list):
-            return len(chargelog)
+            return chargelog
         if isinstance(chargelog, dict):
             sessions = chargelog.get("sessions") or chargelog.get("values") or []
             if isinstance(sessions, list):
-                return len(sessions)
+                return sessions
+        return []
+
+    @property
+    def native_value(self):
+        """Return energy of the last charge session in kWh."""
+        sessions = self._get_sessions()
+        if not sessions:
+            return None
+        last = sessions[0]
+        if isinstance(last, dict):
+            val = last.get("energy")
+            if val is not None:
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return None
         return None
 
     @property
     def extra_state_attributes(self):
-        """Return last session details."""
-        cp = self._get_cp()
-        if cp is None:
+        """Return last session details as flat attributes."""
+        sessions = self._get_sessions()
+        if not sessions:
             return {}
-        chargelog = cp.get("chargelog")
-        sessions = None
-        if isinstance(chargelog, list):
-            sessions = chargelog
-        elif isinstance(chargelog, dict):
-            sessions = chargelog.get("sessions") or chargelog.get("values") or []
-        if sessions and isinstance(sessions, list) and len(sessions) > 0:
-            last = sessions[-1]
-            if isinstance(last, dict):
-                return {"last_session": last}
-        return {}
+        last = sessions[0]
+        if not isinstance(last, dict):
+            return {}
+        attrs = {}
+        attrs["begin"] = last.get("begin")
+        attrs["end"] = last.get("end")
+        attrs["plugged"] = last.get("plugged")
+        attrs["unplugged"] = last.get("unplugged")
+        attrs["session_duration"] = last.get("sessionDuration")
+        attrs["charging_duration"] = last.get("chargingDuration")
+        cost = last.get("cost")
+        if isinstance(cost, dict):
+            attrs["cost_total"] = cost.get("total")
+            attrs["cost_unit"] = cost.get("unit")
+            attrs["cost_currency"] = cost.get("currency")
+        meter = last.get("meter")
+        if isinstance(meter, dict):
+            attrs["meter_begin"] = meter.get("posBegin")
+            attrs["meter_end"] = meter.get("posEnd")
+        solar = last.get("solar")
+        if isinstance(solar, dict):
+            attrs["solar_energy"] = solar.get("solarEnergy")
+            attrs["grid_energy"] = solar.get("gridEnergy")
+            attrs["solar_saving"] = solar.get("solarSaving")
+        auth = last.get("authentication")
+        if isinstance(auth, dict):
+            attrs["auth_source"] = auth.get("source")
+            attrs["auth_label"] = auth.get("label")
+        attrs["session_count"] = len(sessions)
+        return attrs

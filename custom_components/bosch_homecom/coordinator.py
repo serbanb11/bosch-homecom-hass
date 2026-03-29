@@ -189,4 +189,5 @@ class BoschComModuleCoordinatorCommodule(
             notifications=data.notifications,
             charge_points=data.charge_points,
             eth0_state=data.eth0_state,
+            wifi_state=data.wifi_state,
         )

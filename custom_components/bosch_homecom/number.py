@@ -103,7 +103,7 @@ class BoschComCommoduleLimitNumber(CoordinatorEntity, NumberEntity):
     _attr_mode = NumberMode.SLIDER
     _attr_should_poll = False
     _attr_native_min_value = 6
-    _attr_native_max_value = 32
+    _attr_native_max_value = 16
     _attr_native_step = 1
     _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
 
@@ -137,7 +137,7 @@ class BoschComCommoduleLimitNumber(CoordinatorEntity, NumberEntity):
         telemetry = raw.get("values", raw)
         if not isinstance(telemetry, dict):
             return None
-        val = telemetry.get("currentLimit")
+        val = telemetry.get("limit")
         if val is not None:
             try:
                 return float(val)
@@ -161,7 +161,7 @@ class BoschComCommoduleLimitNumber(CoordinatorEntity, NumberEntity):
             raw = cp.get("telemetry") or {}
             telemetry = raw.get("values", raw)
             if isinstance(telemetry, dict):
-                val = telemetry.get("currentLimit")
+                val = telemetry.get("limit")
                 if val is not None:
                     try:
                         self._attr_native_value = float(val)

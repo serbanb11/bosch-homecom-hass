@@ -58,9 +58,10 @@ class BoschComCommoduleStartChargingButton(CoordinatorEntity, ButtonEntity):
         self._cp_id = cp_id
 
     async def async_press(self) -> None:
-        """Start charging."""
+        """Authenticate and start charging."""
         device_id = self._coordinator.data.device["deviceId"]
         label = self._coordinator.entry.options.get(CONF_WB_LABEL, DEFAULT_WB_LABEL)
+        await self._coordinator.bhc.async_cp_authenticate(device_id, self._cp_id, label)
         await self._coordinator.bhc.async_cp_start_charging(
             device_id, self._cp_id, label
         )
@@ -87,9 +88,10 @@ class BoschComCommodulePauseChargingButton(CoordinatorEntity, ButtonEntity):
         self._cp_id = cp_id
 
     async def async_press(self) -> None:
-        """Pause charging."""
+        """Authenticate and pause charging."""
         device_id = self._coordinator.data.device["deviceId"]
         label = self._coordinator.entry.options.get(CONF_WB_LABEL, DEFAULT_WB_LABEL)
+        await self._coordinator.bhc.async_cp_authenticate(device_id, self._cp_id, label)
         await self._coordinator.bhc.async_cp_pause_charging(
             device_id, self._cp_id, label
         )
