@@ -62,7 +62,7 @@ class BoschComCommoduleNetworkSensor(CoordinatorEntity, BinarySensorEntity):
         wifi = self._get_state_value(self._coordinator.data.wifi_state)
         if eth0 is None and wifi is None:
             return None
-        return eth0 == "on" or wifi == "on"
+        return eth0 in ("on", "connected") or wifi in ("on", "connected")
 
     @property
     def extra_state_attributes(self) -> dict[str, str | None]:
@@ -79,5 +79,8 @@ class BoschComCommoduleNetworkSensor(CoordinatorEntity, BinarySensorEntity):
         if eth0 is None and wifi is None:
             self._attr_is_on = None
         else:
-            self._attr_is_on = eth0 == "on" or wifi == "on"
+            self._attr_is_on = eth0 in ("on", "connected") or wifi in (
+                "on",
+                "connected",
+            )
         self.async_write_ha_state()
