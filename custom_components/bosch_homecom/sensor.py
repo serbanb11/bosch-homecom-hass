@@ -1776,9 +1776,7 @@ class BoschComCommoduleChargelogSensor(_CommoduleSensorBase):
         )
         self._attr_translation_key = "wb_chargelog"
         self._attr_name = f"{cp_id}_chargelog"
-        self._attr_device_class = SensorDeviceClass.ENERGY
-        self._attr_native_unit_of_measurement = "kWh"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def _get_sessions(self):
         """Get charge sessions list (newest first)."""
@@ -1796,19 +1794,25 @@ class BoschComCommoduleChargelogSensor(_CommoduleSensorBase):
 
     @property
     def native_value(self):
-        """Return energy of the last charge session in kWh."""
+        """Return start timestamp of the last charge session.
+
+        Using the session begin time as the state guarantees a state change
+        whenever a new session is logged, even if two consecutive sessions
+        deliver the same amount of energy.
+        """
         sessions = self._get_sessions()
         if not sessions:
             return None
         last = sessions[0]
-        if isinstance(last, dict):
-            val = last.get("energy")
-            if val is not None:
-                try:
-                    return float(val)
-                except (ValueError, TypeError):
-                    return None
-        return None
+        if not isinstance(last, dict):
+            return None
+        begin = last.get("begin")
+        if not begin:
+            return None
+        try:
+            return datetime.fromisoformat(begin)
+        except (ValueError, TypeError):
+            return None
 
     @property
     def extra_state_attributes(self):
@@ -1820,6 +1824,12 @@ class BoschComCommoduleChargelogSensor(_CommoduleSensorBase):
         if not isinstance(last, dict):
             return {}
         attrs = {}
+        energy = last.get("energy")
+        if energy is not None:
+            try:
+                attrs["energy"] = float(energy)
+            except (ValueError, TypeError):
+                attrs["energy"] = None
         attrs["begin"] = last.get("begin")
         attrs["end"] = last.get("end")
         attrs["plugged"] = last.get("plugged")
