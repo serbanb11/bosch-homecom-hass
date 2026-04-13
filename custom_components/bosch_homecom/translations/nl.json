@@ -205,7 +205,20 @@
                 }
             },
             "wb_state": {
-                "name": "Wallbox Status"
+                "name": "Wallbox Status",
+                "state": {
+                    "available": "Available",
+                    "authenticated": "Authenticated",
+                    "preparing": "Awaiting Authorization",
+                    "locked": "Locked",
+                    "charging": "Charging",
+                    "suspendedev": "Vehicle Paused",
+                    "suspendedevse": "Wallbox Paused",
+                    "init": "Initializing",
+                    "faulted": "Faulted",
+                    "limited": "Power Limited",
+                    "phaseswitch": "Phase Switching"
+                }
             },
             "wb_power": {
                 "name": "Wallbox Vermogen"
@@ -224,11 +237,29 @@
             },
             "wb_chargelog": {
                 "name": "Wallbox Laadlogboek"
+            },
+            "thermostat_room_temp": {
+                "name": "Kamertemperatuur"
+            },
+            "thermostat_humidity": {
+                "name": "Kamervochtigheid"
+            },
+            "thermostat_setpoint": {
+                "name": "Kamer Instelpunt"
+            },
+            "thermostat_battery": {
+                "name": "Batterij"
+            },
+            "thermostat_signal": {
+                "name": "Signaalsterkte"
             }
         },
         "binary_sensor": {
             "wb_network": {
                 "name": "Wallbox Netwerk"
+            },
+            "thermostat_rf_status": {
+                "name": "RF Verbinding"
             }
         },
         "number": {

@@ -6,6 +6,7 @@ from homecom_alt import BHCDeviceCommodule, BHCDeviceRac
 import pytest
 
 from custom_components.bosch_homecom.button import (
+    BoschComCommoduleAuthenticateButton,
     BoschComCommodulePauseChargingButton,
     BoschComCommoduleStartChargingButton,
     async_setup_entry,
@@ -72,13 +73,16 @@ async def test_setup_creates_buttons_for_commodule(charge_points):
 
     await async_setup_entry(MagicMock(), config_entry, capture_entities)
 
-    assert len(entities) == 2
-    assert isinstance(entities[0], BoschComCommoduleStartChargingButton)
-    assert isinstance(entities[1], BoschComCommodulePauseChargingButton)
-    assert entities[0]._attr_unique_id == "wb123-cp1-start_charging"
-    assert entities[1]._attr_unique_id == "wb123-cp1-pause_charging"
-    assert entities[0]._attr_translation_key == "wb_start_charging"
-    assert entities[1]._attr_translation_key == "wb_pause_charging"
+    assert len(entities) == 3
+    assert isinstance(entities[0], BoschComCommoduleAuthenticateButton)
+    assert isinstance(entities[1], BoschComCommoduleStartChargingButton)
+    assert isinstance(entities[2], BoschComCommodulePauseChargingButton)
+    assert entities[0]._attr_unique_id == "wb123-cp1-authenticate"
+    assert entities[1]._attr_unique_id == "wb123-cp1-start_charging"
+    assert entities[2]._attr_unique_id == "wb123-cp1-pause_charging"
+    assert entities[0]._attr_translation_key == "wb_authenticate"
+    assert entities[1]._attr_translation_key == "wb_start_charging"
+    assert entities[2]._attr_translation_key == "wb_pause_charging"
 
 
 async def test_setup_no_buttons_for_non_commodule():
@@ -178,11 +182,13 @@ async def test_multiple_charge_points():
 
     await async_setup_entry(MagicMock(), config_entry, capture_entities)
 
-    assert len(entities) == 4
+    assert len(entities) == 6
     unique_ids = {e._attr_unique_id for e in entities}
     assert unique_ids == {
+        "wb123-cp1-authenticate",
         "wb123-cp1-start_charging",
         "wb123-cp1-pause_charging",
+        "wb123-cp2-authenticate",
         "wb123-cp2-start_charging",
         "wb123-cp2-pause_charging",
     }

@@ -156,6 +156,40 @@ async def async_setup_entry(
                     )
                 )
 
+            # Thermostat device sensors
+            for dev in coordinator.data.devices or []:
+                dev_id = dev["id"].split("/")[-1]
+                if dev.get("roomtemperature"):
+                    entities.append(
+                        BoschComThermostatRoomTempSensor(
+                            coordinator, config_entry, dev_id
+                        )
+                    )
+                if dev.get("actualHumidity"):
+                    entities.append(
+                        BoschComThermostatHumiditySensor(
+                            coordinator, config_entry, dev_id
+                        )
+                    )
+                if dev.get("currentRoomSetpoint"):
+                    entities.append(
+                        BoschComThermostatSetpointSensor(
+                            coordinator, config_entry, dev_id
+                        )
+                    )
+                if dev.get("battery"):
+                    entities.append(
+                        BoschComThermostatBatterySensor(
+                            coordinator, config_entry, dev_id
+                        )
+                    )
+                if dev.get("signal"):
+                    entities.append(
+                        BoschComThermostatSignalSensor(
+                            coordinator, config_entry, dev_id
+                        )
+                    )
+
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
         elif device_type == "wddw2":
             # Existing per-circuit DHW sensor
@@ -1574,6 +1608,196 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         return {"history": entries}
 
 
+# ---- Thermostat device sensors (K40/K30/icom/rrc2) ----
+
+
+class _ThermostatDeviceSensorBase(CoordinatorEntity, SensorEntity):
+    """Base class for thermostat device sensors."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        dev_id: str,
+        unique_suffix: str,
+        icon: str | None = None,
+    ) -> None:
+        """Initialize thermostat device sensor."""
+        super().__init__(coordinator)
+        self.config_entry = config_entry
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{dev_id}-{unique_suffix}"
+        self._attr_icon = icon
+        self._dev_id = dev_id
+
+    def _get_device(self) -> dict | None:
+        """Get device ref data."""
+        for dev in self.coordinator.data.devices or []:
+            if dev.get("id", "").endswith(f"/{self._dev_id}"):
+                return dev
+        return None
+
+    def _get_property(self, key: str):
+        """Get a property value from the device ref."""
+        dev = self._get_device()
+        if dev is None:
+            return None
+        return (dev.get(key) or {}).get("value")
+
+
+class BoschComThermostatRoomTempSensor(_ThermostatDeviceSensorBase):
+    """Thermostat room temperature sensor."""
+
+    def __init__(self, coordinator, config_entry, dev_id) -> None:
+        """Initialize room temperature sensor."""
+        super().__init__(
+            coordinator,
+            config_entry,
+            dev_id,
+            "thermostat_room_temp",
+            icon="mdi:thermometer",
+        )
+        self._attr_translation_key = "thermostat_room_temp"
+        self._attr_name = f"{dev_id}_room_temp"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self):
+        """Return room temperature."""
+        val = self._get_property("roomtemperature")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
+class BoschComThermostatHumiditySensor(_ThermostatDeviceSensorBase):
+    """Thermostat humidity sensor."""
+
+    def __init__(self, coordinator, config_entry, dev_id) -> None:
+        """Initialize humidity sensor."""
+        super().__init__(
+            coordinator,
+            config_entry,
+            dev_id,
+            "thermostat_humidity",
+            icon="mdi:water-percent",
+        )
+        self._attr_translation_key = "thermostat_humidity"
+        self._attr_name = f"{dev_id}_humidity"
+        self._attr_device_class = SensorDeviceClass.HUMIDITY
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self):
+        """Return humidity."""
+        val = self._get_property("actualHumidity")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
+class BoschComThermostatSetpointSensor(_ThermostatDeviceSensorBase):
+    """Thermostat room setpoint sensor."""
+
+    def __init__(self, coordinator, config_entry, dev_id) -> None:
+        """Initialize setpoint sensor."""
+        super().__init__(
+            coordinator,
+            config_entry,
+            dev_id,
+            "thermostat_setpoint",
+            icon="mdi:thermostat",
+        )
+        self._attr_translation_key = "thermostat_setpoint"
+        self._attr_name = f"{dev_id}_setpoint"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self):
+        """Return room setpoint."""
+        val = self._get_property("currentRoomSetpoint")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
+class BoschComThermostatBatterySensor(_ThermostatDeviceSensorBase):
+    """Thermostat battery sensor."""
+
+    def __init__(self, coordinator, config_entry, dev_id) -> None:
+        """Initialize battery sensor."""
+        super().__init__(
+            coordinator,
+            config_entry,
+            dev_id,
+            "thermostat_battery",
+            icon="mdi:battery",
+        )
+        self._attr_translation_key = "thermostat_battery"
+        self._attr_name = f"{dev_id}_battery"
+        self._attr_device_class = SensorDeviceClass.BATTERY
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self):
+        """Return battery level."""
+        val = self._get_property("battery")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
+class BoschComThermostatSignalSensor(_ThermostatDeviceSensorBase):
+    """Thermostat signal strength sensor."""
+
+    def __init__(self, coordinator, config_entry, dev_id) -> None:
+        """Initialize signal sensor."""
+        super().__init__(
+            coordinator,
+            config_entry,
+            dev_id,
+            "thermostat_signal",
+            icon="mdi:signal",
+        )
+        self._attr_translation_key = "thermostat_signal"
+        self._attr_name = f"{dev_id}_signal"
+        self._attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+        self._attr_native_unit_of_measurement = "dBm"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self):
+        """Return signal strength."""
+        val = self._get_property("signal")
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+
 # ---- Commodule (EV Charger) sensors ----
 
 
@@ -1621,6 +1845,20 @@ class _CommoduleSensorBase(CoordinatorEntity, SensorEntity):
 class BoschComCommoduleStateSensor(_CommoduleSensorBase):
     """Commodule wallbox state sensor."""
 
+    _WB_STATE_OPTIONS = [
+        "available",
+        "authenticated",
+        "preparing",
+        "locked",
+        "charging",
+        "suspendedev",
+        "suspendedevse",
+        "init",
+        "faulted",
+        "limited",
+        "phaseswitch",
+    ]
+
     def __init__(self, coordinator, config_entry, cp_id) -> None:
         """Initialize state sensor."""
         super().__init__(
@@ -1628,12 +1866,20 @@ class BoschComCommoduleStateSensor(_CommoduleSensorBase):
         )
         self._attr_translation_key = "wb_state"
         self._attr_name = f"{cp_id}_state"
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = self._WB_STATE_OPTIONS
 
     @property
     def state(self):
         """Return wallbox state."""
         telemetry = self._get_telemetry()
-        return telemetry.get("wbState")
+        raw = telemetry.get("wbState")
+        if raw is None:
+            return None
+        key = raw.lower()
+        if key in self._WB_STATE_OPTIONS:
+            return key
+        return None
 
 
 class BoschComCommodulePowerSensor(_CommoduleSensorBase):

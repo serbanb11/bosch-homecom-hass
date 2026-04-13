@@ -207,7 +207,20 @@
                 }
             },
             "wb_state": {
-                "name": "Wallbox Status"
+                "name": "Wallbox Status",
+                "state": {
+                    "available": "Bereit",
+                    "authenticated": "Authentifiziert",
+                    "preparing": "Warte auf Freigabe",
+                    "locked": "Gesperrt",
+                    "charging": "Lädt",
+                    "suspendedev": "Fahrzeug pausiert",
+                    "suspendedevse": "Wallbox pausiert",
+                    "init": "Initialisierung",
+                    "faulted": "Störung",
+                    "limited": "Gedrosselt",
+                    "phaseswitch": "Phasenumschaltung"
+                }
             },
             "wb_power": {
                 "name": "Wallbox Leistung"
@@ -226,11 +239,29 @@
             },
             "wb_chargelog": {
                 "name": "Wallbox Ladeprotokoll"
+            },
+            "thermostat_room_temp": {
+                "name": "Raumtemperatur"
+            },
+            "thermostat_humidity": {
+                "name": "Raumfeuchtigkeit"
+            },
+            "thermostat_setpoint": {
+                "name": "Raumsollwert"
+            },
+            "thermostat_battery": {
+                "name": "Batterie"
+            },
+            "thermostat_signal": {
+                "name": "Signalstärke"
             }
         },
         "binary_sensor": {
             "wb_network": {
                 "name": "Wallbox Netzwerk"
+            },
+            "thermostat_rf_status": {
+                "name": "Funkverbindung"
             }
         },
         "number": {

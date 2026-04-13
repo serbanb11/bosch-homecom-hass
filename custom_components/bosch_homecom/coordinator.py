@@ -96,9 +96,6 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
 
         try:
             data = await self.bhc.async_update(self.unique_id)
-        except AuthFailedError:
-            self.entry.async_start_reauth(self.hass)
-            raise UpdateFailed("Re-authentication required")
         except (ApiError, InvalidSensorDataError, RetryError) as error:
             raise UpdateFailed(error) from error
 
