@@ -273,6 +273,9 @@
             }
         },
         "button": {
+            "wb_authenticate": {
+                "name": "Laden authentifizieren"
+            },
             "wb_start_charging": {
                 "name": "Laden starten"
             },

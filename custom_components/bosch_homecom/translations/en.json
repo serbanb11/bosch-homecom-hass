@@ -271,6 +271,9 @@
             }
         },
         "button": {
+            "wb_authenticate": {
+                "name": "Authenticate Charging"
+            },
             "wb_start_charging": {
                 "name": "Start Charging"
             },

@@ -17,6 +17,7 @@ from homecom_alt import (
     HomeComK40,
     HomeComRac,
     HomeComWddw2,
+    NotRespondingError,
 )
 
 from homeassistant.config_entries import ConfigEntry
@@ -115,15 +116,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         device_id = device["deviceId"]
         try:
             firmware = await bhc.async_get_firmware(device_id)
-        except ApiError as err:
-            if "504" in str(err):
-                _LOGGER.warning(
-                    "Firmware request for %s timed out (504), setting to not_available",
-                    device_id,
-                )
-                firmware = {"value": "unknown"}
-            else:
-                raise
+        except (ApiError, NotRespondingError, TimeoutError):
+            firmware = None
+        if not firmware or "value" not in firmware:
+            firmware = {"value": "unknown"}
         auth_provider = False
         if is_first:
             auth_provider = True
