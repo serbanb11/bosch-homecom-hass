@@ -838,12 +838,20 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
     def state(self):
         """Return BoschComSensorHc outdoorTemp."""
         outdoor = self.coordinator.data.outdoor_temp
+        if not outdoor:
+            return None
         unit_str = outdoor.get("unitOfMeasure")
         if unit_str == "F":
             self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
         else:
             self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        return float(outdoor.get("value", "unknown"))
+        value = outdoor.get("value")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
 
 class BoschComSensorHs(BoschComSensorBase):
