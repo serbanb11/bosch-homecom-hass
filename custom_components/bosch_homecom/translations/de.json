@@ -81,7 +81,7 @@
                             "dem": "Bedarfsgeregelt",
                             "powerVent": "Intensivlüftung",
                             "fallAsleep": "Schlafen",
-                            "time": "Zeitgesteuert",
+                            "time": "Auto",
                             "party": "Party",
                             "fireplace": "Kamin"
                         }
