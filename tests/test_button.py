@@ -28,6 +28,7 @@ def _make_commodule_coordinator(charge_points):
         notifications=[],
         charge_points=charge_points,
         eth0_state=None,
+        wifi_state=None,
     )
     return coordinator
 
