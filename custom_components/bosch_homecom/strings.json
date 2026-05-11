@@ -176,6 +176,13 @@
             },
             "hc_control": {
                 "name": "HC Control"
+            },
+            "ventilation_summer_enable": {
+                "name": "Summer bypass",
+                "state": {
+                    "no": "Off",
+                    "yes": "On"
+                }
             }
         },
         "sensor": {
@@ -269,6 +276,9 @@
             },
             "wb_charge_limit": {
                 "name": "Charging Limit"
+            },
+            "ventilation_summer_duration": {
+                "name": "Summer bypass duration"
             }
         },
         "button": {

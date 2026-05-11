@@ -53,13 +53,13 @@ async def async_setup_entry(
 
         if device_type == "rac":
             entities.append(BoschComRacClimate(coordinator=coordinator, field="clima"))
-        elif device_type in ("k40", "k30", "icom", "rrc2"):
+        elif device_type in ("k40", "k30", "icom"):
             for ref in coordinator.data.heating_circuits:
                 hc_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComK40Climate(coordinator=coordinator, field=hc_id)
                 )
-        if device_type in ("k40", "k30", "icom", "rrc2"):
+        if device_type in ("k40", "k30"):
             for ref in coordinator.data.zones or []:
                 zone_id = ref["id"].split("/")[-1]
                 entities.append(
@@ -443,7 +443,8 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                 self._set_heating_circuits(entry)
                 break
 
-        away = (data.away_mode or {}).get("value")
+        # away_mode is only on K40/K30 dataclass, not Icom — guard with getattr.
+        away = (getattr(data, "away_mode", None) or {}).get("value")
         self._attr_preset_mode = PRESET_AWAY if away in ("on", "true") else PRESET_NONE
 
 

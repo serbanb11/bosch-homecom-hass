@@ -13,6 +13,9 @@
       "number": {
         "wb_price": {
           "default": "mdi:currency-eur"
+        },
+        "ventilation_summer_duration": {
+          "default": "mdi:timer-outline"
         }
       },
       "sensor": {
@@ -74,6 +77,9 @@
         },
         "airflow_horizontal": {
           "default": "mdi:pan-horizontal"
+        },
+        "ventilation_summer_enable": {
+          "default": "mdi:weather-sunny"
         }
       }
     }

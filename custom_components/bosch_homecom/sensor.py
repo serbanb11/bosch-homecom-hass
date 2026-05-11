@@ -63,7 +63,7 @@ async def async_setup_entry(
                     coordinator=coordinator, config_entry=config_entry
                 )
             )
-        elif device_type in ("k40", "k30", "icom", "rrc2"):
+        elif device_type in ("k40", "k30", "icom"):
             entities.append(
                 BoschComSensorNotificationsK40(
                     coordinator=coordinator, config_entry=config_entry
@@ -76,8 +76,8 @@ async def async_setup_entry(
                 )
             )
 
-        # ---- K40/K30 (existing) ----
-        if device_type in ("k40", "k30", "icom", "rrc2"):
+        # ---- K40/K30/ICOM (shared subset: dhw, ventilation, heating, hs) ----
+        if device_type in ("k40", "k30", "icom"):
             # DHW circuits
             for ref in coordinator.data.dhw_circuits:
                 dhw_id = ref["id"].split("/")[-1]
@@ -104,20 +104,23 @@ async def async_setup_entry(
                         coordinator=coordinator, config_entry=config_entry, field=hc_id
                     )
                 )
-            # Heat source + outdoor temp
-            entities.extend(
-                [
-                    BoschComSensorHs(
-                        coordinator=coordinator,
-                        config_entry=config_entry,
-                        field="heat_source",
-                    ),
-                    BoschComSensorOutdoorTemp(
-                        coordinator=coordinator,
-                        config_entry=config_entry,
-                        field="outdoor_temp",
-                    ),
-                ]
+            # Heat source
+            entities.append(
+                BoschComSensorHs(
+                    coordinator=coordinator,
+                    config_entry=config_entry,
+                    field="heat_source",
+                )
+            )
+
+        # ---- K40/K30 only (icom does not expose these fields) ----
+        if device_type in ("k40", "k30"):
+            entities.append(
+                BoschComSensorOutdoorTemp(
+                    coordinator=coordinator,
+                    config_entry=config_entry,
+                    field="outdoor_temp",
+                )
             )
             # Indoor humidity
             if coordinator.data.indoor_humidity:
@@ -776,6 +779,15 @@ class BoschComSensorVentilation(BoschComSensorBase):
                 summerBypassDuration_value = (
                     entry.get("summerBypassDuration") or {}
                 ).get("value", "unknown")
+                summerBypassFlapPower_value = (
+                    entry.get("summerBypassFlapPower") or {}
+                ).get("value", "unknown")
+                summerBypassMinSupply_value = (
+                    entry.get("summerBypassMinSupply") or {}
+                ).get("value", "unknown")
+                summerBypassPassiveCooling_value = (
+                    entry.get("summerBypassPassiveCooling") or {}
+                ).get("value", "unknown")
                 demandindoorAirQuality_value = (
                     entry.get("demandindoorAirQuality") or {}
                 ).get("value", "unknown")
@@ -794,6 +806,9 @@ class BoschComSensorVentilation(BoschComSensorBase):
                     "outdoorTemp": outdoorTemp_value,
                     "summerBypassEnable": summerBypassEnable_value,
                     "summerBypassDuration": summerBypassDuration_value,
+                    "summerBypassFlapPower": summerBypassFlapPower_value,
+                    "summerBypassMinSupply": summerBypassMinSupply_value,
+                    "summerBypassPassiveCooling": summerBypassPassiveCooling_value,
                     "demandindoorAirQuality": demandindoorAirQuality_value,
                     "demandrelativeHumidity": demandrelativeHumidity_value,
                 }

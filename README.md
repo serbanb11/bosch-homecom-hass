@@ -57,12 +57,16 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 |----------|-----|---------------------|-------|-----------|
 | Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | -- | -- |
 | Water Heater | -- | Operation mode | Operation mode + target temp | -- |
-| Select | Airflow, programs | DHW/HC modes, away, holiday | -- | -- |
+| Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | -- | -- |
 | Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
 | Switch | Plasmacluster | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | -- | -- |
 | Binary Sensor | -- | -- | -- | Network connectivity |
-| Number | -- | -- | -- | Electricity price |
+| Number | -- | Ventilation summer-bypass duration | -- | Electricity price |
+
+### Ventilation summer bypass
+
+The summer-bypass `enable` toggle is a **manual override** that forces the bypass flap open for `duration` hours. Reading `enable = no` does **not** mean the flap is physically closed — the controller can still open it automatically when supply temperature falls below `minSupplyTemperature` or rises above `passiveCoolingSetpoint`. Both thresholds, plus the live `flapPower`, are exposed as attributes on the ventilation sensor for diagnosis.
 
 ## Documentation
 

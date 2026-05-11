@@ -60,7 +60,7 @@ async def async_setup_entry(
                 entities.append(
                     BoschComSelectProgram(coordinator=coordinator, field="program")
                 )
-        if coordinator.data.device["deviceType"] in ["k30", "k40", "icom", "rrc2"]:
+        if coordinator.data.device["deviceType"] in ["k30", "k40", "icom"]:
             for entry in coordinator.data.dhw_circuits:
                 dhw_id = entry["id"].split("/")[-1]
                 if (
@@ -141,26 +141,35 @@ async def async_setup_entry(
                             allowedValues=entry["control"]["allowedValues"],
                         )
                     )
-            if (
-                coordinator.data.holiday_mode
-                and "allowedValues" in coordinator.data.holiday_mode
-            ):
+            for entry in coordinator.data.ventilation:
+                zone_id = entry["id"].split("/")[-1]
+                if (
+                    entry.get("summerBypassEnable")
+                    and "allowedValues" in entry["summerBypassEnable"]
+                ):
+                    entities.append(
+                        BoschComSelectVentilationSummerEnable(
+                            coordinator=coordinator,
+                            field=zone_id,
+                            allowedValues=entry["summerBypassEnable"]["allowedValues"],
+                        )
+                    )
+            holiday_mode = getattr(coordinator.data, "holiday_mode", None)
+            if isinstance(holiday_mode, dict) and "allowedValues" in holiday_mode:
                 entities.append(
                     BoschComSelectHolidayMode(
                         coordinator=coordinator,
                         field="holiday_mode",
-                        allowedValues=coordinator.data.holiday_mode["allowedValues"],
+                        allowedValues=holiday_mode["allowedValues"],
                     )
                 )
-            if (
-                coordinator.data.away_mode
-                and "allowedValues" in coordinator.data.away_mode
-            ):
+            away_mode = getattr(coordinator.data, "away_mode", None)
+            if isinstance(away_mode, dict) and "allowedValues" in away_mode:
                 entities.append(
                     BoschComSelectAwayMode(
                         coordinator=coordinator,
                         field="away_mode",
-                        allowedValues=coordinator.data.away_mode["allowedValues"],
+                        allowedValues=away_mode["allowedValues"],
                     )
                 )
     async_add_entities(entities)
@@ -897,4 +906,53 @@ class BoschComSelectHcControl(CoordinatorEntity, SelectEntity):
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 self._attr_current_option = (entry.get("control") or {}).get("value")
+        self.async_write_ha_state()
+
+
+class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
+    """Representation of ventilation summer-bypass manual enable select."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        field: str,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "ventilation_summer_enable"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}-summerbypass-enable"
+        self._attr_name = field + "_summerbypass_enable"
+        self._coordinator = coordinator
+        self._attr_should_poll = False
+        self._attr_options = allowedValues
+        self.field = field
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option."""
+        await self._coordinator.bhc.async_set_ventilation_summer_enable(
+            self._coordinator.data.device["deviceId"], self.field, option
+        )
+
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Get the current status of the select entity from device_status."""
+        for entry in self.coordinator.data.ventilation:
+            if entry.get("id") == "/ventilation/" + self.field:
+                return (entry.get("summerBypassEnable") or {}).get("value")
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        for entry in self.coordinator.data.ventilation:
+            if entry.get("id") == "/ventilation/" + self.field:
+                self._attr_current_option = (entry.get("summerBypassEnable") or {}).get(
+                    "value"
+                )
         self.async_write_ha_state()

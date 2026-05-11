@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from homeassistant import config_entries, core
 from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.const import UnitOfElectricCurrent
+from homeassistant.const import UnitOfElectricCurrent, UnitOfTime
 from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinatorCommodule
+from .coordinator import (
+    BoschComModuleCoordinatorCommodule,
+    BoschComModuleCoordinatorK40,
+)
 
 PARALLEL_UPDATES = 1
 
@@ -32,6 +35,19 @@ async def async_setup_entry(
                 entities.append(
                     BoschComCommoduleLimitNumber(coordinator=coordinator, cp_id=cp_id)
                 )
+        if coordinator.data.device["deviceType"] in ("k30", "k40"):
+            for entry in coordinator.data.ventilation:
+                zone_id = entry["id"].split("/")[-1]
+                duration = entry.get("summerBypassDuration") or {}
+                if "value" in duration:
+                    entities.append(
+                        BoschComNumberVentilationSummerDuration(
+                            coordinator=coordinator,
+                            zone_id=zone_id,
+                            min_value=duration.get("minValue", 1),
+                            max_value=duration.get("maxValue", 12),
+                        )
+                    )
     async_add_entities(entities)
 
 
@@ -173,4 +189,67 @@ class BoschComCommoduleLimitNumber(CoordinatorEntity, NumberEntity):
                 self._attr_native_value = None
         else:
             self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+class BoschComNumberVentilationSummerDuration(CoordinatorEntity, NumberEntity):
+    """Representation of ventilation summer-bypass manual override duration."""
+
+    _attr_has_entity_name = True
+    _attr_mode = NumberMode.SLIDER
+    _attr_should_poll = False
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        zone_id: str,
+        min_value: float,
+        max_value: float,
+    ) -> None:
+        """Initialize number entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "ventilation_summer_duration"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = (
+            f"{coordinator.unique_id}-{zone_id}-summerbypass-duration"
+        )
+        self._attr_name = zone_id + "_summerbypass_duration"
+        self._attr_native_min_value = min_value
+        self._attr_native_max_value = max_value
+        self._coordinator = coordinator
+        self._zone_id = zone_id
+
+    def _get_zone(self) -> dict | None:
+        """Return the ventilation zone entry."""
+        for entry in self._coordinator.data.ventilation:
+            if entry.get("id") == "/ventilation/" + self._zone_id:
+                return entry
+        return None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current duration in hours."""
+        zone = self._get_zone()
+        if zone is None:
+            return None
+        val = (zone.get("summerBypassDuration") or {}).get("value")
+        try:
+            return float(val) if val is not None else None
+        except (ValueError, TypeError):
+            return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Send new duration to the device."""
+        device_id = self._coordinator.data.device["deviceId"]
+        await self._coordinator.bhc.async_set_ventilation_summer_duration(
+            device_id, self._zone_id, value
+        )
+        await self._coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._attr_native_value = self.native_value
         self.async_write_ha_state()

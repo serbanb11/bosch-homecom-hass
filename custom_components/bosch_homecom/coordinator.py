@@ -16,8 +16,10 @@ from homecom_alt import (
     AuthFailedError,
     BHCDeviceCommodule,
     BHCDeviceGeneric,
+    BHCDeviceIcom,
     BHCDeviceK40,
     BHCDeviceRac,
+    BHCDeviceRrc2,
     BHCDeviceWddw2,
     HomeComRac,
     InvalidSensorDataError,
@@ -33,6 +35,8 @@ T = TypeVar(
     BHCDeviceGeneric,
     BHCDeviceRac,
     BHCDeviceK40,
+    BHCDeviceIcom,
+    BHCDeviceRrc2,
     BHCDeviceWddw2,
     BHCDeviceCommodule,
 )
@@ -170,6 +174,43 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
             firmware=data.firmware,
             notifications=data.notifications,
             dhw_circuits=data.dhw_circuits,
+        )
+
+
+class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]):
+    """A coordinator for icom heat pumps (subset of K40 endpoint surface)."""
+
+    def _build_device_data(self, data: BHCDeviceIcom) -> BHCDeviceIcom:
+        """Build icom device data."""
+        return BHCDeviceIcom(
+            device=self.device,
+            firmware=data.firmware,
+            notifications=data.notifications,
+            holiday_mode=data.holiday_mode,
+            heat_sources=data.heat_sources,
+            dhw_circuits=data.dhw_circuits,
+            heating_circuits=data.heating_circuits,
+            solar_circuits=data.solar_circuits,
+            ventilation=data.ventilation,
+            system_info=data.system_info,
+            system_bus=data.system_bus,
+        )
+
+
+class BoschComModuleCoordinatorRrc2(BoschComModuleCoordinatorBase[BHCDeviceRrc2]):
+    """A coordinator for rrc2 (Remeha Remote Control) gateways."""
+
+    def _build_device_data(self, data: BHCDeviceRrc2) -> BHCDeviceRrc2:
+        """Build rrc2 device data."""
+        return BHCDeviceRrc2(
+            device=self.device,
+            firmware=data.firmware,
+            notifications=data.notifications,
+            zones=data.zones,
+            heating_circuits=data.heating_circuits,
+            dhw_circuits=data.dhw_circuits,
+            gateway_info=data.gateway_info,
+            system_location=data.system_location,
         )
 
 

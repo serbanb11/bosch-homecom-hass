@@ -14,8 +14,10 @@ from homecom_alt import (
     HomeComAlt,
     HomeComCommodule,
     HomeComGeneric,
+    HomeComIcom,
     HomeComK40,
     HomeComRac,
+    HomeComRrc2,
     HomeComWddw2,
     NotRespondingError,
 )
@@ -44,8 +46,10 @@ from .const import (
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorGeneric,
+    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
+    BoschComModuleCoordinatorRrc2,
     BoschComModuleCoordinatorWddw2,
 )
 
@@ -138,11 +142,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     auth_provider,
                 )
             )
-        elif device["deviceType"] in ("k40", "k30", "icom", "rrc2"):
+        elif device["deviceType"] in ("k40", "k30"):
             coordinators.append(
                 BoschComModuleCoordinatorK40(
                     hass,
                     HomeComK40(
+                        websession, coordinator_options, device_id, auth_provider
+                    ),
+                    device,
+                    firmware,
+                    entry,
+                    auth_provider,
+                )
+            )
+        elif device["deviceType"] == "icom":
+            coordinators.append(
+                BoschComModuleCoordinatorIcom(
+                    hass,
+                    HomeComIcom(
+                        websession, coordinator_options, device_id, auth_provider
+                    ),
+                    device,
+                    firmware,
+                    entry,
+                    auth_provider,
+                )
+            )
+        elif device["deviceType"] == "rrc2":
+            coordinators.append(
+                BoschComModuleCoordinatorRrc2(
+                    hass,
+                    HomeComRrc2(
                         websession, coordinator_options, device_id, auth_provider
                     ),
                     device,

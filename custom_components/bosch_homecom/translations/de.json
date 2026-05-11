@@ -177,6 +177,13 @@
             },
             "hc_control": {
                 "name": "HK Regelung"
+            },
+            "ventilation_summer_enable": {
+                "name": "Sommer-Bypass",
+                "state": {
+                    "no": "Aus",
+                    "yes": "An"
+                }
             }
         },
         "sensor": {
@@ -270,6 +277,9 @@
             },
             "wb_charge_limit": {
                 "name": "Ladestromlimit"
+            },
+            "ventilation_summer_duration": {
+                "name": "Sommer-Bypass Dauer"
             }
         },
         "button": {

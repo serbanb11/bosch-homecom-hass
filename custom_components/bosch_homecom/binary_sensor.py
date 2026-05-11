@@ -31,7 +31,7 @@ async def async_setup_entry(
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "commodule":
             entities.append(BoschComCommoduleNetworkSensor(coordinator=coordinator))
-        if coordinator.data.device["deviceType"] in ("k30", "k40", "icom", "rrc2"):
+        if coordinator.data.device["deviceType"] in ("k30", "k40"):
             for dev in coordinator.data.devices or []:
                 if dev.get("rfConnectionStatus"):
                     dev_id = dev["id"].split("/")[-1]
