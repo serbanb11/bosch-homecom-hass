@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant import config_entries, core
 from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.const import UnitOfElectricCurrent, UnitOfTime
+from homeassistant.const import UnitOfElectricCurrent, UnitOfTemperature, UnitOfTime
 from homeassistant.core import callback
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
+    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
+    BoschComModuleCoordinatorRrc2,
 )
 
 PARALLEL_UPDATES = 1
@@ -48,6 +53,10 @@ async def async_setup_entry(
                             max_value=duration.get("maxValue", 12),
                         )
                     )
+        if coordinator.data.device["deviceType"] == "rrc2":
+            entities.extend(_build_rrc2_numbers(coordinator))
+        if coordinator.data.device["deviceType"] == "icom":
+            entities.extend(_build_icom_dhw_numbers(coordinator))
     async_add_entities(entities)
 
 
@@ -253,3 +262,350 @@ class BoschComNumberVentilationSummerDuration(CoordinatorEntity, NumberEntity):
         """Handle updated data from the coordinator."""
         self._attr_native_value = self.native_value
         self.async_write_ha_state()
+
+
+# ---- RRC2 numbers -----------------------------------------------------------
+
+
+class BoschComRrc2Number(CoordinatorEntity, NumberEntity):
+    """Writable scalar for one field of an RRC2 HC or DHW circuit."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorRrc2,
+        *,
+        scope: str,
+        circuit_id: str,
+        field: str,
+        setter: str,
+        name_suffix: str,
+        unique_suffix: str,
+        min_value: float,
+        max_value: float,
+        step: float,
+        unit: str | None = None,
+        icon: str | None = None,
+        diagnostic: bool = True,
+        cast: type = float,
+    ) -> None:
+        """Initialize one RRC2 number."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_native_min_value = min_value
+        self._attr_native_max_value = max_value
+        self._attr_native_step = step
+        self._attr_native_unit_of_measurement = unit
+        self._attr_mode = NumberMode.BOX
+        if icon:
+            self._attr_icon = icon
+        if diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._scope = scope
+        self._circuit_id = circuit_id
+        self._field = field
+        self._setter = setter
+        self._cast = cast
+
+    def _find_circuit(self) -> dict | None:
+        refs = (
+            self.coordinator.data.heating_circuits
+            if self._scope == "hc"
+            else self.coordinator.data.dhw_circuits
+        )
+        suffix = f"/{self._circuit_id}"
+        for ref in refs or []:
+            if ref.get("id", "").endswith(suffix):
+                return ref
+        return None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current value."""
+        ref = self._find_circuit()
+        if not ref:
+            return None
+        node = ref.get(self._field)
+        if not isinstance(node, dict):
+            return None
+        val = node.get("value")
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Push the new value to the device."""
+        device_id = self.coordinator.data.device["deviceId"]
+        setter = getattr(self.coordinator.bhc, self._setter)
+        await setter(device_id, self._circuit_id, self._cast(value))
+        await self.coordinator.async_request_refresh()
+
+
+def _build_rrc2_numbers(
+    coordinator: BoschComModuleCoordinatorRrc2,
+) -> list[NumberEntity]:
+    """Build the standard RRC2 number set for one device."""
+    entities: list[NumberEntity] = []
+
+    hc_specs: list[dict[str, Any]] = [
+        {
+            "field": "heatCurveMax",
+            "setter": "async_set_hc_heat_curve_max",
+            "name": "heat_curve_max",
+            "min": 40,
+            "max": 90,
+            "step": 1,
+            "unit": UnitOfTemperature.CELSIUS,
+        },
+        {
+            "field": "heatCurveMin",
+            "setter": "async_set_hc_heat_curve_min",
+            "name": "heat_curve_min",
+            "min": 20,
+            "max": 90,
+            "step": 1,
+            "unit": UnitOfTemperature.CELSIUS,
+        },
+        {
+            "field": "maxSupply",
+            "setter": "async_set_hc_max_supply",
+            "name": "max_supply",
+            "min": 25,
+            "max": 90,
+            "step": 1,
+            "unit": UnitOfTemperature.CELSIUS,
+        },
+        {
+            "field": "minSupply",
+            "setter": "async_set_hc_min_supply",
+            "name": "min_supply",
+            "min": 10,
+            "max": 90,
+            "step": 1,
+            "unit": UnitOfTemperature.CELSIUS,
+        },
+        {
+            "field": "nightThreshold",
+            "setter": "async_set_hc_night_threshold",
+            "name": "night_threshold",
+            "min": 5,
+            "max": 30,
+            "step": 0.5,
+            "unit": UnitOfTemperature.CELSIUS,
+        },
+        {
+            "field": "roomInfluence",
+            "setter": "async_set_hc_room_influence",
+            "name": "room_influence",
+            "min": 0,
+            "max": 3,
+            "step": 1,
+            "unit": None,
+        },
+    ]
+
+    for ref in coordinator.data.heating_circuits or []:
+        hc_id = ref["id"].split("/")[-1]
+        for spec in hc_specs:
+            if not isinstance(ref.get(spec["field"]), dict):
+                continue
+            entities.append(
+                BoschComRrc2Number(
+                    coordinator,
+                    scope="hc",
+                    circuit_id=hc_id,
+                    field=spec["field"],
+                    setter=spec["setter"],
+                    name_suffix=f"{hc_id}_{spec['name']}",
+                    unique_suffix=f"{hc_id}-{spec['name']}",
+                    min_value=spec["min"],
+                    max_value=spec["max"],
+                    step=spec["step"],
+                    unit=spec["unit"],
+                )
+            )
+
+    dhw_specs: list[dict[str, Any]] = [
+        {
+            "field": "extraDhwDuration",
+            "setter": "async_set_dhw_extra_dhw_duration",
+            "name": "extra_dhw_duration",
+            "min": 15,
+            "max": 2880,
+            "step": 15,
+            "unit": UnitOfTime.MINUTES,
+            "cast": int,
+        },
+        {
+            "field": "temperatureLevelHigh",
+            "setter": "async_set_dhw_temp_level_high",
+            "name": "temperature_level_high",
+            "min": 10,
+            "max": 80,
+            "step": 1,
+            "unit": UnitOfTemperature.CELSIUS,
+            "cast": float,
+        },
+        {
+            "field": "thermalDisinfectTime",
+            "setter": "async_set_dhw_thermal_disinfect_time",
+            "name": "thermal_disinfect_time",
+            "min": 0,
+            "max": 1439,
+            "step": 1,
+            "unit": UnitOfTime.MINUTES,
+            "cast": int,
+        },
+    ]
+
+    for ref in coordinator.data.dhw_circuits or []:
+        dhw_id = ref["id"].split("/")[-1]
+        for spec in dhw_specs:
+            if not isinstance(ref.get(spec["field"]), dict):
+                continue
+            entities.append(
+                BoschComRrc2Number(
+                    coordinator,
+                    scope="dhw",
+                    circuit_id=dhw_id,
+                    field=spec["field"],
+                    setter=spec["setter"],
+                    name_suffix=f"{dhw_id}_{spec['name']}",
+                    unique_suffix=f"{dhw_id}-{spec['name']}",
+                    min_value=spec["min"],
+                    max_value=spec["max"],
+                    step=spec["step"],
+                    unit=spec["unit"],
+                    cast=spec.get("cast", float),
+                )
+            )
+
+    return entities
+
+
+# ---- ICOM DHW numbers -------------------------------------------------------
+
+
+class BoschComIcomDhwNumber(CoordinatorEntity, NumberEntity):
+    """Writable scalar for one DHW field of an icom heat pump."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorIcom,
+        *,
+        dhw_id: str,
+        field: str,
+        setter: str,
+        name_suffix: str,
+        unique_suffix: str,
+        min_value: float,
+        max_value: float,
+        step: float,
+        unit: str | None = None,
+        icon: str | None = None,
+        cast: type = float,
+    ) -> None:
+        """Initialize one icom DHW number."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_native_min_value = min_value
+        self._attr_native_max_value = max_value
+        self._attr_native_step = step
+        self._attr_native_unit_of_measurement = unit
+        if icon:
+            self._attr_icon = icon
+        self._dhw_id = dhw_id
+        self._field = field
+        self._setter = setter
+        self._cast = cast
+
+    def _find_dhw(self) -> dict | None:
+        suffix = f"/{self._dhw_id}"
+        for ref in self.coordinator.data.dhw_circuits or []:
+            if ref.get("id", "").endswith(suffix):
+                return ref
+        return None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current value."""
+        ref = self._find_dhw()
+        if not ref:
+            return None
+        node = ref.get(self._field)
+        if not isinstance(node, dict):
+            return None
+        val = node.get("value")
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Push new value to the device."""
+        device_id = self.coordinator.data.device["deviceId"]
+        setter = getattr(self.coordinator.bhc, self._setter)
+        await setter(device_id, self._dhw_id, self._cast(value))
+        await self.coordinator.async_request_refresh()
+
+
+def _build_icom_dhw_numbers(
+    coordinator: BoschComModuleCoordinatorIcom,
+) -> list[NumberEntity]:
+    """Build the writable icom DHW number set for one device."""
+    entities: list[NumberEntity] = []
+
+    for ref in coordinator.data.dhw_circuits or []:
+        dhw_id = ref["id"].split("/")[-1]
+
+        charge_dur = ref.get("chargeDuration")
+        if isinstance(charge_dur, dict):
+            entities.append(
+                BoschComIcomDhwNumber(
+                    coordinator,
+                    dhw_id=dhw_id,
+                    field="chargeDuration",
+                    setter="async_set_dhw_charge_duration",
+                    name_suffix=f"{dhw_id}_charge_duration",
+                    unique_suffix=f"{dhw_id}-charge-duration",
+                    min_value=charge_dur.get("minValue", 15),
+                    max_value=charge_dur.get("maxValue", 2880),
+                    step=15,
+                    unit=UnitOfTime.MINUTES,
+                    cast=int,
+                )
+            )
+
+        single_setpoint = ref.get("singleChargeSetpoint")
+        if isinstance(single_setpoint, dict):
+            entities.append(
+                BoschComIcomDhwNumber(
+                    coordinator,
+                    dhw_id=dhw_id,
+                    field="singleChargeSetpoint",
+                    setter="async_set_dhw_charge_setpoint",
+                    name_suffix=f"{dhw_id}_single_charge_setpoint",
+                    unique_suffix=f"{dhw_id}-single-charge-setpoint",
+                    min_value=single_setpoint.get("minValue", 50),
+                    max_value=single_setpoint.get("maxValue", 70),
+                    step=1,
+                    unit=UnitOfTemperature.CELSIUS,
+                )
+            )
+
+    return entities

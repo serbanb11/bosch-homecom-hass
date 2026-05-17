@@ -8,7 +8,11 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
+from .coordinator import (
+    BoschComModuleCoordinatorK40,
+    BoschComModuleCoordinatorRac,
+    BoschComModuleCoordinatorRrc2,
+)
 
 SCAN_INTERVAL = timedelta(minutes=1440)
 
@@ -172,6 +176,8 @@ async def async_setup_entry(
                         allowedValues=away_mode["allowedValues"],
                     )
                 )
+        if coordinator.data.device["deviceType"] == "rrc2":
+            entities.extend(_build_rrc2_selects(coordinator))
     async_add_entities(entities)
 
 
@@ -956,3 +962,124 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
                     "value"
                 )
         self.async_write_ha_state()
+
+
+# ---- RRC2 selects -----------------------------------------------------------
+#
+# RRC2 endpoints never return `allowedValues`, so option lists are hard-coded
+# from issue #78 response dumps. Values that the device rejects on PUT will
+# surface as a failed write rather than be filtered out client-side.
+
+
+class BoschComRrc2CircuitSelect(CoordinatorEntity, SelectEntity):
+    """Writable enum field on an RRC2 HC or DHW circuit."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorRrc2,
+        *,
+        scope: str,
+        circuit_id: str,
+        field: str,
+        setter: str,
+        options: list[str],
+        name_suffix: str,
+        unique_suffix: str,
+    ) -> None:
+        """Initialize one circuit-scoped select."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_options = options
+        self._scope = scope
+        self._circuit_id = circuit_id
+        self._field = field
+        self._setter = setter
+
+    def _find_circuit(self) -> dict | None:
+        refs = (
+            self.coordinator.data.heating_circuits
+            if self._scope == "hc"
+            else self.coordinator.data.dhw_circuits
+        )
+        suffix = f"/{self._circuit_id}"
+        for ref in refs or []:
+            if ref.get("id", "").endswith(suffix):
+                return ref
+        return None
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current value."""
+        ref = self._find_circuit()
+        if not ref:
+            return None
+        node = ref.get(self._field)
+        if not isinstance(node, dict):
+            return None
+        value = node.get("value")
+        return None if value is None else str(value)
+
+    async def async_select_option(self, option: str) -> None:
+        """Push a new value to the device."""
+        setter = getattr(self.coordinator.bhc, self._setter)
+        await setter(self.coordinator.data.device["deviceId"], self._circuit_id, option)
+        await self.coordinator.async_request_refresh()
+
+
+def _build_rrc2_selects(
+    coordinator: BoschComModuleCoordinatorRrc2,
+) -> list[SelectEntity]:
+    """Build the standard RRC2 select set for one device."""
+    entities: list[SelectEntity] = []
+
+    for ref in coordinator.data.heating_circuits or []:
+        hc_id = ref["id"].split("/")[-1]
+        if isinstance(ref.get("control"), dict):
+            entities.append(
+                BoschComRrc2CircuitSelect(
+                    coordinator,
+                    scope="hc",
+                    circuit_id=hc_id,
+                    field="control",
+                    setter="async_set_hc_control",
+                    options=["weather", "room"],
+                    name_suffix=f"{hc_id}_control",
+                    unique_suffix=f"{hc_id}-control",
+                )
+            )
+
+    for ref in coordinator.data.dhw_circuits or []:
+        dhw_id = ref["id"].split("/")[-1]
+        if isinstance(ref.get("operationMode"), dict):
+            entities.append(
+                BoschComRrc2CircuitSelect(
+                    coordinator,
+                    scope="dhw",
+                    circuit_id=dhw_id,
+                    field="operationMode",
+                    setter="async_put_dhw_operation_mode",
+                    options=["Off", "Auto", "High"],
+                    name_suffix=f"{dhw_id}_operation_mode",
+                    unique_suffix=f"{dhw_id}-operation-mode",
+                )
+            )
+        if isinstance(ref.get("thermalDisinfectWeekDay"), dict):
+            entities.append(
+                BoschComRrc2CircuitSelect(
+                    coordinator,
+                    scope="dhw",
+                    circuit_id=dhw_id,
+                    field="thermalDisinfectWeekDay",
+                    setter="async_set_dhw_thermal_disinfect_weekday",
+                    options=["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+                    name_suffix=f"{dhw_id}_thermal_disinfect_weekday",
+                    unique_suffix=f"{dhw_id}-thermal-disinfect-weekday",
+                )
+            )
+
+    return entities

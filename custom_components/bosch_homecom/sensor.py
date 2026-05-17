@@ -16,7 +16,14 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+    UnitOfVolume,
+)
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -24,8 +31,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import BOSCH_SENSOR_DESCRIPTORS
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
+    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
+    BoschComModuleCoordinatorRrc2,
     BoschComModuleCoordinatorWddw2,
 )
 
@@ -63,7 +72,7 @@ async def async_setup_entry(
                     coordinator=coordinator, config_entry=config_entry
                 )
             )
-        elif device_type in ("k40", "k30", "icom"):
+        elif device_type in ("k40", "k30", "icom", "rrc2"):
             entities.append(
                 BoschComSensorNotificationsK40(
                     coordinator=coordinator, config_entry=config_entry
@@ -193,6 +202,15 @@ async def async_setup_entry(
                         )
                     )
 
+        # ---- ICOM diagnostic extras (healthStatus, brand, hs return/starts) ----
+        if device_type == "icom":
+            entities.extend(_build_icom_extra_sensors(coordinator))
+
+        # ---- RRC2 (zone / hc / dhw / heat sources / system / gateway) ----
+        if device_type == "rrc2":
+            for sensor in _build_rrc2_sensors(coordinator):
+                entities.append(sensor)
+
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
         elif device_type == "wddw2":
             # Existing per-circuit DHW sensor
@@ -206,6 +224,9 @@ async def async_setup_entry(
                             field=dhw_id,
                         )
                     )
+
+            # Issue #129: surface heat-source + water totals (top-level paths).
+            entities.extend(_build_wddw2_totals_sensors(coordinator))
 
             # NEW: generic sensors from descriptors (BOSCH_SENSOR_DESCRIPTORS["wddw2"])
             wddw2_desc = BOSCH_SENSOR_DESCRIPTORS.get("wddw2", [])
@@ -1202,30 +1223,40 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
         self._attr_has_entity_name = True
         self._attr_name = name
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
-        self._attr_native_unit_of_measurement = unit
+        self._declared_unit = unit
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._resolver = DynamicPathResolver(path)
         self._attr_device_info = coordinator.device_info
         self._attr_entity_category = None  # or EntityCategory.DIAGNOSTIC if you prefer
 
-    @property
-    def native_value(self) -> Any:
+    def _coordinator_data_as_dict(self) -> dict:
         data = getattr(self.coordinator, "data", {}) or {}
         if hasattr(data, "asdict"):
-            data = data.asdict()
-        elif hasattr(data, "__dict__"):
-            data = data.__dict__
-        value = self._resolver.get(data)
-        if self._attr_device_class == SensorDeviceClass.TEMPERATURE:
-            node = self._resolver.get_node(data)
-            if isinstance(node, dict):
-                unit_str = node.get("unitOfMeasure")
-                if unit_str == "F":
-                    self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
-                elif unit_str == "C":
-                    self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        return value
+            return data.asdict()
+        if hasattr(data, "__dict__"):
+            return data.__dict__
+        return data
+
+    @property
+    def native_unit_of_measurement(self) -> Optional[str]:
+        """Resolve the live unit from the API's unitOfMeasure node, falling
+        back to the descriptor-declared unit when the API doesn't expose one.
+        """
+        if self._attr_device_class != SensorDeviceClass.TEMPERATURE:
+            return self._declared_unit
+        node = self._resolver.get_node(self._coordinator_data_as_dict())
+        if isinstance(node, dict):
+            unit_str = node.get("unitOfMeasure")
+            if unit_str == "F":
+                return UnitOfTemperature.FAHRENHEIT
+            if unit_str == "C":
+                return UnitOfTemperature.CELSIUS
+        return self._declared_unit
+
+    @property
+    def native_value(self) -> Any:
+        return self._resolver.get(self._coordinator_data_as_dict())
 
 
 class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
@@ -2125,3 +2156,572 @@ class BoschComCommoduleChargelogSensor(_CommoduleSensorBase):
             attrs["auth_label"] = auth.get("label")
         attrs["session_count"] = len(sessions)
         return attrs
+
+
+# ---- RRC2 sensors -----------------------------------------------------------
+
+
+class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
+    """Read-only sensor for one field of an RRC2 circuit, system or gateway block."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorRrc2,
+        *,
+        scope: str,
+        circuit_id: str | None,
+        field: str,
+        name_suffix: str,
+        unique_suffix: str,
+        device_class: SensorDeviceClass | None = None,
+        state_class: SensorStateClass | None = None,
+        unit: str | None = None,
+        icon: str | None = None,
+        diagnostic: bool = False,
+    ) -> None:
+        """Initialize one RRC2 sensor."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = unit
+        if icon:
+            self._attr_icon = icon
+        if diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._scope = scope
+        self._circuit_id = circuit_id
+        self._field = field
+
+    def _find_circuit(self, refs: list) -> dict | None:
+        if refs is None:
+            return None
+        suffix = f"/{self._circuit_id}"
+        for ref in refs:
+            if ref.get("id", "").endswith(suffix):
+                return ref
+        return None
+
+    def _read_value(self) -> Any:
+        data = self.coordinator.data
+        if not data:
+            return None
+
+        node: dict | None = None
+        if self._scope == "zone":
+            ref = self._find_circuit(data.zones or [])
+            node = (ref or {}).get(self._field)
+        elif self._scope == "hc":
+            ref = self._find_circuit(data.heating_circuits or [])
+            node = (ref or {}).get(self._field)
+        elif self._scope == "dhw":
+            ref = self._find_circuit(data.dhw_circuits or [])
+            node = (ref or {}).get(self._field)
+        elif self._scope == "heat_sources":
+            node = (data.heat_sources or {}).get(self._field)
+        elif self._scope == "system":
+            if self._field == "outdoor_temp":
+                node = data.outdoor_temp
+            elif self._field == "indoor_humidity":
+                node = data.indoor_humidity
+        elif self._scope == "gateway":
+            node = (data.gateway_info or {}).get(self._field)
+
+        if not isinstance(node, dict):
+            return None
+        return node.get("value")
+
+    @property
+    def native_value(self) -> Any:
+        """Return sensor value."""
+        return self._read_value()
+
+
+def _build_rrc2_sensors(
+    coordinator: BoschComModuleCoordinatorRrc2,
+) -> list[SensorEntity]:
+    """Build the standard RRC2 sensor set for one device."""
+    entities: list[SensorEntity] = []
+
+    for ref in coordinator.data.zones or []:
+        zone_id = ref["id"].split("/")[-1]
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="zone",
+                circuit_id=zone_id,
+                field="temperatureActual",
+                name_suffix=f"{zone_id}_temperature_actual",
+                unique_suffix=f"{zone_id}-temperature-actual",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+            )
+        )
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="zone",
+                circuit_id=zone_id,
+                field="temperatureHeatingSetpoint",
+                name_suffix=f"{zone_id}_heating_setpoint",
+                unique_suffix=f"{zone_id}-heating-setpoint",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+                diagnostic=True,
+            )
+        )
+
+    for ref in coordinator.data.heating_circuits or []:
+        hc_id = ref["id"].split("/")[-1]
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="hc",
+                circuit_id=hc_id,
+                field="supplyTemperatureSetpoint",
+                name_suffix=f"{hc_id}_supply_temperature_setpoint",
+                unique_suffix=f"{hc_id}-supply-temperature-setpoint",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+            )
+        )
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="hc",
+                circuit_id=hc_id,
+                field="operatingSeason",
+                name_suffix=f"{hc_id}_operating_season",
+                unique_suffix=f"{hc_id}-operating-season",
+                diagnostic=True,
+            )
+        )
+
+    for ref in coordinator.data.dhw_circuits or []:
+        dhw_id = ref["id"].split("/")[-1]
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="dhw",
+                circuit_id=dhw_id,
+                field="actualTemp",
+                name_suffix=f"{dhw_id}_actual_temp",
+                unique_suffix=f"{dhw_id}-actual-temp",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+            )
+        )
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="dhw",
+                circuit_id=dhw_id,
+                field="state",
+                name_suffix=f"{dhw_id}_state",
+                unique_suffix=f"{dhw_id}-state",
+                diagnostic=True,
+            )
+        )
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="dhw",
+                circuit_id=dhw_id,
+                field="hotWaterSystem",
+                name_suffix=f"{dhw_id}_hot_water_system",
+                unique_suffix=f"{dhw_id}-hot-water-system",
+                diagnostic=True,
+            )
+        )
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="dhw",
+                circuit_id=dhw_id,
+                field="thermalDisinfectLastResult",
+                name_suffix=f"{dhw_id}_thermal_disinfect_last_result",
+                unique_suffix=f"{dhw_id}-thermal-disinfect-last-result",
+                diagnostic=True,
+            )
+        )
+
+    entities.extend(
+        [
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="heat_sources",
+                circuit_id=None,
+                field="supplyTemperature",
+                name_suffix="hs_supply_temperature",
+                unique_suffix="hs-supply-temperature",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+            ),
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="heat_sources",
+                circuit_id=None,
+                field="returnTemperature",
+                name_suffix="hs_return_temperature",
+                unique_suffix="hs-return-temperature",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+            ),
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="heat_sources",
+                circuit_id=None,
+                field="modulation",
+                name_suffix="hs_modulation",
+                unique_suffix="hs-modulation",
+                state_class=SensorStateClass.MEASUREMENT,
+                unit="%",
+            ),
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="heat_sources",
+                circuit_id=None,
+                field="flameIndication",
+                name_suffix="hs_flame_indication",
+                unique_suffix="hs-flame-indication",
+                icon="mdi:fire",
+                diagnostic=True,
+            ),
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="heat_sources",
+                circuit_id=None,
+                field="type",
+                name_suffix="hs_type",
+                unique_suffix="hs-type",
+                diagnostic=True,
+            ),
+        ]
+    )
+
+    entities.append(
+        BoschComRrc2Sensor(
+            coordinator,
+            scope="system",
+            circuit_id=None,
+            field="outdoor_temp",
+            name_suffix="outdoor_temperature",
+            unique_suffix="outdoor-temperature",
+            device_class=SensorDeviceClass.TEMPERATURE,
+            state_class=SensorStateClass.MEASUREMENT,
+            unit=UnitOfTemperature.CELSIUS,
+        )
+    )
+    if coordinator.data.indoor_humidity:
+        entities.append(
+            BoschComRrc2Sensor(
+                coordinator,
+                scope="system",
+                circuit_id=None,
+                field="indoor_humidity",
+                name_suffix="indoor_humidity",
+                unique_suffix="indoor-humidity",
+                device_class=SensorDeviceClass.HUMIDITY,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit="%",
+            )
+        )
+
+    entities.append(
+        BoschComRrc2Sensor(
+            coordinator,
+            scope="gateway",
+            circuit_id=None,
+            field="wifiRssi",
+            name_suffix="wifi_rssi",
+            unique_suffix="wifi-rssi",
+            device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+            state_class=SensorStateClass.MEASUREMENT,
+            unit="dBm",
+            diagnostic=True,
+        )
+    )
+
+    return entities
+
+
+# ---- ICOM extra diagnostic sensors -----------------------------------------
+
+
+class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic sensor for an icom top-level or heat-sources field."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorIcom,
+        *,
+        attr: str,
+        sub_key: str | None,
+        name_suffix: str,
+        unique_suffix: str,
+        device_class: SensorDeviceClass | None = None,
+        state_class: SensorStateClass | None = None,
+        unit: str | None = None,
+        diagnostic: bool = True,
+        icon: str | None = None,
+    ) -> None:
+        """Initialize the sensor.
+
+        attr names the top-level BHCDeviceIcom field (e.g. "health_status").
+        sub_key, if set, looks up a key within that dict (used to dig into
+        heat_sources for returnTemperature / numberOfStarts).
+        """
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = unit
+        if icon:
+            self._attr_icon = icon
+        if diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_path = attr
+        self._sub_key = sub_key
+
+    @property
+    def native_value(self) -> Any:
+        """Return the field value."""
+        data = self.coordinator.data
+        if data is None:
+            return None
+        node = getattr(data, self._attr_path, None)
+        if self._sub_key is not None:
+            if not isinstance(node, dict):
+                return None
+            node = node.get(self._sub_key)
+        if not isinstance(node, dict):
+            return None
+        return node.get("value")
+
+
+def _build_icom_extra_sensors(
+    coordinator: BoschComModuleCoordinatorIcom,
+) -> list[SensorEntity]:
+    """Build icom-only diagnostic sensors that don't fit the K40 entities."""
+    entities: list[SensorEntity] = []
+
+    data = coordinator.data
+    if data is None:
+        return entities
+
+    if isinstance(data.health_status, dict) and "value" in data.health_status:
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="health_status",
+                sub_key=None,
+                name_suffix="health_status",
+                unique_suffix="health-status",
+                icon="mdi:heart-pulse",
+            )
+        )
+    if isinstance(data.brand, dict) and "value" in data.brand:
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="brand",
+                sub_key=None,
+                name_suffix="brand",
+                unique_suffix="brand",
+                icon="mdi:tag",
+            )
+        )
+
+    hs = data.heat_sources or {}
+    if isinstance(hs.get("returnTemperature"), dict):
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="returnTemperature",
+                name_suffix="hs_return_temperature",
+                unique_suffix="hs-return-temperature",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+                diagnostic=False,
+            )
+        )
+    if isinstance(hs.get("numberOfStarts"), dict):
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="numberOfStarts",
+                name_suffix="hs_number_of_starts",
+                unique_suffix="hs-number-of-starts",
+                state_class=SensorStateClass.TOTAL_INCREASING,
+            )
+        )
+
+    return entities
+
+
+# ---- WDDW2 heat-source + water totals (issue #129) -------------------------
+
+
+class BoschComWddw2TotalsSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic / totals sensor for a top-level WDDW2 field.
+
+    Reads either coordinator.data.water_total_consumption directly, or a key
+    inside coordinator.data.heat_sources.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorWddw2,
+        *,
+        source: str,
+        sub_key: str | None,
+        name_suffix: str,
+        unique_suffix: str,
+        device_class: SensorDeviceClass | None,
+        state_class: SensorStateClass | None,
+        unit: str | None,
+        icon: str | None = None,
+    ) -> None:
+        """Initialize one WDDW2 totals sensor."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = unit
+        if icon:
+            self._attr_icon = icon
+        self._source = source
+        self._sub_key = sub_key
+
+    def _node(self) -> dict | None:
+        data = self.coordinator.data
+        if data is None:
+            return None
+        if self._source == "water_total_consumption":
+            node = data.water_total_consumption
+        elif self._source == "heat_sources":
+            hs = data.heat_sources or {}
+            node = hs.get(self._sub_key) if self._sub_key else None
+        else:
+            return None
+        return node if isinstance(node, dict) else None
+
+    @property
+    def native_value(self) -> Any:
+        """Return the field value."""
+        node = self._node()
+        if node is None:
+            return None
+        return node.get("value")
+
+
+def _build_wddw2_totals_sensors(
+    coordinator: BoschComModuleCoordinatorWddw2,
+) -> list[SensorEntity]:
+    """Build the 5 priority WDDW2 totals sensors from issue #129."""
+    entities: list[SensorEntity] = []
+    data = coordinator.data
+    if data is None:
+        return entities
+
+    if isinstance(data.water_total_consumption, dict) and (
+        "value" in data.water_total_consumption
+    ):
+        entities.append(
+            BoschComWddw2TotalsSensor(
+                coordinator,
+                source="water_total_consumption",
+                sub_key=None,
+                name_suffix="water_total_consumption",
+                unique_suffix="water-total-consumption",
+                device_class=SensorDeviceClass.WATER,
+                state_class=SensorStateClass.TOTAL_INCREASING,
+                unit=UnitOfVolume.LITERS,
+                icon="mdi:water",
+            )
+        )
+
+    hs = data.heat_sources or {}
+    if isinstance(hs.get("electricityTotalConsumption"), dict) and (
+        "value" in hs["electricityTotalConsumption"]
+    ):
+        entities.append(
+            BoschComWddw2TotalsSensor(
+                coordinator,
+                source="heat_sources",
+                sub_key="electricityTotalConsumption",
+                name_suffix="electricity_total_consumption",
+                unique_suffix="electricity-total-consumption",
+                device_class=SensorDeviceClass.ENERGY,
+                state_class=SensorStateClass.TOTAL_INCREASING,
+                unit=UnitOfEnergy.KILO_WATT_HOUR,
+            )
+        )
+    if isinstance(hs.get("operationHours"), dict) and "value" in hs["operationHours"]:
+        entities.append(
+            BoschComWddw2TotalsSensor(
+                coordinator,
+                source="heat_sources",
+                sub_key="operationHours",
+                name_suffix="hs_operation_hours",
+                unique_suffix="hs-operation-hours",
+                device_class=SensorDeviceClass.DURATION,
+                state_class=SensorStateClass.TOTAL_INCREASING,
+                unit=UnitOfTime.HOURS,
+            )
+        )
+    if isinstance(hs.get("actualPower"), dict) and "value" in hs["actualPower"]:
+        entities.append(
+            BoschComWddw2TotalsSensor(
+                coordinator,
+                source="heat_sources",
+                sub_key="actualPower",
+                name_suffix="hs_actual_power",
+                unique_suffix="hs-actual-power",
+                device_class=SensorDeviceClass.POWER,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfPower.KILO_WATT,
+            )
+        )
+    if isinstance(hs.get("powerPercentage"), dict) and (
+        "value" in hs["powerPercentage"]
+    ):
+        entities.append(
+            BoschComWddw2TotalsSensor(
+                coordinator,
+                source="heat_sources",
+                sub_key="powerPercentage",
+                name_suffix="hs_power_percentage",
+                unique_suffix="hs-power-percentage",
+                device_class=None,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=PERCENTAGE,
+                icon="mdi:gauge",
+            )
+        )
+
+    return entities

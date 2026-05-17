@@ -12,6 +12,7 @@ from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
+    BoschComModuleCoordinatorRrc2,
 )
 
 PARALLEL_UPDATES = 1
@@ -60,6 +61,9 @@ async def async_setup_entry(
                         coordinator=coordinator, cp_id=cp_id
                     )
                 )
+    for coordinator in coordinators:
+        if coordinator.data.device["deviceType"] == "rrc2":
+            entities.extend(_build_rrc2_switches(coordinator))
     async_add_entities(entities)
 
 
@@ -313,3 +317,175 @@ class BoschComCommoduleRfidSecureSwitch(_BoschComCommoduleSwitchBase):
     ) -> None:
         """Initialize RFID secure switch."""
         super().__init__(coordinator, cp_id, "wb_rfid_secure", "rfid_secure")
+
+
+# ---- RRC2 switches ----------------------------------------------------------
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    """Coerce stringy boolean values to a bool."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in ("true", "on", "1")
+
+
+class BoschComRrc2AwayModeSwitch(CoordinatorEntity, SwitchEntity):
+    """System-level away/holiday mode (writes /system/awayMode/enabled)."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:home-export-outline"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorRrc2) -> None:
+        """Initialize away mode switch."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-away-mode"
+        self._attr_name = "away_mode"
+        self._attr_should_poll = False
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return away-mode state."""
+        return _coerce_bool((self.coordinator.data.away_mode or {}).get("value"))
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable away mode."""
+        await self.coordinator.bhc.async_put_away_mode(
+            self.coordinator.data.device["deviceId"], "true"
+        )
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable away mode."""
+        await self.coordinator.bhc.async_put_away_mode(
+            self.coordinator.data.device["deviceId"], "false"
+        )
+        await self.coordinator.async_request_refresh()
+
+
+class BoschComRrc2CircuitFieldSwitch(CoordinatorEntity, SwitchEntity):
+    """Boolean field on an RRC2 HC or DHW circuit."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorRrc2,
+        *,
+        scope: str,
+        circuit_id: str,
+        field: str,
+        setter: str,
+        name_suffix: str,
+        unique_suffix: str,
+        icon: str | None = None,
+    ) -> None:
+        """Initialize one circuit-scoped switch."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_should_poll = False
+        if icon:
+            self._attr_icon = icon
+        self._scope = scope
+        self._circuit_id = circuit_id
+        self._field = field
+        self._setter = setter
+
+    def _find_circuit(self) -> dict | None:
+        refs = (
+            self.coordinator.data.heating_circuits
+            if self._scope == "hc"
+            else self.coordinator.data.dhw_circuits
+        )
+        suffix = f"/{self._circuit_id}"
+        for ref in refs or []:
+            if ref.get("id", "").endswith(suffix):
+                return ref
+        return None
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return current state of the field."""
+        ref = self._find_circuit()
+        if not ref:
+            return None
+        node = ref.get(self._field)
+        if not isinstance(node, dict):
+            return None
+        return _coerce_bool(node.get("value"))
+
+    async def _put(self, value: str) -> None:
+        setter = getattr(self.coordinator.bhc, self._setter)
+        await setter(self.coordinator.data.device["deviceId"], self._circuit_id, value)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the field on."""
+        await self._put("true")
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn the field off."""
+        await self._put("false")
+
+
+def _build_rrc2_switches(
+    coordinator: BoschComModuleCoordinatorRrc2,
+) -> list[SwitchEntity]:
+    """Build the standard RRC2 switch set for one device."""
+    entities: list[SwitchEntity] = [BoschComRrc2AwayModeSwitch(coordinator)]
+
+    for dev in coordinator.data.devices or []:
+        child_lock = dev.get("childLockEnabled") or {}
+        if child_lock.get("value") is None:
+            continue
+        dev_id = dev["id"].split("/")[-1]
+        entities.append(BoschComChildLockSwitch(coordinator=coordinator, field=dev_id))
+
+    for ref in coordinator.data.heating_circuits or []:
+        hc_id = ref["id"].split("/")[-1]
+        if isinstance(ref.get("nightSwitchMode"), dict):
+            entities.append(
+                BoschComRrc2CircuitFieldSwitch(
+                    coordinator,
+                    scope="hc",
+                    circuit_id=hc_id,
+                    field="nightSwitchMode",
+                    setter="async_set_hc_night_switch_mode",
+                    name_suffix=f"{hc_id}_night_switch_mode",
+                    unique_suffix=f"{hc_id}-night-switch-mode",
+                )
+            )
+
+    for ref in coordinator.data.dhw_circuits or []:
+        dhw_id = ref["id"].split("/")[-1]
+        if isinstance(ref.get("extraDhw"), dict):
+            entities.append(
+                BoschComRrc2CircuitFieldSwitch(
+                    coordinator,
+                    scope="dhw",
+                    circuit_id=dhw_id,
+                    field="extraDhw",
+                    setter="async_set_dhw_extra_dhw",
+                    name_suffix=f"{dhw_id}_extra_dhw",
+                    unique_suffix=f"{dhw_id}-extra-dhw",
+                    icon="mdi:water-boiler",
+                )
+            )
+        if isinstance(ref.get("thermalDisinfectState"), dict):
+            entities.append(
+                BoschComRrc2CircuitFieldSwitch(
+                    coordinator,
+                    scope="dhw",
+                    circuit_id=dhw_id,
+                    field="thermalDisinfectState",
+                    setter="async_set_dhw_thermal_disinfect_state",
+                    name_suffix=f"{dhw_id}_thermal_disinfect",
+                    unique_suffix=f"{dhw_id}-thermal-disinfect",
+                )
+            )
+
+    return entities

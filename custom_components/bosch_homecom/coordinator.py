@@ -174,6 +174,8 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
             firmware=data.firmware,
             notifications=data.notifications,
             dhw_circuits=data.dhw_circuits,
+            heat_sources=data.heat_sources,
+            water_total_consumption=data.water_total_consumption,
         )
 
 
@@ -194,6 +196,8 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
             ventilation=data.ventilation,
             system_info=data.system_info,
             system_bus=data.system_bus,
+            health_status=data.health_status,
+            brand=data.brand,
         )
 
 
@@ -209,6 +213,11 @@ class BoschComModuleCoordinatorRrc2(BoschComModuleCoordinatorBase[BHCDeviceRrc2]
             zones=data.zones,
             heating_circuits=data.heating_circuits,
             dhw_circuits=data.dhw_circuits,
+            heat_sources=data.heat_sources,
+            away_mode=data.away_mode,
+            outdoor_temp=data.outdoor_temp,
+            indoor_humidity=data.indoor_humidity,
+            devices=data.devices,
             gateway_info=data.gateway_info,
             system_location=data.system_location,
         )

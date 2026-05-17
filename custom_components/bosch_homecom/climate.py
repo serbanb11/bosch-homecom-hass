@@ -27,7 +27,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorRac
+from .coordinator import (
+    BoschComModuleCoordinatorK40,
+    BoschComModuleCoordinatorRac,
+    BoschComModuleCoordinatorRrc2,
+)
 
 PARALLEL_UPDATES = 1
 
@@ -64,6 +68,12 @@ async def async_setup_entry(
                 zone_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComZoneClimate(coordinator=coordinator, field=zone_id)
+                )
+        if device_type == "rrc2":
+            for ref in coordinator.data.zones or []:
+                zone_id = ref["id"].split("/")[-1]
+                entities.append(
+                    BoschComRrc2ZoneClimate(coordinator=coordinator, field=zone_id)
                 )
     if entities:
         async_add_entities(entities)
@@ -565,3 +575,95 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
             return entry.get("manualTemperatureHeating") or {}
 
         return entry.get("tempSetpoint") or {}
+
+
+class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
+    """Climate entity for an RRC2 zone (writes manualTemperatureHeating)."""
+
+    _attr_has_entity_name = True
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.TURN_ON
+        | ClimateEntityFeature.TURN_OFF
+    )
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorRrc2,
+        field: str,
+    ) -> None:
+        """Initialize RRC2 zone climate entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "zone"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_name = field
+        self._attr_should_poll = False
+        self.field = field
+        self.set_attr()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.set_attr()
+        self.async_write_ha_state()
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set new target temperature via manualTemperatureHeating PUT."""
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
+            return
+
+        self._attr_target_temperature = temperature
+        self.async_write_ha_state()
+
+        await self.coordinator.bhc.async_set_zone_manual_temp_heating(
+            self.coordinator.unique_id, self.field, temperature
+        )
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Toggle the system-level away mode (HEAT = off-away, OFF = away)."""
+        value = "true" if hvac_mode == HVACMode.OFF else "false"
+
+        self._attr_hvac_mode = hvac_mode
+        self.async_write_ha_state()
+
+        await self.coordinator.bhc.async_put_away_mode(
+            self.coordinator.unique_id, value
+        )
+        await self.coordinator.async_request_refresh()
+
+    def set_attr(self) -> None:
+        """Populate attributes from coordinator data."""
+        data = self.coordinator.data
+        if not data:
+            return
+
+        away = (data.away_mode or {}).get("value")
+        self._attr_hvac_mode = (
+            HVACMode.OFF if str(away).lower() == "true" else HVACMode.HEAT
+        )
+
+        for entry in data.zones or []:
+            if not entry.get("id", "").endswith(f"/{self.field}"):
+                continue
+
+            actual_node = entry.get("temperatureActual") or {}
+            actual = actual_node.get("value")
+            if actual is not None:
+                self._attr_current_temperature = actual
+                self._attr_temperature_unit = _parse_temp_unit(
+                    actual_node.get("unitOfMeasure")
+                )
+
+            manual = entry.get("manualTemperatureHeating") or {}
+            effective = entry.get("temperatureHeatingSetpoint") or {}
+            target_node = manual if manual.get("value") is not None else effective
+            if target_node.get("value") is not None:
+                self._attr_target_temperature = target_node["value"]
+            self._attr_min_temp = manual.get("minValue", 5)
+            self._attr_max_temp = manual.get("maxValue", 30)
+            self._attr_target_temperature_step = manual.get("stepSize", 0.5)
+            break
