@@ -24,6 +24,7 @@ from homecom_alt import (
     BHCDeviceWddw2,
     HomeComRac,
     InvalidSensorDataError,
+    NotRespondingError,
 )
 from homecom_alt.const import (
     BOSCHCOM_DOMAIN,
@@ -107,7 +108,12 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
 
         try:
             data = await self.bhc.async_update(self.unique_id)
-        except (ApiError, InvalidSensorDataError, RetryError) as error:
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            RetryError,
+            NotRespondingError,
+        ) as error:
             raise UpdateFailed(error) from error
 
         return self._build_device_data(data)
