@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+import asyncio
 import logging
 from typing import TypeVar
 
@@ -23,6 +24,12 @@ from homecom_alt import (
     BHCDeviceWddw2,
     HomeComRac,
     InvalidSensorDataError,
+)
+from homecom_alt.const import (
+    BOSCHCOM_DOMAIN,
+    BOSCHCOM_ENDPOINT_GATEWAYS,
+    BOSCHCOM_ENDPOINT_HC_TEMPORARY_ROOM_SETPOINT,
+    BOSCHCOM_ENDPOINT_HEATING_CIRCUITS,
 )
 from tenacity import RetryError
 
@@ -198,6 +205,80 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
             system_bus=data.system_bus,
             health_status=data.health_status,
             brand=data.brand,
+        )
+
+    async def _async_update_data(self) -> BHCDeviceIcom:
+        """Fetch base icom data then augment with additional heat-source sensors."""
+        data = await super()._async_update_data()
+
+        async def _safe(coro):
+            """Run a library call and return {} on any error (e.g. 404)."""
+            try:
+                result = await coro
+                return result or {}
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("icom optional endpoint unavailable: %s", err)
+                return {}
+
+        (
+            supply_temp,
+            modulation,
+            total_consumption,
+            working_time,
+            system_pressure,
+            heat_demand,
+            outdoor_temp,
+        ) = await asyncio.gather(
+            _safe(self.bhc.async_get_hs_supply_temp(self.unique_id)),
+            _safe(self.bhc.async_get_hs_modulation(self.unique_id)),
+            _safe(self.bhc.async_get_hs_total_consumption(self.unique_id)),
+            _safe(self.bhc.async_get_hs_working_time(self.unique_id)),
+            _safe(self.bhc.async_get_hs_system_pressure(self.unique_id)),
+            _safe(self.bhc.async_get_hs_heat_demand(self.unique_id)),
+            _safe(self.bhc.async_get_outdoor_temp(self.unique_id)),
+        )
+
+        hs = dict(data.heat_sources or {})
+        hs["supplyTemperature"] = supply_temp
+        hs["modulation"] = modulation
+        hs["totalConsumption"] = total_consumption
+        hs["workingTime"] = working_time
+        hs["systemPressure"] = system_pressure
+        hs["actualHeatDemand"] = heat_demand
+        hs["outdoorTemp"] = outdoor_temp
+
+        return BHCDeviceIcom(
+            device=data.device,
+            firmware=data.firmware,
+            notifications=data.notifications,
+            holiday_mode=data.holiday_mode,
+            heat_sources=hs,
+            dhw_circuits=data.dhw_circuits,
+            heating_circuits=data.heating_circuits,
+            solar_circuits=data.solar_circuits,
+            ventilation=data.ventilation,
+            system_info=data.system_info,
+            system_bus=data.system_bus,
+            health_status=data.health_status,
+            brand=data.brand,
+        )
+
+    async def async_set_temporary_room_setpoint(self, hc_id: str, temp: float) -> None:
+        """PUT temporaryRoomSetpoint — sets a temporary override like the Bosch app."""
+        await self.bhc.get_token()
+        await self.bhc._async_http_request(
+            "put",
+            (
+                BOSCHCOM_DOMAIN
+                + BOSCHCOM_ENDPOINT_GATEWAYS
+                + self.unique_id
+                + BOSCHCOM_ENDPOINT_HEATING_CIRCUITS
+                + "/"
+                + hc_id
+                + BOSCHCOM_ENDPOINT_HC_TEMPORARY_ROOM_SETPOINT
+            ),
+            {"value": temp},
+            1,
         )
 
 

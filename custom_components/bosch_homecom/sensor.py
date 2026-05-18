@@ -20,6 +20,7 @@ from homeassistant.const import (
     PERCENTAGE,
     UnitOfEnergy,
     UnitOfPower,
+    UnitOfPressure,
     UnitOfTemperature,
     UnitOfTime,
     UnitOfVolume,
@@ -562,8 +563,13 @@ class BoschComSensorDhw(BoschComSensorBase):
                     self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
                 else:
                     self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-                actualTemp_value = actual_temp.get("value", "unknown")
-                return float(actualTemp_value)
+                value = actual_temp.get("value")
+                if value is None:
+                    return None
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return None
         return "unknown"
 
     @property
@@ -941,7 +947,12 @@ class BoschComSensorHs(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHS type."""
-        return (self.coordinator.data.heat_sources.get("pumpType") or {}).get("value")
+        hs = self.coordinator.data.heat_sources
+        pump_type = (hs.get("pumpType") or {}).get("value")
+        if pump_type is not None:
+            return pump_type
+        # icom devices don't expose pumpType; fall back to hs1/type
+        return (hs.get("type") or {}).get("value")
 
     @property
     def extra_state_attributes(self):
@@ -2478,12 +2489,15 @@ class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
         unit: str | None = None,
         diagnostic: bool = True,
         icon: str | None = None,
+        value_divisor: float = 1.0,
     ) -> None:
         """Initialize the sensor.
 
         attr names the top-level BHCDeviceIcom field (e.g. "health_status").
         sub_key, if set, looks up a key within that dict (used to dig into
         heat_sources for returnTemperature / numberOfStarts).
+        value_divisor divides the raw API value before returning (e.g. 3600
+        to convert seconds to hours).
         """
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
@@ -2498,6 +2512,7 @@ class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_path = attr
         self._sub_key = sub_key
+        self._value_divisor = value_divisor
 
     @property
     def native_value(self) -> Any:
@@ -2512,7 +2527,13 @@ class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
             node = node.get(self._sub_key)
         if not isinstance(node, dict):
             return None
-        return node.get("value")
+        value = node.get("value")
+        if self._value_divisor != 1.0 and value is not None:
+            try:
+                return round(float(value) / self._value_divisor, 2)
+            except (ValueError, TypeError):
+                return value
+        return value
 
 
 def _build_icom_extra_sensors(
@@ -2536,7 +2557,7 @@ def _build_icom_extra_sensors(
                 icon="mdi:heart-pulse",
             )
         )
-    if isinstance(data.brand, dict) and "value" in data.brand:
+    if isinstance(data.brand, dict) and data.brand.get("value") is not None:
         entities.append(
             BoschComIcomExtraSensor(
                 coordinator,
@@ -2572,6 +2593,115 @@ def _build_icom_extra_sensors(
                 name_suffix="hs_number_of_starts",
                 unique_suffix="hs-number-of-starts",
                 state_class=SensorStateClass.TOTAL_INCREASING,
+            )
+        )
+    if (
+        isinstance(hs.get("supplyTemperature"), dict)
+        and "value" in hs["supplyTemperature"]
+    ):
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="supplyTemperature",
+                name_suffix="hs_supply_temperature",
+                unique_suffix="hs-supply-temperature",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+                diagnostic=False,
+            )
+        )
+    if isinstance(hs.get("modulation"), dict) and "value" in hs["modulation"]:
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="modulation",
+                name_suffix="hs_modulation",
+                unique_suffix="hs-modulation",
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=PERCENTAGE,
+                diagnostic=False,
+                icon="mdi:sine-wave",
+            )
+        )
+    if (
+        isinstance(hs.get("totalConsumption"), dict)
+        and "value" in hs["totalConsumption"]
+    ):
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="totalConsumption",
+                name_suffix="hs_total_consumption",
+                unique_suffix="hs-total-consumption",
+                device_class=SensorDeviceClass.ENERGY,
+                state_class=SensorStateClass.TOTAL_INCREASING,
+                unit=UnitOfEnergy.KILO_WATT_HOUR,
+                diagnostic=False,
+            )
+        )
+    if isinstance(hs.get("workingTime"), dict) and "value" in hs["workingTime"]:
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="workingTime",
+                name_suffix="hs_working_time",
+                unique_suffix="hs-working-time",
+                device_class=SensorDeviceClass.DURATION,
+                state_class=SensorStateClass.TOTAL_INCREASING,
+                unit=UnitOfTime.HOURS,
+                diagnostic=False,
+                icon="mdi:timer-outline",
+                value_divisor=3600,
+            )
+        )
+    if isinstance(hs.get("systemPressure"), dict) and "value" in hs["systemPressure"]:
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="systemPressure",
+                name_suffix="hs_system_pressure",
+                unique_suffix="hs-system-pressure",
+                device_class=SensorDeviceClass.PRESSURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfPressure.BAR,
+                diagnostic=False,
+            )
+        )
+    if (
+        isinstance(hs.get("actualHeatDemand"), dict)
+        and "value" in hs["actualHeatDemand"]
+    ):
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="actualHeatDemand",
+                name_suffix="hs_heat_demand",
+                unique_suffix="hs-heat-demand",
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=PERCENTAGE,
+                diagnostic=False,
+                icon="mdi:thermometer-chevron-up",
+            )
+        )
+    if isinstance(hs.get("outdoorTemp"), dict) and "value" in hs["outdoorTemp"]:
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="heat_sources",
+                sub_key="outdoorTemp",
+                name_suffix="outdoor_temperature",
+                unique_suffix="outdoor-temperature",
+                device_class=SensorDeviceClass.TEMPERATURE,
+                state_class=SensorStateClass.MEASUREMENT,
+                unit=UnitOfTemperature.CELSIUS,
+                diagnostic=False,
             )
         )
 
