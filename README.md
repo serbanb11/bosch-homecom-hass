@@ -13,7 +13,7 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 |-------------|----------|
 | **RAC** | Climate Class 3000i\*, 5000i, 6000i |
 | **K30 / K40** | Bosch boilers, Buderus Logatherm WLW 186i (MX300) |
-| **ICOM** | IVT Aero Series heat pumps |
+| **ICOM** | IVT Aero Series, Bosch Compress 7000i/7001i AW heat pumps |
 | **RRC2** | Bosch thermostats (CT200) |
 | **WDDW2** | Hydronext 5700s water heaters |
 | **Commodule** | Wallbox 7000i EV chargers |
@@ -53,16 +53,16 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 ## What You Get
 
-| Platform | RAC | K30/K40/ICOM/RRC2 | WDDW2 | Commodule |
-|----------|-----|---------------------|-------|-----------|
-| Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | -- | -- |
-| Water Heater | -- | Operation mode | Operation mode + target temp | -- |
-| Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | -- | -- |
-| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
-| Switch | Plasmacluster | -- | -- | Lock, auth, RFID secure |
-| Fan | -- | Ventilation zones | -- | -- |
-| Binary Sensor | -- | -- | -- | Network connectivity |
-| Number | -- | Ventilation summer-bypass duration | -- | Electricity price |
+| Platform | RAC | K30/K40/RRC2 | ICOM | WDDW2 | Commodule |
+|----------|-----|--------------|------|-------|-----------|
+| Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | Heating circuits with temporary setpoint | -- | -- |
+| Water Heater | -- | Operation mode | Operation mode | Operation mode + target temp | -- |
+| Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | DHW/HC modes, away | -- | -- |
+| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp | Notifications, DHW, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
+| Switch | Plasmacluster | -- | -- | -- | Lock, auth, RFID secure |
+| Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
+| Binary Sensor | -- | -- | DHW circuit charge status | -- | Network connectivity |
+| Number | -- | Ventilation summer-bypass duration | -- | -- | Electricity price |
 
 ### Ventilation summer bypass
 
