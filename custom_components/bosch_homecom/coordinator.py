@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 import asyncio
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TOKEN
@@ -208,16 +208,28 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
         )
 
     async def _async_update_data(self) -> BHCDeviceIcom:
-        """Fetch base icom data then augment with additional heat-source sensors."""
+        """Fetch base icom data, then augment heat_sources with extra endpoints.
+
+        The base update (auth + core icom endpoints) runs first via super().
+        Seven additional heat-source endpoints are then fetched in parallel.
+        Each call is wrapped in _safe() so a 404 or any other API error for
+        an unsupported endpoint silently returns {} without failing the whole
+        coordinator update cycle.
+        """
         data = await super()._async_update_data()
 
-        async def _safe(coro):
-            """Run a library call and return {} on any error (e.g. 404)."""
+        async def _safe(coro: Any) -> dict:
+            """Await *coro* and return its result, or {} on any error.
+
+            Unsupported endpoints return HTTP 404 / raise ApiError; catching
+            broadly here is intentional so that a missing optional sensor never
+            prevents the coordinator from delivering data to other entities.
+            """
             try:
                 result = await coro
                 return result or {}
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("icom optional endpoint unavailable: %s", err)
+                _LOGGER.debug("Optional icom endpoint unavailable: %s", err)
                 return {}
 
         (
@@ -264,7 +276,21 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
         )
 
     async def async_set_temporary_room_setpoint(self, hc_id: str, temp: float) -> None:
-        """PUT temporaryRoomSetpoint — sets a temporary override like the Bosch app."""
+        """Set a temporary room-temperature override for a heating circuit.
+
+        This mirrors the Bosch app behaviour: the scheduled programme is
+        preserved and the override is active until the next programme switch.
+        Uses *temporaryRoomSetpoint* instead of *manualRoomSetpoint* so the
+        heating schedule is not permanently altered.
+
+        The homecom_alt library exposes a GET for this endpoint but no PUT;
+        we call _async_http_request directly using the same pattern as the
+        library's own async_set_hc_manual_room_setpoint implementation.
+
+        Args:
+            hc_id: Heating-circuit identifier (e.g. ``"hc1"``).
+            temp:  Target temperature in degrees Celsius.
+        """
         await self.bhc.get_token()
         await self.bhc._async_http_request(
             "put",

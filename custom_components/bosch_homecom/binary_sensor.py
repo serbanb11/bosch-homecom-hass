@@ -42,6 +42,7 @@ async def async_setup_entry(
                         )
                     )
         if coordinator.data.device["deviceType"] == "icom":
+            # One charge sensor per DHW circuit that exposes the "charge" field.
             for ref in coordinator.data.dhw_circuits or []:
                 dhw_id = ref.get("id", "").split("/")[-1]
                 if isinstance(ref.get("charge"), dict):
@@ -163,12 +164,23 @@ class BoschComIcomDhwChargeBinarySensor(CoordinatorEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.RUNNING
     _attr_should_poll = False
 
+    # API values that indicate the DHW circuit is actively charging.
+    _ACTIVE_CHARGE_STATES: frozenset[str] = frozenset(
+        {"start", "true", "on", "charging"}
+    )
+
     def __init__(
         self,
         coordinator: BoschComModuleCoordinatorIcom,
         dhw_id: str,
     ) -> None:
-        """Initialize DHW charge binary sensor."""
+        """Initialize DHW charge binary sensor.
+
+        Args:
+            coordinator: The icom coordinator supplying ``BHCDeviceIcom`` data.
+            dhw_id:      DHW circuit identifier extracted from the API path
+                         (e.g. ``"dhw1"``).
+        """
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{dhw_id}-charge"
@@ -189,7 +201,7 @@ class BoschComIcomDhwChargeBinarySensor(CoordinatorEntity, BinarySensorEntity):
         value = self._get_charge_value()
         if value is None:
             return None
-        return value.lower() in ("start", "true", "on", "charging")
+        return value.lower() in self._ACTIVE_CHARGE_STATES
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -198,5 +210,5 @@ class BoschComIcomDhwChargeBinarySensor(CoordinatorEntity, BinarySensorEntity):
         if value is None:
             self._attr_is_on = None
         else:
-            self._attr_is_on = value.lower() in ("start", "true", "on", "charging")
+            self._attr_is_on = value.lower() in self._ACTIVE_CHARGE_STATES
         self.async_write_ha_state()

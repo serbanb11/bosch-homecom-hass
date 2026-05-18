@@ -2491,13 +2491,27 @@ class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
         icon: str | None = None,
         value_divisor: float = 1.0,
     ) -> None:
-        """Initialize the sensor.
+        """Initialize an icom extra sensor.
 
-        attr names the top-level BHCDeviceIcom field (e.g. "health_status").
-        sub_key, if set, looks up a key within that dict (used to dig into
-        heat_sources for returnTemperature / numberOfStarts).
-        value_divisor divides the raw API value before returning (e.g. 3600
-        to convert seconds to hours).
+        Args:
+            coordinator:   The icom coordinator supplying ``BHCDeviceIcom`` data.
+            attr:          Top-level ``BHCDeviceIcom`` field name to read from
+                           (e.g. ``"heat_sources"`` or ``"health_status"``).
+            sub_key:       Optional key to look up inside the field dict. Used
+                           to reach nested heat-source entries such as
+                           ``"returnTemperature"`` or ``"modulation"``.
+            name_suffix:   Human-readable entity name shown in the UI.
+            unique_suffix: Suffix appended to the coordinator unique ID to
+                           form this entity's ``unique_id``.
+            device_class:  HA sensor device class (temperature, energy, …).
+            state_class:   HA state class (measurement, total_increasing, …).
+            unit:          Native unit of measurement.
+            diagnostic:    When ``True`` the entity is placed in the
+                           ``DIAGNOSTIC`` category. Defaults to ``True``.
+            icon:          Optional MDI icon override.
+            value_divisor: Divide the raw API value by this factor before
+                           returning it. Use ``3600`` to convert seconds to
+                           hours (e.g. ``workingTime/totalSystem``).
         """
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
@@ -2510,13 +2524,14 @@ class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
             self._attr_icon = icon
         if diagnostic:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        # _attr_path stores the BHCDeviceIcom field name, not an HA attribute.
         self._attr_path = attr
         self._sub_key = sub_key
         self._value_divisor = value_divisor
 
     @property
     def native_value(self) -> Any:
-        """Return the field value."""
+        """Return the sensor value, applying value_divisor when set."""
         data = self.coordinator.data
         if data is None:
             return None
@@ -2532,6 +2547,12 @@ class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
             try:
                 return round(float(value) / self._value_divisor, 2)
             except (ValueError, TypeError):
+                _LOGGER.debug(
+                    "Could not apply divisor %s to value %r for %s",
+                    self._value_divisor,
+                    value,
+                    self.unique_id,
+                )
                 return value
         return value
 
