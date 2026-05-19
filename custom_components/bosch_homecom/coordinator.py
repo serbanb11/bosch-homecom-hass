@@ -90,6 +90,16 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
                     self.hass.config_entries.async_update_entry(
                         self.entry, data=new_data
                     )
+                    # Bosch SingleKey-ID issues single-use refresh tokens, so the
+                    # rotated token MUST be on disk before the next poll. The
+                    # write above is debounced — if HA restarts/crashes inside
+                    # the debounce window, the now-invalid old token is what's
+                    # persisted, and the next start fails with "Failed to refresh"
+                    # and forces a manual browser re-login.
+                    # Force an immediate flush to close that race window.
+                    await self.hass.config_entries._store.async_save(
+                        self.hass.config_entries._data_to_save()
+                    )
                     _LOGGER.debug(
                         "Device_Id: %s, persisted refreshed auth tokens",
                         self.unique_id,
