@@ -600,7 +600,11 @@ class BoschComSensorDhw(BoschComSensorBase):
                     )
 
                 return result
-        return "unknown"
+        # extra_state_attributes must return a mapping. Home Assistant merges
+        # it with `attr |= extra_state_attributes`; returning a string iterates
+        # it as a char sequence and raises
+        # "dictionary update sequence element #0 has length 1; 2 is required".
+        return {}
 
 
 class BoschComSensorHc(BoschComSensorBase):
@@ -833,7 +837,8 @@ class BoschComSensorVentilation(BoschComSensorBase):
                     "demandindoorAirQuality": demandindoorAirQuality_value,
                     "demandrelativeHumidity": demandrelativeHumidity_value,
                 }
-        return "unknown"
+        # See BoschComSensorDhw.extra_state_attributes — must return a mapping.
+        return {}
 
 
 class BoschComSensorOutdoorTemp(BoschComSensorBase):
@@ -950,10 +955,22 @@ class BoschComSensorHs(BoschComSensorBase):
             "values", "unknown"
         )
 
-        numberOfStarts = (self.coordinator.data.heat_sources.get("starts") or {}).get(
-            "values"
-        ) or []
-        numberOfStarts_dict = {k: v for d in numberOfStarts for k, v in d.items()}
+        # The pointt-api occasionally returns 500 for
+        # heatSources/.../numberOfStarts; the upstream lib may then pass a
+        # non-list or a list of non-dict items. Treat anything unexpected as
+        # missing so the entity does not crash during state update.
+        starts_node = self.coordinator.data.heat_sources.get("starts")
+        if not isinstance(starts_node, dict):
+            starts_node = {}
+        numberOfStarts = starts_node.get("values")
+        if not isinstance(numberOfStarts, list):
+            numberOfStarts = []
+        numberOfStarts_dict = {
+            k: v
+            for d in numberOfStarts
+            if isinstance(d, dict)
+            for k, v in d.items()
+        }
 
         returnTemperature = str(
             (self.coordinator.data.heat_sources.get("returnTemperature") or {}).get(
