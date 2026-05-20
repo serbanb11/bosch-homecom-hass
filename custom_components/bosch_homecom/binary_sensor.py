@@ -14,7 +14,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
-    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
 
@@ -39,16 +38,6 @@ async def async_setup_entry(
                     entities.append(
                         BoschComThermostatRfStatusSensor(
                             coordinator=coordinator, dev_id=dev_id
-                        )
-                    )
-        if coordinator.data.device["deviceType"] == "icom":
-            # One charge sensor per DHW circuit that exposes the "charge" field.
-            for ref in coordinator.data.dhw_circuits or []:
-                dhw_id = ref.get("id", "").split("/")[-1]
-                if isinstance(ref.get("charge"), dict):
-                    entities.append(
-                        BoschComIcomDhwChargeBinarySensor(
-                            coordinator=coordinator, dhw_id=dhw_id
                         )
                     )
     async_add_entities(entities)
@@ -154,61 +143,4 @@ class BoschComThermostatRfStatusSensor(CoordinatorEntity, BinarySensorEntity):
             self._attr_is_on = None
         else:
             self._attr_is_on = status.lower() in ("online", "connected", "on")
-        self.async_write_ha_state()
-
-
-class BoschComIcomDhwChargeBinarySensor(CoordinatorEntity, BinarySensorEntity):
-    """Binary sensor indicating whether a DHW circuit is actively charging."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.RUNNING
-    _attr_should_poll = False
-
-    # API values that indicate the DHW circuit is actively charging.
-    _ACTIVE_CHARGE_STATES: frozenset[str] = frozenset(
-        {"start", "true", "on", "charging"}
-    )
-
-    def __init__(
-        self,
-        coordinator: BoschComModuleCoordinatorIcom,
-        dhw_id: str,
-    ) -> None:
-        """Initialize DHW charge binary sensor.
-
-        Args:
-            coordinator: The icom coordinator supplying ``BHCDeviceIcom`` data.
-            dhw_id:      DHW circuit identifier extracted from the API path
-                         (e.g. ``"dhw1"``).
-        """
-        super().__init__(coordinator)
-        self._attr_device_info = coordinator.device_info
-        self._attr_unique_id = f"{coordinator.unique_id}-{dhw_id}-charge"
-        self._attr_name = f"{dhw_id}_charge"
-        self._coordinator = coordinator
-        self._dhw_id = dhw_id
-
-    def _get_charge_value(self) -> str | None:
-        """Return the raw charge value for this DHW circuit."""
-        for ref in self._coordinator.data.dhw_circuits or []:
-            if ref.get("id", "").split("/")[-1] == self._dhw_id:
-                return (ref.get("charge") or {}).get("value")
-        return None
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return True when the DHW circuit is charging."""
-        value = self._get_charge_value()
-        if value is None:
-            return None
-        return value.lower() in self._ACTIVE_CHARGE_STATES
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        value = self._get_charge_value()
-        if value is None:
-            self._attr_is_on = None
-        else:
-            self._attr_is_on = value.lower() in self._ACTIVE_CHARGE_STATES
         self.async_write_ha_state()

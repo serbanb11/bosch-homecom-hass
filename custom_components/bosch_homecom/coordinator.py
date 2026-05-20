@@ -28,6 +28,7 @@ from homecom_alt import (
 )
 from homecom_alt.const import (
     BOSCHCOM_DOMAIN,
+    BOSCHCOM_ENDPOINT_DHW_CIRCUITS,
     BOSCHCOM_ENDPOINT_GATEWAYS,
     BOSCHCOM_ENDPOINT_HC_TEMPORARY_ROOM_SETPOINT,
     BOSCHCOM_ENDPOINT_HEATING_CIRCUITS,
@@ -214,13 +215,13 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
         )
 
     async def _async_update_data(self) -> BHCDeviceIcom:
-        """Fetch base icom data, then augment heat_sources with extra endpoints.
+        """Fetch base icom data, then augment heat_sources and DHW circuits.
 
         The base update (auth + core icom endpoints) runs first via super().
-        Seven additional heat-source endpoints are then fetched in parallel.
-        Each call is wrapped in _safe() so a 404 or any other API error for
-        an unsupported endpoint silently returns {} without failing the whole
-        coordinator update cycle.
+        Seven additional heat-source endpoints and per-circuit DHW currentSetpoint
+        are then fetched in parallel.  Each call is wrapped in _safe() so a 404
+        or any other API error for an unsupported endpoint silently returns {}
+        without failing the whole coordinator update cycle.
         """
         data = await super()._async_update_data()
 
@@ -237,6 +238,28 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
             except Exception as err:  # noqa: BLE001
                 _LOGGER.debug("Optional icom endpoint unavailable: %s", err)
                 return {}
+
+        async def _get_dhw_current_setpoint(dhw_id: str) -> dict:
+            """Fetch the live DHW current setpoint for *dhw_id*.
+
+            The homecom_alt library exposes singleChargeSetpoint but not the
+            live currentSetpoint (which reflects the active programme or manual
+            override).  We call _async_http_request directly, the same pattern
+            used by async_set_temporary_room_setpoint.
+            """
+            response = await self.bhc._async_http_request(
+                "get",
+                (
+                    BOSCHCOM_DOMAIN
+                    + BOSCHCOM_ENDPOINT_GATEWAYS
+                    + self.unique_id
+                    + BOSCHCOM_ENDPOINT_DHW_CIRCUITS
+                    + "/"
+                    + dhw_id
+                    + "/currentSetpoint"
+                ),
+            )
+            return await self.bhc._to_data(response) or {}
 
         (
             supply_temp,
@@ -265,13 +288,22 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
         hs["actualHeatDemand"] = heat_demand
         hs["outdoorTemp"] = outdoor_temp
 
+        # Augment each DHW circuit reference with its live currentSetpoint.
+        # The library's populate_dhw fetches singleChargeSetpoint only; we need
+        # the active programme setpoint to detect when DHW is being heated.
+        dhw_circuits = list(data.dhw_circuits or [])
+        for ref in dhw_circuits:
+            dhw_id = ref.get("id", "").split("/")[-1]
+            if dhw_id:
+                ref["currentSetpoint"] = await _safe(_get_dhw_current_setpoint(dhw_id))
+
         return BHCDeviceIcom(
             device=data.device,
             firmware=data.firmware,
             notifications=data.notifications,
             holiday_mode=data.holiday_mode,
             heat_sources=hs,
-            dhw_circuits=data.dhw_circuits,
+            dhw_circuits=dhw_circuits,
             heating_circuits=data.heating_circuits,
             solar_circuits=data.solar_circuits,
             ventilation=data.ventilation,

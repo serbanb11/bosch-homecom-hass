@@ -2557,6 +2557,82 @@ class BoschComIcomExtraSensor(CoordinatorEntity, SensorEntity):
         return value
 
 
+class BoschComIcomDhwFieldSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for a single field inside a specific icom DHW circuit reference.
+
+    Unlike ``BoschComIcomExtraSensor`` (which reads top-level or heat-source
+    dict fields), this class handles ``dhw_circuits``, which is a list.  It
+    locates the correct circuit by ``dhw_id`` and returns the ``{"value": …}``
+    contained in ``field``.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorIcom,
+        *,
+        dhw_id: str,
+        field: str,
+        name_suffix: str,
+        unique_suffix: str,
+        device_class: SensorDeviceClass | None = None,
+        state_class: SensorStateClass | None = None,
+        unit: str | None = None,
+        diagnostic: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        """Initialize a DHW circuit field sensor.
+
+        Args:
+            coordinator:   The icom coordinator supplying ``BHCDeviceIcom`` data.
+            dhw_id:        DHW circuit identifier (e.g. ``"dhw1"``).
+            field:         Key to read from the circuit reference dict
+                           (e.g. ``"currentSetpoint"``).
+            name_suffix:   Human-readable entity name shown in the UI.
+            unique_suffix: Suffix appended to the coordinator unique ID.
+            device_class:  HA sensor device class.
+            state_class:   HA state class.
+            unit:          Native unit of measurement.
+            diagnostic:    When ``True`` the entity is placed in DIAGNOSTIC
+                           category.
+            icon:          Optional MDI icon override.
+        """
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_name = name_suffix
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = unit
+        if icon:
+            self._attr_icon = icon
+        if diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._dhw_id = dhw_id
+        self._field = field
+
+    def _get_value(self) -> Any:
+        """Return the field value for the configured DHW circuit, or None."""
+        for ref in self.coordinator.data.dhw_circuits or []:
+            if ref.get("id", "").split("/")[-1] == self._dhw_id:
+                node = ref.get(self._field)
+                if isinstance(node, dict):
+                    return node.get("value")
+        return None
+
+    @property
+    def native_value(self) -> Any:
+        """Return the sensor value."""
+        return self._get_value()
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._attr_native_value = self._get_value()
+        self.async_write_ha_state()
+
+
 def _build_icom_extra_sensors(
     coordinator: BoschComModuleCoordinatorIcom,
 ) -> list[SensorEntity]:
@@ -2725,6 +2801,30 @@ def _build_icom_extra_sensors(
                 diagnostic=False,
             )
         )
+
+    # DHW currentSetpoint — needed to detect when the DHW circuit is being
+    # heated (actual temp below setpoint).  The library fetches singleCharge
+    # Setpoint only; the coordinator augments each DHW ref with this field.
+    for ref in data.dhw_circuits or []:
+        dhw_id = ref.get("id", "").split("/")[-1]
+        if not dhw_id:
+            continue
+        if isinstance(ref.get("currentSetpoint"), dict) and "value" in ref.get(
+            "currentSetpoint", {}
+        ):
+            entities.append(
+                BoschComIcomDhwFieldSensor(
+                    coordinator,
+                    dhw_id=dhw_id,
+                    field="currentSetpoint",
+                    name_suffix=f"{dhw_id}_current_setpoint",
+                    unique_suffix=f"{dhw_id}-current-setpoint",
+                    device_class=SensorDeviceClass.TEMPERATURE,
+                    state_class=SensorStateClass.MEASUREMENT,
+                    unit=UnitOfTemperature.CELSIUS,
+                    icon="mdi:thermometer-water",
+                )
+            )
 
     return entities
 
