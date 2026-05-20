@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+import asyncio
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TOKEN
@@ -23,6 +24,14 @@ from homecom_alt import (
     BHCDeviceWddw2,
     HomeComRac,
     InvalidSensorDataError,
+    NotRespondingError,
+)
+from homecom_alt.const import (
+    BOSCHCOM_DOMAIN,
+    BOSCHCOM_ENDPOINT_DHW_CIRCUITS,
+    BOSCHCOM_ENDPOINT_GATEWAYS,
+    BOSCHCOM_ENDPOINT_HC_TEMPORARY_ROOM_SETPOINT,
+    BOSCHCOM_ENDPOINT_HEATING_CIRCUITS,
 )
 from tenacity import RetryError
 
@@ -100,7 +109,12 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
 
         try:
             data = await self.bhc.async_update(self.unique_id)
-        except (ApiError, InvalidSensorDataError, RetryError) as error:
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            RetryError,
+            NotRespondingError,
+        ) as error:
             raise UpdateFailed(error) from error
 
         return self._build_device_data(data)
@@ -198,6 +212,137 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
             system_bus=data.system_bus,
             health_status=data.health_status,
             brand=data.brand,
+        )
+
+    async def _async_update_data(self) -> BHCDeviceIcom:
+        """Fetch base icom data, then augment heat_sources and DHW circuits.
+
+        The base update (auth + core icom endpoints) runs first via super().
+        Seven additional heat-source endpoints and per-circuit DHW currentSetpoint
+        are then fetched in parallel.  Each call is wrapped in _safe() so a 404
+        or any other API error for an unsupported endpoint silently returns {}
+        without failing the whole coordinator update cycle.
+        """
+        data = await super()._async_update_data()
+
+        async def _safe(coro: Any) -> dict:
+            """Await *coro* and return its result, or {} on any error.
+
+            Unsupported endpoints return HTTP 404 / raise ApiError; catching
+            broadly here is intentional so that a missing optional sensor never
+            prevents the coordinator from delivering data to other entities.
+            """
+            try:
+                result = await coro
+                return result or {}
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("Optional icom endpoint unavailable: %s", err)
+                return {}
+
+        async def _get_dhw_current_setpoint(dhw_id: str) -> dict:
+            """Fetch the live DHW current setpoint for *dhw_id*.
+
+            The homecom_alt library exposes singleChargeSetpoint but not the
+            live currentSetpoint (which reflects the active programme or manual
+            override).  We call _async_http_request directly, the same pattern
+            used by async_set_temporary_room_setpoint.
+            """
+            response = await self.bhc._async_http_request(
+                "get",
+                (
+                    BOSCHCOM_DOMAIN
+                    + BOSCHCOM_ENDPOINT_GATEWAYS
+                    + self.unique_id
+                    + BOSCHCOM_ENDPOINT_DHW_CIRCUITS
+                    + "/"
+                    + dhw_id
+                    + "/currentSetpoint"
+                ),
+            )
+            return await self.bhc._to_data(response) or {}
+
+        (
+            supply_temp,
+            modulation,
+            total_consumption,
+            working_time,
+            system_pressure,
+            heat_demand,
+            outdoor_temp,
+        ) = await asyncio.gather(
+            _safe(self.bhc.async_get_hs_supply_temp(self.unique_id)),
+            _safe(self.bhc.async_get_hs_modulation(self.unique_id)),
+            _safe(self.bhc.async_get_hs_total_consumption(self.unique_id)),
+            _safe(self.bhc.async_get_hs_working_time(self.unique_id)),
+            _safe(self.bhc.async_get_hs_system_pressure(self.unique_id)),
+            _safe(self.bhc.async_get_hs_heat_demand(self.unique_id)),
+            _safe(self.bhc.async_get_outdoor_temp(self.unique_id)),
+        )
+
+        hs = dict(data.heat_sources or {})
+        hs["supplyTemperature"] = supply_temp
+        hs["modulation"] = modulation
+        hs["totalConsumption"] = total_consumption
+        hs["workingTime"] = working_time
+        hs["systemPressure"] = system_pressure
+        hs["actualHeatDemand"] = heat_demand
+        hs["outdoorTemp"] = outdoor_temp
+
+        # Augment each DHW circuit reference with its live currentSetpoint.
+        # The library's populate_dhw fetches singleChargeSetpoint only; we need
+        # the active programme setpoint to detect when DHW is being heated.
+        dhw_circuits = list(data.dhw_circuits or [])
+        for ref in dhw_circuits:
+            dhw_id = ref.get("id", "").split("/")[-1]
+            if dhw_id:
+                ref["currentSetpoint"] = await _safe(_get_dhw_current_setpoint(dhw_id))
+
+        return BHCDeviceIcom(
+            device=data.device,
+            firmware=data.firmware,
+            notifications=data.notifications,
+            holiday_mode=data.holiday_mode,
+            heat_sources=hs,
+            dhw_circuits=dhw_circuits,
+            heating_circuits=data.heating_circuits,
+            solar_circuits=data.solar_circuits,
+            ventilation=data.ventilation,
+            system_info=data.system_info,
+            system_bus=data.system_bus,
+            health_status=data.health_status,
+            brand=data.brand,
+        )
+
+    async def async_set_temporary_room_setpoint(self, hc_id: str, temp: float) -> None:
+        """Set a temporary room-temperature override for a heating circuit.
+
+        This mirrors the Bosch app behaviour: the scheduled programme is
+        preserved and the override is active until the next programme switch.
+        Uses *temporaryRoomSetpoint* instead of *manualRoomSetpoint* so the
+        heating schedule is not permanently altered.
+
+        The homecom_alt library exposes a GET for this endpoint but no PUT;
+        we call _async_http_request directly using the same pattern as the
+        library's own async_set_hc_manual_room_setpoint implementation.
+
+        Args:
+            hc_id: Heating-circuit identifier (e.g. ``"hc1"``).
+            temp:  Target temperature in degrees Celsius.
+        """
+        await self.bhc.get_token()
+        await self.bhc._async_http_request(
+            "put",
+            (
+                BOSCHCOM_DOMAIN
+                + BOSCHCOM_ENDPOINT_GATEWAYS
+                + self.unique_id
+                + BOSCHCOM_ENDPOINT_HEATING_CIRCUITS
+                + "/"
+                + hc_id
+                + BOSCHCOM_ENDPOINT_HC_TEMPORARY_ROOM_SETPOINT
+            ),
+            {"value": temp},
+            1,
         )
 
 
