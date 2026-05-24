@@ -1205,6 +1205,27 @@ class DynamicPathResolver:
         return cur
 
 
+_UNIT_NORMALISE: dict[str, str] = {
+    # Volume flow
+    "l/min": "L/min",
+    "l/h":   "L/h",
+    # Volume
+    "l":     "L",
+    # Energy
+    "kwh":   "kWh",
+    "wh":    "Wh",
+    # Power
+    "w":     "W",
+    "kw":    "kW",
+    # Pressure
+    "bar":   "bar",
+    # Electrical (EV charger)
+    "v":     "V",
+    "a":     "A",
+    "hz":    "Hz",
+}
+
+
 class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
     """Generic read-only sensor for Bosch HomeCom values."""
 
@@ -1243,15 +1264,16 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
         """Resolve the live unit from the API's unitOfMeasure node, falling
         back to the descriptor-declared unit when the API doesn't expose one.
         """
-        if self._attr_device_class != SensorDeviceClass.TEMPERATURE:
-            return self._declared_unit
         node = self._resolver.get_node(self._coordinator_data_as_dict())
         if isinstance(node, dict):
             unit_str = node.get("unitOfMeasure")
-            if unit_str == "F":
-                return UnitOfTemperature.FAHRENHEIT
-            if unit_str == "C":
-                return UnitOfTemperature.CELSIUS
+            if unit_str:
+                if self._attr_device_class != SensorDeviceClass.TEMPERATURE:
+                    return _UNIT_NORMALISE.get(unit_str, unit_str)
+                if unit_str == "F":
+                    return UnitOfTemperature.FAHRENHEIT
+                if unit_str == "C":
+                    return UnitOfTemperature.CELSIUS
         return self._declared_unit
 
     @property
