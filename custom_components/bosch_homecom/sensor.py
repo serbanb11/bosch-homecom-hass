@@ -208,7 +208,7 @@ async def async_setup_entry(
 
         # ---- RRC2 (zone / hc / dhw / heat sources / system / gateway) ----
         if device_type == "rrc2":
-            for sensor in _build_rrc2_sensors(coordinator):
+            for sensor in _build_rrc2_sensors(coordinator, config_entry):
                 entities.append(sensor)
 
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
@@ -2283,6 +2283,7 @@ class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
 
 def _build_rrc2_sensors(
     coordinator: BoschComModuleCoordinatorRrc2,
+    config_entry: config_entries.ConfigEntry,
 ) -> list[SensorEntity]:
     """Build the standard RRC2 sensor set for one device."""
     entities: list[SensorEntity] = []
@@ -2491,6 +2492,29 @@ def _build_rrc2_sensors(
             diagnostic=True,
         )
     )
+
+    for dev in coordinator.data.devices or []:
+        dev_id = dev["id"].split("/")[-1]
+        if dev.get("roomtemperature"):
+            entities.append(
+                BoschComThermostatRoomTempSensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("actualHumidity"):
+            entities.append(
+                BoschComThermostatHumiditySensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("currentRoomSetpoint"):
+            entities.append(
+                BoschComThermostatSetpointSensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("battery"):
+            entities.append(
+                BoschComThermostatBatterySensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("signal"):
+            entities.append(
+                BoschComThermostatSignalSensor(coordinator, config_entry, dev_id)
+            )
 
     return entities
 

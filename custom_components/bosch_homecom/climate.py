@@ -578,11 +578,11 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
 
 
 class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
-    """Climate entity for an RRC2 zone (writes manualTemperatureHeating)."""
+    """Climate entity for an RRC2 zone."""
 
     _attr_has_entity_name = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
+    _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO, HVACMode.OFF]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.TURN_ON
@@ -601,7 +601,10 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
         self._attr_should_poll = False
+        self._attr_hvac_mode = HVACMode.HEAT
         self.field = field
+        self._manual_temp: float | None = None
+        self._clock_temp: float | None = None
         self.set_attr()
 
     @callback
@@ -611,7 +614,7 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature via manualTemperatureHeating PUT."""
+        """Set new target temperature."""
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
@@ -624,14 +627,32 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Toggle the system-level away mode (HEAT = off-away, OFF = away)."""
-        value = "true" if hvac_mode == HVACMode.OFF else "false"
-
+        """Set HVAC mode: AUTO=clock, HEAT=manual, OFF=away."""
         self._attr_hvac_mode = hvac_mode
+
+        if hvac_mode == HVACMode.OFF:
+            self.async_write_ha_state()
+            await self.coordinator.bhc.async_put_away_mode(
+                self.coordinator.unique_id, "true"
+            )
+            await self.coordinator.async_request_refresh()
+            return
+
+        if hvac_mode == HVACMode.HEAT and self._manual_temp is not None:
+            self._attr_target_temperature = self._manual_temp
+        elif hvac_mode == HVACMode.AUTO and self._clock_temp is not None:
+            self._attr_target_temperature = self._clock_temp
         self.async_write_ha_state()
 
+        mode: Literal["manual", "clock"] = "manual"
+        if hvac_mode == HVACMode.AUTO:
+            mode = "clock"
+
         await self.coordinator.bhc.async_put_away_mode(
-            self.coordinator.unique_id, value
+            self.coordinator.unique_id, "false"
+        )
+        await self.coordinator.bhc.async_set_zone_user_mode(
+            self.coordinator.unique_id, self.field, mode
         )
         await self.coordinator.async_request_refresh()
 
@@ -642,9 +663,10 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
             return
 
         away = (data.away_mode or {}).get("value")
-        self._attr_hvac_mode = (
-            HVACMode.OFF if str(away).lower() == "true" else HVACMode.HEAT
-        )
+        if str(away).lower() == "true":
+            self._attr_hvac_mode = HVACMode.OFF
+        else:
+            self._attr_hvac_mode = self._get_hvac_mode_from_zone()
 
         for entry in data.zones or []:
             if not entry.get("id", "").endswith(f"/{self.field}"):
@@ -659,11 +681,36 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
                 )
 
             manual = entry.get("manualTemperatureHeating") or {}
-            effective = entry.get("temperatureHeatingSetpoint") or {}
-            target_node = manual if manual.get("value") is not None else effective
+            clock = entry.get("temperatureHeatingSetpoint") or {}
+            if manual.get("value") is not None:
+                self._manual_temp = manual["value"]
+            if clock.get("value") is not None:
+                self._clock_temp = clock["value"]
+
+            target_node = self._get_temperature_data(entry)
             if target_node.get("value") is not None:
                 self._attr_target_temperature = target_node["value"]
             self._attr_min_temp = manual.get("minValue", 5)
             self._attr_max_temp = manual.get("maxValue", 30)
             self._attr_target_temperature_step = manual.get("stepSize", 0.5)
             break
+
+    def _get_hvac_mode_from_zone(self) -> HVACMode:
+        """Return HVAC mode based on zone userMode."""
+        data = self.coordinator.data
+        if not data:
+            return HVACMode.HEAT
+        for entry in data.zones or []:
+            if entry.get("id", "").endswith(f"/{self.field}"):
+                user_mode = (entry.get("userMode") or {}).get("value")
+                if user_mode == "clock":
+                    return HVACMode.AUTO
+                return HVACMode.HEAT
+        return HVACMode.HEAT
+
+    def _get_temperature_data(self, entry: dict) -> dict:
+        """Return the correct temperature object based on user mode."""
+        user_mode = (entry.get("userMode") or {}).get("value")
+        if user_mode == "manual":
+            return entry.get("manualTemperatureHeating") or {}
+        return entry.get("temperatureHeatingSetpoint") or {}
