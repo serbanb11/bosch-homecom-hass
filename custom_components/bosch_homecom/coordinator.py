@@ -26,13 +26,6 @@ from homecom_alt import (
     InvalidSensorDataError,
     NotRespondingError,
 )
-from homecom_alt.const import (
-    BOSCHCOM_DOMAIN,
-    BOSCHCOM_ENDPOINT_DHW_CIRCUITS,
-    BOSCHCOM_ENDPOINT_GATEWAYS,
-    BOSCHCOM_ENDPOINT_HC_TEMPORARY_ROOM_SETPOINT,
-    BOSCHCOM_ENDPOINT_HEATING_CIRCUITS,
-)
 from tenacity import RetryError
 
 from .const import CONF_REFRESH, DEFAULT_UPDATE_INTERVAL, DOMAIN, MANUFACTURER
@@ -242,24 +235,10 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
         async def _get_dhw_current_setpoint(dhw_id: str) -> dict:
             """Fetch the live DHW current setpoint for *dhw_id*.
 
-            The homecom_alt library exposes singleChargeSetpoint but not the
-            live currentSetpoint (which reflects the active programme or manual
-            override).  We call _async_http_request directly, the same pattern
-            used by async_set_temporary_room_setpoint.
+            Uses the homecom_alt library method added in v1.6.2 which exposes
+            the active programme setpoint (not just singleChargeSetpoint).
             """
-            response = await self.bhc._async_http_request(
-                "get",
-                (
-                    BOSCHCOM_DOMAIN
-                    + BOSCHCOM_ENDPOINT_GATEWAYS
-                    + self.unique_id
-                    + BOSCHCOM_ENDPOINT_DHW_CIRCUITS
-                    + "/"
-                    + dhw_id
-                    + "/currentSetpoint"
-                ),
-            )
-            return await self.bhc._to_data(response) or {}
+            return await self.bhc.async_get_dhw_current_setpoint(self.unique_id, dhw_id)
 
         (
             supply_temp,
@@ -321,29 +300,13 @@ class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]
         Uses *temporaryRoomSetpoint* instead of *manualRoomSetpoint* so the
         heating schedule is not permanently altered.
 
-        The homecom_alt library exposes a GET for this endpoint but no PUT;
-        we call _async_http_request directly using the same pattern as the
-        library's own async_set_hc_manual_room_setpoint implementation.
+        Delegates to the homecom_alt library method added in v1.6.2.
 
         Args:
             hc_id: Heating-circuit identifier (e.g. ``"hc1"``).
             temp:  Target temperature in degrees Celsius.
         """
-        await self.bhc.get_token()
-        await self.bhc._async_http_request(
-            "put",
-            (
-                BOSCHCOM_DOMAIN
-                + BOSCHCOM_ENDPOINT_GATEWAYS
-                + self.unique_id
-                + BOSCHCOM_ENDPOINT_HEATING_CIRCUITS
-                + "/"
-                + hc_id
-                + BOSCHCOM_ENDPOINT_HC_TEMPORARY_ROOM_SETPOINT
-            ),
-            {"value": temp},
-            1,
-        )
+        await self.bhc.async_set_hc_temporary_room_setpoint(self.unique_id, hc_id, temp)
 
 
 class BoschComModuleCoordinatorRrc2(BoschComModuleCoordinatorBase[BHCDeviceRrc2]):
