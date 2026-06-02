@@ -209,7 +209,7 @@ async def async_setup_entry(
 
         # ---- RRC2 (zone / hc / dhw / heat sources / system / gateway) ----
         if device_type == "rrc2":
-            for sensor in _build_rrc2_sensors(coordinator):
+            for sensor in _build_rrc2_sensors(coordinator, config_entry):
                 entities.append(sensor)
 
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
@@ -606,7 +606,11 @@ class BoschComSensorDhw(BoschComSensorBase):
                     )
 
                 return result
-        return "unknown"
+        # extra_state_attributes must return a mapping. Home Assistant merges
+        # it with `attr |= extra_state_attributes`; returning a string iterates
+        # it as a char sequence and raises
+        # "dictionary update sequence element #0 has length 1; 2 is required".
+        return {}
 
 
 class BoschComSensorHc(BoschComSensorBase):
@@ -839,7 +843,8 @@ class BoschComSensorVentilation(BoschComSensorBase):
                     "demandindoorAirQuality": demandindoorAirQuality_value,
                     "demandrelativeHumidity": demandrelativeHumidity_value,
                 }
-        return "unknown"
+        # See BoschComSensorDhw.extra_state_attributes — must return a mapping.
+        return {}
 
 
 class BoschComSensorOutdoorTemp(BoschComSensorBase):
@@ -961,10 +966,22 @@ class BoschComSensorHs(BoschComSensorBase):
             "values", "unknown"
         )
 
-        numberOfStarts = (self.coordinator.data.heat_sources.get("starts") or {}).get(
-            "values"
-        ) or []
-        numberOfStarts_dict = {k: v for d in numberOfStarts for k, v in d.items()}
+        # The pointt-api occasionally returns 500 for
+        # heatSources/.../numberOfStarts; the upstream lib may then pass a
+        # non-list or a list of non-dict items. Treat anything unexpected as
+        # missing so the entity does not crash during state update.
+        starts_node = self.coordinator.data.heat_sources.get("starts")
+        if not isinstance(starts_node, dict):
+            starts_node = {}
+        numberOfStarts = starts_node.get("values")
+        if not isinstance(numberOfStarts, list):
+            numberOfStarts = []
+        numberOfStarts_dict = {
+            k: v
+            for d in numberOfStarts
+            if isinstance(d, dict)
+            for k, v in d.items()
+        }
 
         returnTemperature = str(
             (self.coordinator.data.heat_sources.get("returnTemperature") or {}).get(
@@ -1216,6 +1233,27 @@ class DynamicPathResolver:
         return cur
 
 
+_UNIT_NORMALISE: dict[str, str] = {
+    # Volume flow
+    "l/min": "L/min",
+    "l/h":   "L/h",
+    # Volume
+    "l":     "L",
+    # Energy
+    "kwh":   "kWh",
+    "wh":    "Wh",
+    # Power
+    "w":     "W",
+    "kw":    "kW",
+    # Pressure
+    "bar":   "bar",
+    # Electrical (EV charger)
+    "v":     "V",
+    "a":     "A",
+    "hz":    "Hz",
+}
+
+
 class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
     """Generic read-only sensor for Bosch HomeCom values."""
 
@@ -1254,15 +1292,16 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
         """Resolve the live unit from the API's unitOfMeasure node, falling
         back to the descriptor-declared unit when the API doesn't expose one.
         """
-        if self._attr_device_class != SensorDeviceClass.TEMPERATURE:
-            return self._declared_unit
         node = self._resolver.get_node(self._coordinator_data_as_dict())
         if isinstance(node, dict):
             unit_str = node.get("unitOfMeasure")
-            if unit_str == "F":
-                return UnitOfTemperature.FAHRENHEIT
-            if unit_str == "C":
-                return UnitOfTemperature.CELSIUS
+            if unit_str:
+                if self._attr_device_class != SensorDeviceClass.TEMPERATURE:
+                    return _UNIT_NORMALISE.get(unit_str, unit_str)
+                if unit_str == "F":
+                    return UnitOfTemperature.FAHRENHEIT
+                if unit_str == "C":
+                    return UnitOfTemperature.CELSIUS
         return self._declared_unit
 
     @property
@@ -2255,6 +2294,7 @@ class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
 
 def _build_rrc2_sensors(
     coordinator: BoschComModuleCoordinatorRrc2,
+    config_entry: config_entries.ConfigEntry,
 ) -> list[SensorEntity]:
     """Build the standard RRC2 sensor set for one device."""
     entities: list[SensorEntity] = []
@@ -2463,6 +2503,29 @@ def _build_rrc2_sensors(
             diagnostic=True,
         )
     )
+
+    for dev in coordinator.data.devices or []:
+        dev_id = dev["id"].split("/")[-1]
+        if dev.get("roomtemperature"):
+            entities.append(
+                BoschComThermostatRoomTempSensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("actualHumidity"):
+            entities.append(
+                BoschComThermostatHumiditySensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("currentRoomSetpoint"):
+            entities.append(
+                BoschComThermostatSetpointSensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("battery"):
+            entities.append(
+                BoschComThermostatBatterySensor(coordinator, config_entry, dev_id)
+            )
+        if dev.get("signal"):
+            entities.append(
+                BoschComThermostatSignalSensor(coordinator, config_entry, dev_id)
+            )
 
     return entities
 
