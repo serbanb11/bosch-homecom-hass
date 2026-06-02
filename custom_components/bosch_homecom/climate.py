@@ -28,6 +28,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import (
+    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
     BoschComModuleCoordinatorRrc2,
@@ -363,9 +364,20 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
-        await self.coordinator.bhc.async_set_hc_manual_room_setpoint(
-            self.coordinator.unique_id, self._attr_name, temperature
-        )
+        if isinstance(self.coordinator, BoschComModuleCoordinatorIcom):
+            # icom: use temporaryRoomSetpoint to match the Bosch app behaviour
+            await self.coordinator.async_set_temporary_room_setpoint(
+                self._attr_name, temperature
+            )
+        else:
+            await self.coordinator.bhc.async_set_hc_manual_room_setpoint(
+                self.coordinator.unique_id, self._attr_name, temperature
+            )
+
+        # Optimistically reflect the new setpoint immediately — the Bosch cloud
+        # API may lag before the updated value appears in GET responses.
+        self._attr_target_temperature = temperature
+        self.async_write_ha_state()
 
         await self.coordinator.async_request_refresh()
 
