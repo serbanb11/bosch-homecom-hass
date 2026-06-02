@@ -66,10 +66,17 @@
         "climate": {
             "zone": {
                 "name": "Zone"
+            },
+            "ac": {
+                "name": "Klimaanlage"
+            },
+            "hc": {
+                "name": "Heizkreis {circuit}"
             }
         },
         "fan": {
             "ventilation": {
+                "name": "Lüftung {zone}",
                 "state_attributes": {
                     "preset_mode": {
                         "state": {
@@ -91,6 +98,7 @@
         },
         "select": {
             "airflow_horizontal": {
+                "name": "Luftstrom horizontal",
                 "state": {
                     "center": "Mitte",
                     "left": "Links",
@@ -99,6 +107,7 @@
                 }
             },
             "airflow_vertical": {
+                "name": "Luftstrom vertikal",
                 "state": {
                     "auto": "Automatisch",
                     "angle1": "Winkel 1",
@@ -110,6 +119,7 @@
                 }
             },
             "program": {
+                "name": "Programm",
                 "state": {
                     "off": "Aus",
                     "program1": "Programm 1",
@@ -117,6 +127,7 @@
                 }
             },
             "dhw_operation_mode": {
+                "name": "{circuit} Betriebsmodus",
                 "state": {
                     "off": "Aus",
                     "low": "Niedrig (Eco)",
@@ -127,6 +138,7 @@
                 }
             },
             "dhw_current_temp": {
+                "name": "{circuit} Temperaturstufe",
                 "state": {
                     "off": "Aus",
                     "low": "Niedrig",
@@ -135,6 +147,7 @@
                 }
             },
             "hc_operation_mode": {
+                "name": "{circuit} Betriebsmodus",
                 "state": {
                     "off": "Aus",
                     "manual": "Manuell",
@@ -142,6 +155,7 @@
                 }
             },
             "hc_suwi_mode": {
+                "name": "{circuit} Sommer/Winter",
                 "state": {
                     "forced": "Erzwungen",
                     "off": "Aus",
@@ -149,12 +163,14 @@
                 }
             },
             "hc_heatcool_mode": {
+                "name": "{circuit} Heizen/Kühlen",
                 "state": {
                     "heat": "Heizen",
                     "cool": "Kühlen"
                 }
             },
             "holiday_mode": {
+                "name": "Urlaubsmodus",
                 "state": {
                     "hm1": "Urlaubsmodus 1",
                     "hm2": "Urlaubsmodus 2",
@@ -167,6 +183,7 @@
                 }
             },
             "away_mode": {
+                "name": "Abwesenheit",
                 "state": {
                     "on": "An",
                     "off": "Aus"
@@ -184,10 +201,18 @@
                     "no": "Aus",
                     "yes": "An"
                 }
+            },
+            "wb_charging_strategy": {
+                "name": "Ladestrategie",
+                "state": {
+                    "default": "Standard",
+                    "solar-eco": "Solar-Eco"
+                }
             }
         },
         "sensor": {
             "hc": {
+                "name": "{circuit} Status",
                 "state": {
                     "off": "Aus",
                     "manual": "Manuell",
@@ -204,6 +229,7 @@
                 "name": "Energieverlauf"
             },
             "ventilation": {
+                "name": "{zone} Stufe",
                 "state": {
                     "off": "Aus",
                     "min": "Stufe 1 (Minimum)",
@@ -261,6 +287,21 @@
             },
             "thermostat_signal": {
                 "name": "Signalstärke"
+            },
+            "dhw": {
+                "name": "{circuit} Temperatur"
+            },
+            "hs": {
+                "name": "Wärmequelle"
+            },
+            "OutdoorTemp": {
+                "name": "Außentemperatur"
+            },
+            "notifications": {
+                "name": "Benachrichtigungen"
+            },
+            "energy_history_hourly": {
+                "name": "Energieverlauf (stündlich)"
             }
         },
         "binary_sensor": {
@@ -305,10 +346,14 @@
             },
             "wb_rfid_secure": {
                 "name": "Wallbox RFID Sicher"
+            },
+            "plasmacluster": {
+                "name": "Plasmacluster"
             }
         },
         "water_heater": {
             "dhw": {
+                "name": "Warmwasser {circuit}",
                 "state_attributes": {
                     "operation_mode": {
                         "state": {

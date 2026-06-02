@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import (
+    BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
     BoschComModuleCoordinatorRrc2,
@@ -178,6 +179,19 @@ async def async_setup_entry(
                 )
         if coordinator.data.device["deviceType"] == "rrc2":
             entities.extend(_build_rrc2_selects(coordinator))
+        if coordinator.data.device["deviceType"] == "commodule":
+            for cp in coordinator.data.charge_points or []:
+                cp_id = cp["id"].split("/")[-1]
+                strategy = cp.get("chargingStrategy") or {}
+                allowed_values = strategy.get("allowedValues")
+                if allowed_values:
+                    entities.append(
+                        BoschComCommoduleChargingStrategySelect(
+                            coordinator=coordinator,
+                            cp_id=cp_id,
+                            allowed_values=allowed_values,
+                        )
+                    )
     async_add_entities(entities)
 
 
@@ -434,6 +448,7 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw_operation_mode"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
@@ -495,6 +510,7 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw_current_temp"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-temp"
         self._attr_name = field + "_temp"
@@ -561,6 +577,7 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_operation_mode"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
@@ -622,6 +639,7 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_suwi_mode"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-suwi"
         self._attr_name = field + "_suwi"
@@ -684,6 +702,7 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_heatcool_mode"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-heatcool"
         self._attr_name = field + "_heatcool"
@@ -1083,3 +1102,60 @@ def _build_rrc2_selects(
             )
 
     return entities
+
+
+class BoschComCommoduleChargingStrategySelect(CoordinatorEntity, SelectEntity):
+    """Representation of a commodule charge point charging strategy select."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorCommodule,
+        cp_id: str,
+        allowed_values: list[str],
+    ) -> None:
+        """Initialize select entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "wb_charging_strategy"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{cp_id}-charging-strategy"
+        self._coordinator = coordinator
+        self._cp_id = cp_id
+        self._attr_options = allowed_values
+
+    def _get_cp_data(self) -> dict | None:
+        """Get charge point data."""
+        for cp in self._coordinator.data.charge_points or []:
+            if cp["id"].split("/")[-1] == self._cp_id:
+                return cp
+        return None
+
+    def _read_value(self) -> str | None:
+        """Return the current charging strategy value, or None."""
+        cp = self._get_cp_data()
+        if cp is None:
+            return None
+        strategy = cp.get("chargingStrategy")
+        if not isinstance(strategy, dict):
+            return None
+        return strategy.get("value")
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the charging strategy."""
+        await self._coordinator.bhc.async_put_cp_conf_charging_strategy(
+            self._coordinator.data.device["deviceId"], self._cp_id, option
+        )
+        await self._coordinator.async_request_refresh()
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current charging strategy."""
+        return self._read_value()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._attr_current_option = self._read_value()
+        self.async_write_ha_state()

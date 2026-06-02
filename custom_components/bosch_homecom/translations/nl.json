@@ -66,10 +66,17 @@
         "climate": {
             "zone": {
                 "name": "Zone"
+            },
+            "ac": {
+                "name": "Airconditioner"
+            },
+            "hc": {
+                "name": "Verwarmingscircuit {circuit}"
             }
         },
         "fan": {
             "ventilation": {
+                "name": "Ventilatie {zone}",
                 "state_attributes": {
                     "preset_mode": {
                         "state": {
@@ -89,6 +96,7 @@
         },
         "select": {
             "airflow_horizontal": {
+                "name": "Luchtstroom horizontaal",
                 "state": {
                     "center": "Midden",
                     "left": "Links",
@@ -97,6 +105,7 @@
                 }
             },
             "airflow_vertical": {
+                "name": "Luchtstroom verticaal",
                 "state": {
                     "auto": "Automatisch",
                     "angle1": "Hoek 1",
@@ -108,6 +117,7 @@
                 }
             },
             "program": {
+                "name": "Programma",
                 "state": {
                     "off": "Uit",
                     "program1": "Programma 1",
@@ -115,6 +125,7 @@
                 }
             },
             "dhw_operation_mode": {
+                "name": "{circuit} bedrijfsmodus",
                 "state": {
                     "off": "Uit",
                     "low": "Laag (Eco)",
@@ -125,6 +136,7 @@
                 }
             },
             "dhw_current_temp": {
+                "name": "{circuit} temperatuurniveau",
                 "state": {
                     "off": "Uit",
                     "low": "Laag",
@@ -133,6 +145,7 @@
                 }
             },
             "hc_operation_mode": {
+                "name": "{circuit} bedrijfsmodus",
                 "state": {
                     "off": "Uit",
                     "manual": "Handmatig",
@@ -140,6 +153,7 @@
                 }
             },
             "hc_suwi_mode": {
+                "name": "{circuit} zomer/winter",
                 "state": {
                     "forced": "Geforceerd",
                     "off": "Uit",
@@ -147,12 +161,14 @@
                 }
             },
             "hc_heatcool_mode": {
+                "name": "{circuit} verwarmen/koelen",
                 "state": {
                     "heat": "Verwarmen",
                     "cool": "Koelen"
                 }
             },
             "holiday_mode": {
+                "name": "Vakantiemodus",
                 "state": {
                     "hm1": "Vakantiemodus 1",
                     "hm2": "Vakantiemodus 2",
@@ -165,6 +181,7 @@
                 }
             },
             "away_mode": {
+                "name": "Afwezigheidsmodus",
                 "state": {
                     "on": "Aan",
                     "off": "Uit"
@@ -182,10 +199,18 @@
                     "no": "Uit",
                     "yes": "Aan"
                 }
+            },
+            "wb_charging_strategy": {
+                "name": "Laadstrategie",
+                "state": {
+                    "default": "Standaard",
+                    "solar-eco": "Solar-Eco"
+                }
             }
         },
         "sensor": {
             "hc": {
+                "name": "{circuit} status",
                 "state": {
                     "off": "Uit",
                     "manual": "Handmatig",
@@ -202,6 +227,7 @@
                 "name": "Energiegeschiedenis"
             },
             "ventilation": {
+                "name": "{zone} niveau",
                 "state": {
                     "off": "Uit",
                     "min": "Niveau 1 (Minimaal)",
@@ -259,6 +285,21 @@
             },
             "thermostat_signal": {
                 "name": "Signaalsterkte"
+            },
+            "dhw": {
+                "name": "{circuit} temperatuur"
+            },
+            "hs": {
+                "name": "Warmtebron"
+            },
+            "OutdoorTemp": {
+                "name": "Buitentemperatuur"
+            },
+            "notifications": {
+                "name": "Meldingen"
+            },
+            "energy_history_hourly": {
+                "name": "Energiegeschiedenis (uurlijks)"
             }
         },
         "binary_sensor": {
@@ -303,10 +344,14 @@
             },
             "wb_rfid_secure": {
                 "name": "Wallbox RFID Beveiligd"
+            },
+            "plasmacluster": {
+                "name": "Plasmacluster"
             }
         },
         "water_heater": {
             "dhw": {
+                "name": "Boiler {circuit}",
                 "state_attributes": {
                     "operation_mode": {
                         "state": {

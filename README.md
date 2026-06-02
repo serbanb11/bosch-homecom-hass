@@ -57,7 +57,7 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 |----------|-----|--------------|------|-------|-----------|
 | Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | Heating circuits with temporary setpoint | -- | -- |
 | Water Heater | -- | Operation mode | Operation mode | Operation mode + target temp | -- |
-| Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | DHW/HC modes, away | -- | -- |
+| Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | DHW/HC modes, away | -- | Charging strategy |
 | Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
 | Switch | Plasmacluster | -- | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |

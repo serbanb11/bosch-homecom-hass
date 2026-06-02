@@ -143,6 +143,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}"
         self._attr_name = field + "_waterheater"

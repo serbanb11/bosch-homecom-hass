@@ -50,6 +50,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         super().__init__(coordinator)
         self.field = field
         self._attr_translation_key = "ventilation"
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-fan"
         self._attr_name = f"{field}_fan"

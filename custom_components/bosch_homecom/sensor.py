@@ -538,6 +538,7 @@ class BoschComSensorDhw(BoschComSensorBase):
             icon="mdi:water-boiler",
         )
         self._attr_translation_key = "dhw"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False
@@ -633,6 +634,7 @@ class BoschComSensorHc(BoschComSensorBase):
             icon="mdi:heating-coil",
         )
         self._attr_translation_key = "hc"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False
@@ -753,6 +755,7 @@ class BoschComSensorVentilation(BoschComSensorBase):
             icon="mdi:fan",
         )
         self._attr_translation_key = "ventilation"
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False
@@ -1120,6 +1123,7 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
             icon="mdi:water-boiler",
         )
         self._attr_translation_key = "dhw"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False

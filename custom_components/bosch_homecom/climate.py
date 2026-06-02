@@ -343,6 +343,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         """Initialize climate entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field
@@ -368,6 +369,12 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
             # icom: use temporaryRoomSetpoint to match the Bosch app behaviour
             await self.coordinator.async_set_temporary_room_setpoint(
                 self._attr_name, temperature
+            )
+        elif self._is_cooling():
+            # In cooling mode the manualRoomSetpoint endpoint returns 404;
+            # the writable setpoint is coolingRoomTempSetpoint instead.
+            await self.coordinator.bhc.async_set_hc_cooling_room_temp_setpoint(
+                self.coordinator.unique_id, self._attr_name, temperature
             )
         else:
             await self.coordinator.bhc.async_set_hc_manual_room_setpoint(
@@ -453,6 +460,21 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                         self._attr_current_temperature = None
                 case "actualHumidity":
                     self._attr_current_humidity = heating_circuits[key]["value"]
+
+    def _is_cooling(self) -> bool:
+        """Return True when this circuit is cooling.
+
+        In cooling the manualRoomSetpoint endpoint returns 404, so the write
+        path must target coolingRoomTempSetpoint instead. Matching either the
+        live season (currentSuWiMode) or the configured mode (heatCoolMode)
+        also covers cooling season while the compressor is idle.
+        """
+        for entry in self.coordinator.data.heating_circuits or []:
+            if entry.get("id") == f"/heatingCircuits/{self._attr_name}":
+                suwi = (entry.get("currentSuWiMode") or {}).get("value")
+                heatcool = (entry.get("heatCoolMode") or {}).get("value")
+                return suwi == "cooling" or heatcool == "cooling"
+        return False
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""
