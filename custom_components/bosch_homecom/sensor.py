@@ -977,10 +977,7 @@ class BoschComSensorHs(BoschComSensorBase):
         if not isinstance(numberOfStarts, list):
             numberOfStarts = []
         numberOfStarts_dict = {
-            k: v
-            for d in numberOfStarts
-            if isinstance(d, dict)
-            for k, v in d.items()
+            k: v for d in numberOfStarts if isinstance(d, dict) for k, v in d.items()
         }
 
         returnTemperature = str(
@@ -1236,21 +1233,21 @@ class DynamicPathResolver:
 _UNIT_NORMALISE: dict[str, str] = {
     # Volume flow
     "l/min": "L/min",
-    "l/h":   "L/h",
+    "l/h": "L/h",
     # Volume
-    "l":     "L",
+    "l": "L",
     # Energy
-    "kwh":   "kWh",
-    "wh":    "Wh",
+    "kwh": "kWh",
+    "wh": "Wh",
     # Power
-    "w":     "W",
-    "kw":    "kW",
+    "w": "W",
+    "kw": "kW",
     # Pressure
-    "bar":   "bar",
+    "bar": "bar",
     # Electrical (EV charger)
-    "v":     "V",
-    "a":     "A",
-    "hz":    "Hz",
+    "v": "V",
+    "a": "A",
+    "hz": "Hz",
 }
 
 
