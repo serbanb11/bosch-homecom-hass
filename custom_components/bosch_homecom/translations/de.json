@@ -294,7 +294,7 @@
             "hs": {
                 "name": "Wärmequelle"
             },
-            "OutdoorTemp": {
+            "outdoor_temp": {
                 "name": "Außentemperatur"
             },
             "notifications": {

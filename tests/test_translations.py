@@ -57,6 +57,22 @@ def _used_keys() -> set[tuple[str, str]]:
     return used
 
 
+_VALID_KEY_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$")
+
+
+@pytest.mark.parametrize("filename", TRANSLATION_FILES)
+def test_translation_keys_are_valid_slugs(filename):
+    """hassfest requires entity translation keys to be lowercase slugs."""
+    entity = _load(filename)["entity"]
+    invalid = [
+        f"{platform}.{key}"
+        for platform, keys in entity.items()
+        for key in keys
+        if not _VALID_KEY_RE.match(key)
+    ]
+    assert not invalid, f"{filename} has invalid translation keys: {invalid}"
+
+
 def test_every_translation_key_has_a_name():
     """Each translation_key used in code must have a name in strings.json."""
     entity = _load("strings.json")["entity"]

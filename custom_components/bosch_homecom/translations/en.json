@@ -292,7 +292,7 @@
             "hs": {
                 "name": "Heat source"
             },
-            "OutdoorTemp": {
+            "outdoor_temp": {
                 "name": "Outdoor temperature"
             },
             "notifications": {

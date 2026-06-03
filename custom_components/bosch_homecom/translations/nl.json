@@ -292,7 +292,7 @@
             "hs": {
                 "name": "Warmtebron"
             },
-            "OutdoorTemp": {
+            "outdoor_temp": {
                 "name": "Buitentemperatuur"
             },
             "notifications": {

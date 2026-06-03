@@ -872,7 +872,7 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-        self._attr_translation_key = "OutdoorTemp"
+        self._attr_translation_key = "outdoor_temp"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_name = field + "_sensor"
         self._attr_should_poll = False
