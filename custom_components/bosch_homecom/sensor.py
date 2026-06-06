@@ -425,12 +425,11 @@ class BoschComSensorNotificationsRac(BoschComSensorBase):
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
-        self._attr_name = None
+        del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorNotificationsRac: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorNotificationsRac: unique_id=%s",
             self._attr_unique_id,
         )
 
@@ -460,12 +459,11 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
-        self._attr_name = None
+        del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorNotificationsK40: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorNotificationsK40: unique_id=%s",
             self._attr_unique_id,
         )
 
@@ -499,12 +497,11 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
-        self._attr_name = None
+        del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorNotificationsWddw2: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorNotificationsWddw2: unique_id=%s",
             self._attr_unique_id,
         )
 
@@ -540,7 +537,7 @@ class BoschComSensorDhw(BoschComSensorBase):
         self._attr_translation_key = "dhw"
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
+        del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -548,8 +545,8 @@ class BoschComSensorDhw(BoschComSensorBase):
         self.field = field
 
         _LOGGER.debug(
-            "Init BoschComSensorDhw: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorDhw: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -636,15 +633,15 @@ class BoschComSensorHc(BoschComSensorBase):
         self._attr_translation_key = "hc"
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
+        del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
         self._attr_options = ["off", "manual", "auto"]
         self.field = field
 
         _LOGGER.debug(
-            "Init BoschComSensorHc: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorHc: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -757,15 +754,15 @@ class BoschComSensorVentilation(BoschComSensorBase):
         self._attr_translation_key = "ventilation"
         self._attr_translation_placeholders = {"zone": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
+        del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
         self._attr_options = ["off", "min", "red", "nom", "max", "dem"]
         self.field = field
 
         _LOGGER.debug(
-            "Init BoschComSensorVentilation: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorVentilation: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -1125,13 +1122,13 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
         self._attr_translation_key = "dhw"
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
+        del self._attr_name
         self._attr_should_poll = False
         self.field = field
 
         _LOGGER.debug(
-            "Init BoschComSensorDhw: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorDhwWddw2: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 

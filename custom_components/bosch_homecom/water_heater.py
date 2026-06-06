@@ -146,7 +146,6 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self.field = field

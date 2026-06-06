@@ -53,7 +53,6 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-fan"
-        self._attr_name = None
         self._attr_should_poll = False
         self._attr_has_entity_name = True
         self._attr_supported_features = (

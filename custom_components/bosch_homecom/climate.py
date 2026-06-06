@@ -324,7 +324,6 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschComK40 climate entity."""
 
     _attr_has_entity_name = True
-    _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [
         HVACMode.OFF,
@@ -346,7 +345,6 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.OFF
         self.field = field
@@ -497,7 +495,6 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom zone climate entity."""
 
     _attr_has_entity_name = True
-    _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
@@ -513,7 +510,6 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.HEAT
         self.field = field
@@ -636,7 +632,6 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.HEAT
         self.field = field

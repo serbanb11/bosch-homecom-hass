@@ -210,7 +210,6 @@ class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "airflow_horizontal"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
 
@@ -283,7 +282,6 @@ class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "airflow_vertical"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
 
@@ -356,7 +354,6 @@ class BoschComSelectProgram(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "program"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
 
@@ -451,7 +448,6 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -518,7 +514,6 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-temp"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -585,7 +580,6 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -652,7 +646,6 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-suwi"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -715,7 +708,6 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-heatcool"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -777,7 +769,6 @@ class BoschComSelectHolidayMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "holiday_mode"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -821,7 +812,6 @@ class BoschComSelectAwayMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "away_mode"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -865,7 +855,6 @@ class BoschComSelectHcNightSwitchMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-nightswitch"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -915,7 +904,6 @@ class BoschComSelectHcControl(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-control"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
@@ -963,7 +951,6 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-summerbypass-enable"
-        self._attr_name = None
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
