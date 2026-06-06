@@ -149,6 +149,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         self._coordinator = coordinator
         self._attr_should_poll = False
         self.field = field
+        self._attr_suggested_object_id = field + "_waterheater"
 
         self._attr_min_temp = 36
         self._attr_max_temp = 60

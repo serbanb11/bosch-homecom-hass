@@ -212,6 +212,7 @@ class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._coordinator = coordinator
         self._attr_should_poll = False
+            self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -284,6 +285,7 @@ class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._coordinator = coordinator
         self._attr_should_poll = False
+            self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -356,6 +358,7 @@ class BoschComSelectProgram(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._coordinator = coordinator
         self._attr_should_poll = False
+            self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -452,6 +455,7 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -518,6 +522,7 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field + "_temp"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -584,6 +589,7 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -650,6 +656,7 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field + "_suwi"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -712,6 +719,7 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field + "_heatcool"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -772,6 +780,7 @@ class BoschComSelectHolidayMode(CoordinatorEntity, SelectEntity):
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
+            self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -815,6 +824,7 @@ class BoschComSelectAwayMode(CoordinatorEntity, SelectEntity):
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
+            self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -859,6 +869,7 @@ class BoschComSelectHcNightSwitchMode(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field + "_nightswitch"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -908,6 +919,7 @@ class BoschComSelectHcControl(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field + "_control"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -955,6 +967,7 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+            self._attr_suggested_object_id = field + "_summerbypass_enable"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""

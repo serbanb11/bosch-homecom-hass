@@ -348,6 +348,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.OFF
         self.field = field
+        self._attr_suggested_object_id = field
 
         # Call this in __init__ so data is populated right away, since it's
         # already available in the coordinator data.
@@ -515,6 +516,7 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         self.field = field
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None
+        self._attr_suggested_object_id = field
 
         self.set_attr()
 
@@ -637,6 +639,7 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         self.field = field
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None
+        self._attr_suggested_object_id = field
         self.set_attr()
 
     @callback
