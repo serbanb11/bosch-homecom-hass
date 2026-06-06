@@ -55,7 +55,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-fan"
         self._attr_should_poll = False
         self._attr_has_entity_name = True
-            self._attr_suggested_object_id = field + "_fan"
+        self._attr_suggested_object_id = field + "_fan"
         self._attr_supported_features = (
             FanEntityFeature.PRESET_MODE
             | FanEntityFeature.TURN_OFF

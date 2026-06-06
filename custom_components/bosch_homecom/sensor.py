@@ -425,12 +425,12 @@ class BoschComSensorNotificationsRac(BoschComSensorBase):
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
+        self._attr_suggested_object_id = "notifications"
         del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
             "Init BoschComSensorNotificationsRac: unique_id=%s",
-            self._attr_suggested_object_id = "notifications"
             self._attr_unique_id,
         )
 
@@ -460,12 +460,12 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
+        self._attr_suggested_object_id = "notifications"
         del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
             "Init BoschComSensorNotificationsK40: unique_id=%s",
-            self._attr_suggested_object_id = "notifications"
             self._attr_unique_id,
         )
 
@@ -499,12 +499,12 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
+        self._attr_suggested_object_id = "notifications"
         del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
             "Init BoschComSensorNotificationsWddw2: unique_id=%s",
-            self._attr_suggested_object_id = "notifications"
             self._attr_unique_id,
         )
 
@@ -640,7 +640,7 @@ class BoschComSensorHc(BoschComSensorBase):
         del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
-            self._attr_suggested_object_id = f"{field}_sensor"
+        self._attr_suggested_object_id = f"{field}_sensor"
         self._attr_options = ["off", "manual", "auto"]
         self.field = field
 
@@ -762,7 +762,7 @@ class BoschComSensorVentilation(BoschComSensorBase):
         del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
-            self._attr_suggested_object_id = field + "_sensor"
+        self._attr_suggested_object_id = field + "_sensor"
         self._attr_options = ["off", "min", "red", "nom", "max", "dem"]
         self.field = field
 
