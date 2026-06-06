@@ -1,371 +1,371 @@
 {
-    "config": {
-        "step": {
-            "user": {
-                "data": {
-                    "username": "SingleKey ID username",
-                    "password": "SingleKey ID password",
-                    "brand_buderus": "Buderus brand"
-                },
-                "description": "Enter your SingleKey ID Credentials",
-                "title": "Authentication"
-            },
-            "reauth_confirm": {
-                "description": "Please enter the correct username and password for SingleKey ID",
-                "data": {
-                    "username": "SingleKey ID username",
-                    "password": "SingleKey ID password"
-                }
-            },
-            "reconfigure": {
-                "description": "Update configuration for SingleKey ID.",
-                "data": {
-                    "username": "SingleKey ID username",
-                    "password": "SingleKey ID password"
-                },
-                "title": "Authentication"
-            },
-            "browser": {
-                "description": "Login in browser using [URL]({url}) in readme and capture code using browser's developer tools.",
-                "data": {
-                    "code": "SingleKey ID code"
-                },
-                "title": "Browser Authentication"
-            }
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "username": "SingleKey ID username",
+          "password": "SingleKey ID password",
+          "brand_buderus": "Buderus brand"
         },
-        "error": {
-            "username_required": "Username is required.",
-            "code_required": "Verification code is required.",
-            "unknown": "An unknown error occurred.",
-            "cannot_connect": "Cannot connect to Bosch servers.",
-            "no_devices_found": "No devices found.",
-            "no_device_selected": "You must select at least one device.",
-            "already_configured": "This account is already configured."
-        },
-        "abort": {
-            "already_configured": "Already configured",
-            "device_unsupported": "The device is unsupported.",
-            "reauth_successful": "Reauth successful",
-            "reauth_unsuccessful": "Re-authentication was unsuccessful, please remove the integration and set it up again.",
-            "reconfigure_successful": "Reconfigure successful"
+        "description": "Enter your SingleKey ID Credentials",
+        "title": "Authentication"
+      },
+      "reauth_confirm": {
+        "description": "Please enter the correct username and password for SingleKey ID",
+        "data": {
+          "username": "SingleKey ID username",
+          "password": "SingleKey ID password"
         }
+      },
+      "reconfigure": {
+        "description": "Update configuration for SingleKey ID.",
+        "data": {
+          "username": "SingleKey ID username",
+          "password": "SingleKey ID password"
+        },
+        "title": "Authentication"
+      },
+      "browser": {
+        "description": "Login in browser using [URL]({url}) in readme and capture code using browser's developer tools.",
+        "data": {
+          "code": "SingleKey ID code"
+        },
+        "title": "Browser Authentication"
+      }
     },
-    "options": {
-        "step": {
-            "init": {
-                "title": "Options",
-                "description": "Adjust runtime options for Bosch HomeCom.",
-                "data": {
-                    "update_seconds": "Update interval (seconds)",
-                    "brand_buderus": "Buderus brand",
-                    "wb_label": "Wallbox label"
-                }
-            }
-        }
+    "error": {
+      "username_required": "Username is required.",
+      "code_required": "Verification code is required.",
+      "unknown": "An unknown error occurred.",
+      "cannot_connect": "Cannot connect to Bosch servers.",
+      "no_devices_found": "No devices found.",
+      "no_device_selected": "You must select at least one device.",
+      "already_configured": "This account is already configured."
     },
-    "entity": {
-        "climate": {
-            "zone": {
-                "name": "Zone"
-            },
-            "ac": {
-                "name": "Air conditioner"
-            },
-            "hc": {
-                "name": "Heating circuit {circuit}"
-            }
-        },
-        "fan": {
-            "ventilation": {
-                "name": "Ventilation {zone}",
-                "state_attributes": {
-                    "preset_mode": {
-                        "state": {
-                            "off": "Off",
-                            "min": "Level 1 (Minimum)",
-                            "red": "Level 2 (Reduced)",
-                            "nom": "Level 3 (Normal)",
-                            "max": "Level 4 (Maximum)",
-                            "dem": "Demand-based",
-                            "time": "Time-based",
-                            "party": "Party",
-                            "fireplace": "Fireplace"
-                        }
-                    }
-                }
-            }
-        },
-        "select": {
-            "airflow_horizontal": {
-                "name": "Horizontal airflow",
-                "state": {
-                    "center": "Center",
-                    "left": "Left",
-                    "right": "Right",
-                    "swing": "Swing"
-                }
-            },
-            "airflow_vertical": {
-                "name": "Vertical airflow",
-                "state": {
-                    "auto": "Auto",
-                    "angle1": "Angle 1",
-                    "angle2": "Angle 2",
-                    "angle3": "Angle 3",
-                    "angle4": "Angle 4",
-                    "angle5": "Angle 5",
-                    "swing": "Swing"
-                }
-            },
-            "program": {
-                "name": "Program",
-                "state": {
-                    "off": "Off",
-                    "program1": "Program 1",
-                    "program2": "Program 2"
-                }
-            },
-            "dhw_operation_mode": {
-                "name": "{circuit} operation mode",
-                "state": {
-                    "off": "Off",
-                    "low": "Low (Eco)",
-                    "high": "High (Comfort)",
-                    "eco": "Eco+",
-                    "ownprogram": "Own program",
-                    "manual": "Manual"
-                }
-            },
-            "dhw_current_temp": {
-                "name": "{circuit} temperature level",
-                "state": {
-                    "off": "Off",
-                    "low": "Low",
-                    "high": "High",
-                    "eco": "Eco"
-                }
-            },
-            "hc_operation_mode": {
-                "name": "{circuit} operation mode",
-                "state": {
-                    "off": "Off",
-                    "manual": "Manual",
-                    "auto": "Auto"
-                }
-            },
-            "hc_suwi_mode": {
-                "name": "{circuit} summer/winter mode",
-                "state": {
-                    "forced": "Forced",
-                    "off": "Off",
-                    "cooling": "Cooling"
-                }
-            },
-            "hc_heatcool_mode": {
-                "name": "{circuit} heat/cool mode",
-                "state": {
-                    "heat": "Heat",
-                    "cool": "Cool"
-                }
-            },
-            "holiday_mode": {
-                "name": "Holiday mode",
-                "state": {
-                    "hm1": "Holiday mode 1",
-                    "hm2": "Holiday mode 2",
-                    "hm3": "Holiday mode 3",
-                    "hm4": "Holiday mode 4",
-                    "hm5": "Holiday mode 5",
-                    "hm6": "Holiday mode 6",
-                    "hm7": "Holiday mode 7",
-                    "hm8": "Holiday mode 8"
-                }
-            },
-            "away_mode": {
-                "name": "Away mode",
-                "state": {
-                    "on": "On",
-                    "off": "Off"
-                }
-            },
-            "hc_night_switch_mode": {
-                "name": "HC Night Switch Mode"
-            },
-            "hc_control": {
-                "name": "HC Control"
-            },
-            "ventilation_summer_enable": {
-                "name": "Summer bypass",
-                "state": {
-                    "no": "Off",
-                    "yes": "On"
-                }
-            },
-            "wb_charging_strategy": {
-                "name": "Charging Strategy",
-                "state": {
-                    "default": "Default",
-                    "solar-eco": "Solar Eco"
-                }
-            }
-        },
-        "sensor": {
-            "hc": {
-                "name": "{circuit} status",
-                "state": {
-                    "off": "Off",
-                    "manual": "Manual",
-                    "auto": "Auto"
-                }
-            },
-            "indoor_humidity": {
-                "name": "Indoor Humidity"
-            },
-            "flame_indication": {
-                "name": "Flame Indication"
-            },
-            "energy_history": {
-                "name": "Energy History"
-            },
-            "ventilation": {
-                "name": "{zone} level",
-                "state": {
-                    "off": "Off",
-                    "min": "Level 1 (Minimum)",
-                    "red": "Level 2 (Reduced)",
-                    "nom": "Level 3 (Normal)",
-                    "max": "Level 4 (Maximum)",
-                    "dem": "Demand-based"
-                }
-            },
-            "wb_state": {
-                "name": "Wallbox State",
-                "state": {
-                    "available": "Available",
-                    "authenticated": "Authenticated",
-                    "preparing": "Awaiting Authorization",
-                    "locked": "Locked",
-                    "charging": "Charging",
-                    "suspendedev": "Vehicle Paused",
-                    "suspendedevse": "Wallbox Paused",
-                    "init": "Initializing",
-                    "faulted": "Faulted",
-                    "limited": "Power Limited",
-                    "phaseswitch": "Phase Switching"
-                }
-            },
-            "wb_power": {
-                "name": "Wallbox Power"
-            },
-            "wb_energy_total": {
-                "name": "Wallbox Energy Total"
-            },
-            "wb_temperature": {
-                "name": "Wallbox Temperature"
-            },
-            "wb_phases": {
-                "name": "Wallbox Phases"
-            },
-            "wb_phase_sensor": {
-                "name": "Wallbox Phase"
-            },
-            "wb_chargelog": {
-                "name": "Wallbox Charge Log"
-            },
-            "thermostat_room_temp": {
-                "name": "Room Temperature"
-            },
-            "thermostat_humidity": {
-                "name": "Room Humidity"
-            },
-            "thermostat_setpoint": {
-                "name": "Room Setpoint"
-            },
-            "thermostat_battery": {
-                "name": "Battery"
-            },
-            "thermostat_signal": {
-                "name": "Signal Strength"
-            },
-            "dhw": {
-                "name": "{circuit} temperature"
-            },
-            "hs": {
-                "name": "Heat source"
-            },
-            "outdoor_temp": {
-                "name": "Outdoor temperature"
-            },
-            "notifications": {
-                "name": "Notifications"
-            },
-            "energy_history_hourly": {
-                "name": "Energy history (hourly)"
-            }
-        },
-        "binary_sensor": {
-            "wb_network": {
-                "name": "Wallbox Network"
-            },
-            "thermostat_rf_status": {
-                "name": "RF Connection"
-            }
-        },
-        "number": {
-            "wb_price": {
-                "name": "Electricity Price"
-            },
-            "wb_charge_limit": {
-                "name": "Charging Limit"
-            },
-            "ventilation_summer_duration": {
-                "name": "Summer bypass duration"
-            }
-        },
-        "button": {
-            "wb_authenticate": {
-                "name": "Authenticate Charging"
-            },
-            "wb_start_charging": {
-                "name": "Start Charging"
-            },
-            "wb_pause_charging": {
-                "name": "Pause Charging"
-            }
-        },
-        "switch": {
-            "child_lock": {
-                "name": "Child Lock"
-            },
-            "wb_locked": {
-                "name": "Wallbox Locked"
-            },
-            "wb_auth": {
-                "name": "Wallbox Auth"
-            },
-            "wb_rfid_secure": {
-                "name": "Wallbox RFID Secure"
-            },
-            "plasmacluster": {
-                "name": "Plasmacluster"
-            }
-        },
-        "water_heater": {
-            "dhw": {
-                "name": "Water heater {circuit}",
-                "state_attributes": {
-                    "operation_mode": {
-                        "state": {
-                            "off": "Off",
-                            "low": "Low (Eco)",
-                            "high": "High (Comfort)",
-                            "eco": "Eco+",
-                            "manual": "Manual",
-                            "ownprogram": "Own program"
-                        }
-                    }
-                }
-            }
-        }
+    "abort": {
+      "already_configured": "Already configured",
+      "device_unsupported": "The device is unsupported.",
+      "reauth_successful": "Reauth successful",
+      "reauth_unsuccessful": "Re-authentication was unsuccessful, please remove the integration and set it up again.",
+      "reconfigure_successful": "Reconfigure successful"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "Adjust runtime options for Bosch HomeCom.",
+        "data": {
+          "update_seconds": "Update interval (seconds)",
+          "brand_buderus": "Buderus brand",
+          "wb_label": "Wallbox label"
+        }
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "zone": {
+        "name": "Zone {zone}"
+      },
+      "ac": {
+        "name": "Air conditioner"
+      },
+      "hc": {
+        "name": "Heating circuit {circuit}"
+      }
+    },
+    "fan": {
+      "ventilation": {
+        "name": "Ventilation {zone}",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "off": "Off",
+              "min": "Level 1 (Minimum)",
+              "red": "Level 2 (Reduced)",
+              "nom": "Level 3 (Normal)",
+              "max": "Level 4 (Maximum)",
+              "dem": "Demand-based",
+              "time": "Time-based",
+              "party": "Party",
+              "fireplace": "Fireplace"
+            }
+          }
+        }
+      }
+    },
+    "select": {
+      "airflow_horizontal": {
+        "name": "Horizontal airflow",
+        "state": {
+          "center": "Center",
+          "left": "Left",
+          "right": "Right",
+          "swing": "Swing"
+        }
+      },
+      "airflow_vertical": {
+        "name": "Vertical airflow",
+        "state": {
+          "auto": "Auto",
+          "angle1": "Angle 1",
+          "angle2": "Angle 2",
+          "angle3": "Angle 3",
+          "angle4": "Angle 4",
+          "angle5": "Angle 5",
+          "swing": "Swing"
+        }
+      },
+      "program": {
+        "name": "Program",
+        "state": {
+          "off": "Off",
+          "program1": "Program 1",
+          "program2": "Program 2"
+        }
+      },
+      "dhw_operation_mode": {
+        "name": "{circuit} operation mode",
+        "state": {
+          "off": "Off",
+          "low": "Low (Eco)",
+          "high": "High (Comfort)",
+          "eco": "Eco+",
+          "ownprogram": "Own program",
+          "manual": "Manual"
+        }
+      },
+      "dhw_current_temp": {
+        "name": "{circuit} temperature level",
+        "state": {
+          "off": "Off",
+          "low": "Low",
+          "high": "High",
+          "eco": "Eco"
+        }
+      },
+      "hc_operation_mode": {
+        "name": "{circuit} operation mode",
+        "state": {
+          "off": "Off",
+          "manual": "Manual",
+          "auto": "Auto"
+        }
+      },
+      "hc_suwi_mode": {
+        "name": "{circuit} summer/winter mode",
+        "state": {
+          "forced": "Forced",
+          "off": "Off",
+          "cooling": "Cooling"
+        }
+      },
+      "hc_heatcool_mode": {
+        "name": "{circuit} heat/cool mode",
+        "state": {
+          "heat": "Heat",
+          "cool": "Cool"
+        }
+      },
+      "holiday_mode": {
+        "name": "Holiday mode",
+        "state": {
+          "hm1": "Holiday mode 1",
+          "hm2": "Holiday mode 2",
+          "hm3": "Holiday mode 3",
+          "hm4": "Holiday mode 4",
+          "hm5": "Holiday mode 5",
+          "hm6": "Holiday mode 6",
+          "hm7": "Holiday mode 7",
+          "hm8": "Holiday mode 8"
+        }
+      },
+      "away_mode": {
+        "name": "Away mode",
+        "state": {
+          "on": "On",
+          "off": "Off"
+        }
+      },
+      "hc_night_switch_mode": {
+        "name": "{circuit} night switch mode"
+      },
+      "hc_control": {
+        "name": "{circuit} control"
+      },
+      "ventilation_summer_enable": {
+        "name": "{zone} summer bypass",
+        "state": {
+          "no": "Off",
+          "yes": "On"
+        }
+      },
+      "wb_charging_strategy": {
+        "name": "Charging Strategy",
+        "state": {
+          "default": "Default",
+          "solar-eco": "Solar Eco"
+        }
+      }
+    },
+    "sensor": {
+      "hc": {
+        "name": "{circuit} status",
+        "state": {
+          "off": "Off",
+          "manual": "Manual",
+          "auto": "Auto"
+        }
+      },
+      "indoor_humidity": {
+        "name": "Indoor Humidity"
+      },
+      "flame_indication": {
+        "name": "Flame Indication"
+      },
+      "energy_history": {
+        "name": "Energy History"
+      },
+      "ventilation": {
+        "name": "{zone} level",
+        "state": {
+          "off": "Off",
+          "min": "Level 1 (Minimum)",
+          "red": "Level 2 (Reduced)",
+          "nom": "Level 3 (Normal)",
+          "max": "Level 4 (Maximum)",
+          "dem": "Demand-based"
+        }
+      },
+      "wb_state": {
+        "name": "Wallbox State",
+        "state": {
+          "available": "Available",
+          "authenticated": "Authenticated",
+          "preparing": "Awaiting Authorization",
+          "locked": "Locked",
+          "charging": "Charging",
+          "suspendedev": "Vehicle Paused",
+          "suspendedevse": "Wallbox Paused",
+          "init": "Initializing",
+          "faulted": "Faulted",
+          "limited": "Power Limited",
+          "phaseswitch": "Phase Switching"
+        }
+      },
+      "wb_power": {
+        "name": "Wallbox Power"
+      },
+      "wb_energy_total": {
+        "name": "Wallbox Energy Total"
+      },
+      "wb_temperature": {
+        "name": "Wallbox Temperature"
+      },
+      "wb_phases": {
+        "name": "Wallbox Phases"
+      },
+      "wb_phase_sensor": {
+        "name": "Wallbox Phase"
+      },
+      "wb_chargelog": {
+        "name": "Wallbox Charge Log"
+      },
+      "thermostat_room_temp": {
+        "name": "Room Temperature"
+      },
+      "thermostat_humidity": {
+        "name": "Room Humidity"
+      },
+      "thermostat_setpoint": {
+        "name": "Room Setpoint"
+      },
+      "thermostat_battery": {
+        "name": "Battery"
+      },
+      "thermostat_signal": {
+        "name": "Signal Strength"
+      },
+      "dhw": {
+        "name": "{circuit} temperature"
+      },
+      "hs": {
+        "name": "Heat source"
+      },
+      "outdoor_temp": {
+        "name": "Outdoor temperature"
+      },
+      "notifications": {
+        "name": "Notifications"
+      },
+      "energy_history_hourly": {
+        "name": "Energy history (hourly)"
+      }
+    },
+    "binary_sensor": {
+      "wb_network": {
+        "name": "Wallbox Network"
+      },
+      "thermostat_rf_status": {
+        "name": "RF Connection"
+      }
+    },
+    "number": {
+      "wb_price": {
+        "name": "Electricity Price"
+      },
+      "wb_charge_limit": {
+        "name": "Charging Limit"
+      },
+      "ventilation_summer_duration": {
+        "name": "Summer bypass duration"
+      }
+    },
+    "button": {
+      "wb_authenticate": {
+        "name": "Authenticate Charging"
+      },
+      "wb_start_charging": {
+        "name": "Start Charging"
+      },
+      "wb_pause_charging": {
+        "name": "Pause Charging"
+      }
+    },
+    "switch": {
+      "child_lock": {
+        "name": "Child Lock"
+      },
+      "wb_locked": {
+        "name": "Wallbox Locked"
+      },
+      "wb_auth": {
+        "name": "Wallbox Auth"
+      },
+      "wb_rfid_secure": {
+        "name": "Wallbox RFID Secure"
+      },
+      "plasmacluster": {
+        "name": "Plasmacluster"
+      }
+    },
+    "water_heater": {
+      "dhw": {
+        "name": "Water heater {circuit}",
+        "state_attributes": {
+          "operation_mode": {
+            "state": {
+              "off": "Off",
+              "low": "Low (Eco)",
+              "high": "High (Comfort)",
+              "eco": "Eco+",
+              "manual": "Manual",
+              "ownprogram": "Own program"
+            }
+          }
+        }
+      }
+    }
+  }
 }
