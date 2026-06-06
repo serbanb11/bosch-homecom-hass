@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import get_field_number
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorWddw2
 
 
@@ -143,7 +144,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": field}
+        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}"
         self._coordinator = coordinator
