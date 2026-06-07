@@ -11,7 +11,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util.percentage import ordered_list_item_to_percentage
 
-from .const import get_field_number
 from .coordinator import BoschComModuleCoordinatorK40
 
 PARALLEL_UPDATES = 1
@@ -51,7 +50,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
         super().__init__(coordinator)
         self.field = field
         self._attr_translation_key = "ventilation"
-        self._attr_translation_placeholders = {"zone": get_field_number(field)}
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-fan"
         self._attr_should_poll = False

@@ -44,33 +44,6 @@ SINGLEKEY_LOGIN_URL = "https://singlekey-id.com/auth/connect/authorize?state=nKq
 
 SINGLEKEY_LOGIN_URL_BUDERUS = "https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.buderus.tt.dashtt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bud"
 
-
-def get_field_number(field: str) -> str:
-    """Extract number from field ID for translation placeholders.
-
-    Field IDs use patterns like hc1, zone1, dhw1.
-    This returns just the number (1, 2, 3, etc.) which will be
-    interpolated into translation templates like "Heating circuit {circuit}".
-
-    Examples:
-      hc1 -> 1
-      zone2 -> 2
-      dhw1 -> 1
-    """
-    if field.startswith("zone"):
-        return field[4:]  # "zone1" -> "1"
-    if field.startswith("dhw"):
-        return field[3:]  # "dhw1" -> "1"
-    if field.startswith("hc"):
-        return field[2:]  # "hc1" -> "1"
-    # For any other format, try to extract trailing digits
-    for i in range(len(field) - 1, -1, -1):
-        if field[i].isdigit():
-            continue
-        return field[i + 1:]
-    return field
-
-
 CONF_DEVICES: Final = "devices"
 CONF_REFRESH: Final = "refresh"
 CONF_WB_LABEL: Final = "wb_label"

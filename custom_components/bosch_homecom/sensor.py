@@ -29,7 +29,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import get_field_number, BOSCH_SENSOR_DESCRIPTORS
+from .const import BOSCH_SENSOR_DESCRIPTORS
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
@@ -538,7 +538,7 @@ class BoschComSensorDhw(BoschComSensorBase):
             icon="mdi:water-boiler",
         )
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         del self._attr_name
         self._attr_should_poll = False
@@ -635,7 +635,7 @@ class BoschComSensorHc(BoschComSensorBase):
             icon="mdi:heating-coil",
         )
         self._attr_translation_key = "hc"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         del self._attr_name
         self._attr_should_poll = False
@@ -757,7 +757,7 @@ class BoschComSensorVentilation(BoschComSensorBase):
             icon="mdi:fan",
         )
         self._attr_translation_key = "ventilation"
-        self._attr_translation_placeholders = {"zone": get_field_number(field)}
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         del self._attr_name
         self._attr_should_poll = False
@@ -1126,7 +1126,7 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
             icon="mdi:water-boiler",
         )
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         del self._attr_name
         self._attr_should_poll = False

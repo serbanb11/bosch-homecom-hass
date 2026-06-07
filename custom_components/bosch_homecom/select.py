@@ -8,7 +8,6 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import get_field_number
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorK40,
@@ -449,7 +448,7 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw_operation_mode"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._coordinator = coordinator
@@ -516,7 +515,7 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw_current_temp"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-temp"
         self._coordinator = coordinator
@@ -583,7 +582,7 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_operation_mode"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._coordinator = coordinator
@@ -650,7 +649,7 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_suwi_mode"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-suwi"
         self._coordinator = coordinator
@@ -713,7 +712,7 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_heatcool_mode"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-heatcool"
         self._coordinator = coordinator
@@ -863,7 +862,7 @@ class BoschComSelectHcNightSwitchMode(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_night_switch_mode"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-nightswitch"
         self._coordinator = coordinator
@@ -913,7 +912,7 @@ class BoschComSelectHcControl(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc_control"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-control"
         self._coordinator = coordinator
@@ -961,7 +960,7 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
         """Initialize select entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "ventilation_summer_enable"
-        self._attr_translation_placeholders = {"zone": get_field_number(field)}
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-summerbypass-enable"
         self._coordinator = coordinator

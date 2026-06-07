@@ -27,7 +27,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import get_field_number
 from .coordinator import (
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
@@ -343,7 +342,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         """Initialize climate entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "hc"
-        self._attr_translation_placeholders = {"circuit": get_field_number(field)}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_should_poll = False
@@ -509,7 +508,7 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         """Initialize zone climate entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "zone"
-        self._attr_translation_placeholders = {"zone": get_field_number(field)}
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_should_poll = False
@@ -632,7 +631,7 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         """Initialize RRC2 zone climate entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "zone"
-        self._attr_translation_placeholders = {"zone": get_field_number(field)}
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_should_poll = False
