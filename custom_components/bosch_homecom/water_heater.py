@@ -74,7 +74,8 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": ""}
+        # The K40 API does not have a circuit identifier type "dhw1", instead it uses a generic and deixo or more specific name in translation with placeholder
+        self._attr_translation_placeholders = {"circuit": "dhw1"}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_suggested_object_id = field + "_waterheater"
@@ -143,7 +144,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": " " + field}
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_suggested_object_id = field + "_waterheater"
