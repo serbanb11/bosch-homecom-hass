@@ -74,9 +74,9 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field + "_waterheater"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._ioperation_map = {v: k for k, v in self._operation_map.items()}
@@ -142,12 +142,13 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field + "_waterheater"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self.field = field
-        self._attr_suggested_object_id = field + "_waterheater"
 
         self._attr_min_temp = 36
         self._attr_max_temp = 60
