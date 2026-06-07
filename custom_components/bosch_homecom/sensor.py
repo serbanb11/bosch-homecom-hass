@@ -389,18 +389,16 @@ async def async_setup_entry(
 class BoschComSensorBase(CoordinatorEntity, SensorEntity):
     """Boshcom sensor base class."""
 
-    def __init__(self, coordinator, config_entry, name, unique_id, icon=None) -> None:
+    def __init__(self, coordinator, config_entry, unique_id, icon=None) -> None:
         """Init base class."""
         super().__init__(coordinator)
         self.config_entry = config_entry
-        self._attr_name = name
         self._attr_unique_id = unique_id
         self._attr_icon = icon
         self._attr_device_info = coordinator.device_info
 
         _LOGGER.debug(
-            "Init base class: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init base class: unique_id=%s",
             self._attr_unique_id,
         )
 
@@ -419,18 +417,17 @@ class BoschComSensorNotificationsRac(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name="_notifications",
             unique_id=f"{coordinator.unique_id}-notifications",
             icon="mdi:bell",
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
         self._attr_suggested_object_id = "notifications"
-        del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorNotificationsRac: unique_id=%s",
+            "Init BoschComSensorNotificationsRac: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -454,18 +451,17 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name="_notifications",
             unique_id=f"{coordinator.unique_id}-notifications",
             icon="mdi:bell",
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
         self._attr_suggested_object_id = "notifications"
-        del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorNotificationsK40: unique_id=%s",
+            "Init BoschComSensorNotificationsK40: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -493,18 +489,17 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name="_notifications",
             unique_id=f"{coordinator.unique_id}-notifications",
             icon="mdi:bell",
         )
         self._attr_translation_key = "notifications"
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
         self._attr_suggested_object_id = "notifications"
-        del self._attr_name
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorNotificationsWddw2: unique_id=%s",
+            "Init BoschComSensorNotificationsWddw2: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -533,14 +528,12 @@ class BoschComSensorDhw(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field + "_sensor",
             unique_id=f"{coordinator.unique_id}-{field}-sensor",
             icon="mdi:water-boiler",
         )
         self._attr_translation_key = "dhw"
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_suggested_object_id = field + "_sensor"
@@ -630,14 +623,12 @@ class BoschComSensorHc(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field + "_sensor",
             unique_id=f"{coordinator.unique_id}-{field}-sensor",
             icon="mdi:heating-coil",
         )
         self._attr_translation_key = "hc"
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
         self._attr_suggested_object_id = f"{field}_sensor"
@@ -752,14 +743,12 @@ class BoschComSensorVentilation(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field + "_sensor",
             unique_id=f"{coordinator.unique_id}-{field}-sensor",
             icon="mdi:fan",
         )
         self._attr_translation_key = "ventilation"
         self._attr_translation_placeholders = {"zone": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
         self._attr_suggested_object_id = field + "_sensor"
@@ -868,7 +857,6 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field + "_sensor",
             unique_id=f"{coordinator.unique_id}-{field}-sensor",
             icon="mdi:sun-thermometer",
         )
@@ -876,15 +864,14 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         self._attr_translation_key = "outdoor_temp"
-        del self._attr_name
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_suggested_object_id = field + "_sensor"
         self._attr_should_poll = False
         self.field = field
 
         _LOGGER.debug(
-            "Init BoschComSensorOutdoorTemp: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorOutdoorTemp: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -923,19 +910,17 @@ class BoschComSensorHs(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field,
             unique_id=f"{coordinator.unique_id}-{field}",
             icon="mdi:heat-wave",
         )
         self._attr_translation_key = "hs"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_suggested_object_id = field
         self._attr_should_poll = False
 
         _LOGGER.debug(
-            "Init BoschComSensorHS: name=%s, unique_id=%s",
-            self._attr_name,
+            "Init BoschComSensorHS: translation_key=%s, unique_id=%s",
+            self._attr_translation_key,
             self._attr_unique_id,
         )
 
@@ -1123,14 +1108,12 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field + "_sensor",
             unique_id=f"{coordinator.unique_id}-{field}-sensor",
             icon="mdi:water-boiler",
         )
         self._attr_translation_key = "dhw"
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_suggested_object_id = field + "_sensor"
         self._attr_should_poll = False
         self.field = field
@@ -1326,7 +1309,6 @@ class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
-        # self._attr_device_class = "temperature"
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         self._attr_state_class = "measurement"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1492,13 +1474,11 @@ class BoschComSensorIndoorHumidity(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field,
             unique_id=f"{coordinator.unique_id}-{field}",
             icon="mdi:water-percent",
         )
         self._attr_translation_key = "indoor_humidity"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_suggested_object_id = field
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.HUMIDITY
@@ -1529,13 +1509,11 @@ class BoschComSensorFlameIndication(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field,
             unique_id=f"{coordinator.unique_id}-{field}",
             icon="mdi:fire",
         )
         self._attr_translation_key = "flame_indication"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_suggested_object_id = field
         self._attr_should_poll = False
 
@@ -1563,13 +1541,11 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field,
             unique_id=f"{coordinator.unique_id}-{field}",
             icon="mdi:lightning-bolt",
         )
         self._attr_translation_key = "energy_history"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_suggested_object_id = field
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
@@ -1640,12 +1616,10 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            name=field,
             unique_id=f"{coordinator.unique_id}-{field}",
         )
         self._attr_translation_key = "energy_history_hourly"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        del self._attr_name
         self._attr_suggested_object_id = field
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
@@ -1806,7 +1780,6 @@ class BoschComThermostatHumiditySensor(_ThermostatDeviceSensorBase):
             icon="mdi:water-percent",
         )
         self._attr_translation_key = "thermostat_humidity"
-        del self._attr_name
         self._attr_suggested_object_id = f"{dev_id}_humidity"
         self._attr_device_class = SensorDeviceClass.HUMIDITY
         self._attr_native_unit_of_measurement = "%"
@@ -1837,7 +1810,6 @@ class BoschComThermostatSetpointSensor(_ThermostatDeviceSensorBase):
             icon="mdi:thermostat",
         )
         self._attr_translation_key = "thermostat_setpoint"
-        del self._attr_name
         self._attr_suggested_object_id = f"{dev_id}_setpoint"
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
@@ -1868,7 +1840,6 @@ class BoschComThermostatBatterySensor(_ThermostatDeviceSensorBase):
             icon="mdi:battery",
         )
         self._attr_translation_key = "thermostat_battery"
-        del self._attr_name
         self._attr_suggested_object_id = f"{dev_id}_battery"
         self._attr_device_class = SensorDeviceClass.BATTERY
         self._attr_native_unit_of_measurement = "%"
@@ -1899,7 +1870,6 @@ class BoschComThermostatSignalSensor(_ThermostatDeviceSensorBase):
             icon="mdi:signal",
         )
         self._attr_translation_key = "thermostat_signal"
-        del self._attr_name
         self._attr_suggested_object_id = f"{dev_id}_signal"
         self._attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
         self._attr_native_unit_of_measurement = "dBm"
@@ -1984,7 +1954,6 @@ class BoschComCommoduleStateSensor(_CommoduleSensorBase):
             coordinator, config_entry, cp_id, "wb_state", icon="mdi:ev-station"
         )
         self._attr_translation_key = "wb_state"
-        del self._attr_name
         self._attr_suggested_object_id = f"{cp_id}_state"
         self._attr_device_class = SensorDeviceClass.ENUM
         self._attr_options = self._WB_STATE_OPTIONS
@@ -2009,7 +1978,6 @@ class BoschComCommodulePowerSensor(_CommoduleSensorBase):
         """Initialize power sensor."""
         super().__init__(coordinator, config_entry, cp_id, "wb_power")
         self._attr_translation_key = "wb_power"
-        del self._attr_name
         self._attr_suggested_object_id = f"{cp_id}_power"
         self._attr_device_class = SensorDeviceClass.POWER
         self._attr_native_unit_of_measurement = "W"
@@ -2035,7 +2003,6 @@ class BoschComCommoduleEnergySensor(_CommoduleSensorBase):
         """Initialize energy sensor."""
         super().__init__(coordinator, config_entry, cp_id, "wb_energy_total")
         self._attr_translation_key = "wb_energy_total"
-        del self._attr_name
         self._attr_suggested_object_id = f"{cp_id}_energy_total"
         self._attr_device_class = SensorDeviceClass.ENERGY
         self._attr_native_unit_of_measurement = "kWh"
@@ -2061,7 +2028,6 @@ class BoschComCommoduleTempSensor(_CommoduleSensorBase):
         """Initialize temperature sensor."""
         super().__init__(coordinator, config_entry, cp_id, "wb_temperature")
         self._attr_translation_key = "wb_temperature"
-        del self._attr_name
         self._attr_suggested_object_id = f"{cp_id}_temperature"
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
@@ -2089,7 +2055,6 @@ class BoschComCommodulePhasesSensor(_CommoduleSensorBase):
             coordinator, config_entry, cp_id, "wb_phases", icon="mdi:sine-wave"
         )
         self._attr_translation_key = "wb_phases"
-        del self._attr_name
         self._attr_suggested_object_id = f"{cp_id}_phases"
 
     @property
@@ -2112,7 +2077,6 @@ class BoschComCommodulePhaseSensor(_CommoduleSensorBase):
             icon="mdi:sine-wave",
         )
         self._attr_translation_key = "wb_phase_sensor"
-        self._attr_name = f"{cp_id}_{phase_key}"
         self._phase_key = phase_key
 
     @property
@@ -2145,7 +2109,6 @@ class BoschComCommoduleChargelogSensor(_CommoduleSensorBase):
             coordinator, config_entry, cp_id, "wb_chargelog", icon="mdi:history"
         )
         self._attr_translation_key = "wb_chargelog"
-        del self._attr_name
         self._attr_suggested_object_id = f"{cp_id}_chargelog"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
