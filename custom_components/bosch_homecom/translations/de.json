@@ -353,7 +353,7 @@
     },
     "water_heater": {
       "dhw": {
-        "name": "Warmwasser",
+        "name": "Warmwasser {circuit}",
         "state_attributes": {
           "operation_mode": {
             "state": {
