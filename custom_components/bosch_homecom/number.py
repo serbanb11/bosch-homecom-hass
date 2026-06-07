@@ -225,6 +225,7 @@ class BoschComNumberVentilationSummerDuration(CoordinatorEntity, NumberEntity):
         self._attr_unique_id = (
             f"{coordinator.unique_id}-{zone_id}-summerbypass-duration"
         )
+        self._attr_suggested_object_id = zone_id + "_summerbypass_duration"
         self._attr_native_min_value = min_value
         self._attr_native_max_value = max_value
         self._coordinator = coordinator

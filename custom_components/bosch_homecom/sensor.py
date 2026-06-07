@@ -629,9 +629,9 @@ class BoschComSensorHc(BoschComSensorBase):
         self._attr_translation_key = "hc"
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field + "_sensor"
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_suggested_object_id = f"{field}_sensor"
         self._attr_options = ["off", "manual", "auto"]
         self.field = field
 
@@ -749,9 +749,9 @@ class BoschComSensorVentilation(BoschComSensorBase):
         self._attr_translation_key = "ventilation"
         self._attr_translation_placeholders = {"zone": field}
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field + "_sensor"
         self._attr_should_poll = False
         self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_suggested_object_id = field + "_sensor"
         self._attr_options = ["off", "min", "red", "nom", "max", "dem"]
         self.field = field
 
@@ -2077,6 +2077,7 @@ class BoschComCommodulePhaseSensor(_CommoduleSensorBase):
             icon="mdi:sine-wave",
         )
         self._attr_translation_key = "wb_phase_sensor"
+        self._attr_suggested_object_id = f"{cp_id}_{phase_key}"
         self._phase_key = phase_key
 
     @property

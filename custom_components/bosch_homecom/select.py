@@ -210,9 +210,9 @@ class BoschComSelectAirflowHorizontal(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "airflow_horizontal"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
-        self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -283,9 +283,9 @@ class BoschComSelectAirflowVertical(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "airflow_vertical"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
-        self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -356,9 +356,9 @@ class BoschComSelectProgram(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "program"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
-        self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -451,11 +451,11 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -474,13 +474,13 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        operation_mode = None
+        operationMode = None
 
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                operation_mode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry["operationMode"], "value")
 
-        return operation_mode
+        return operationMode
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -491,13 +491,13 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        operation_mode = None
+        operationMode = None
 
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                operation_mode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry["operationMode"], "value")
 
-        self._attr_current_option = operation_mode
+        self._attr_current_option = operationMode
         self.async_write_ha_state()
 
 
@@ -518,11 +518,11 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-temp"
+        self._attr_suggested_object_id = field + "_temp"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field + "_temp"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -585,11 +585,11 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -608,13 +608,13 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        operation_mode = None
+        operationMode = None
 
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                operation_mode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry["operationMode"], "value")
 
-        return operation_mode
+        return operationMode
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -625,13 +625,13 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        operation_mode = None
+        operationMode = None
 
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                operation_mode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry["operationMode"], "value")
 
-        self._attr_current_option = operation_mode
+        self._attr_current_option = operationMode
         self.async_write_ha_state()
 
 
@@ -652,11 +652,11 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-suwi"
+        self._attr_suggested_object_id = field + "_suwi"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field + "_suwi"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -715,11 +715,11 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-heatcool"
+        self._attr_suggested_object_id = field + "_heatcool"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field + "_heatcool"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -777,10 +777,10 @@ class BoschComSelectHolidayMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "holiday_mode"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
-        self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -821,10 +821,10 @@ class BoschComSelectAwayMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "away_mode"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
-        self._attr_suggested_object_id = field
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -865,11 +865,11 @@ class BoschComSelectHcNightSwitchMode(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-nightswitch"
+        self._attr_suggested_object_id = field + "_nightswitch"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field + "_nightswitch"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -915,11 +915,11 @@ class BoschComSelectHcControl(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-control"
+        self._attr_suggested_object_id = field + "_control"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field + "_control"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -963,11 +963,11 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
         self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-summerbypass-enable"
+        self._attr_suggested_object_id = field + "_summerbypass_enable"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
-        self._attr_suggested_object_id = field + "_summerbypass_enable"
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
@@ -1134,6 +1134,7 @@ class BoschComCommoduleChargingStrategySelect(CoordinatorEntity, SelectEntity):
         self._attr_translation_key = "wb_charging_strategy"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{cp_id}-charging-strategy"
+        self._attr_suggested_object_id = cp_id + "_charging_strategy"
         self._coordinator = coordinator
         self._cp_id = cp_id
         self._attr_options = allowed_values
