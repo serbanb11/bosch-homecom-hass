@@ -119,7 +119,7 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
         self._attr_translation_key = "ac"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}"
-        self._attr_name = None
+        self._attr_suggested_object_id = field
         self._attr_should_poll = False
 
         # Call this in __init__ so data is populated right away, since it's
