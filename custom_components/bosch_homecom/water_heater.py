@@ -53,7 +53,6 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     """Representation of a BoschComK40 water heater entity."""
 
     _attr_has_entity_name = True
-    _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
     _attr_operation_list = ["Eco+", "Eco", "Comfort", "Program", "Off"]
@@ -74,10 +73,10 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     ) -> None:
         """Initialize water heater entity."""
         super().__init__(coordinator)
-        # self._attr_translation_key = "ac"
+        self._attr_translation_key = "dhw"
+        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
-        self._attr_unique_id = f"{coordinator.unique_id}"
-        self._attr_name = field
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self._ioperation_map = {v: k for k, v in self._operation_map.items()}
@@ -143,9 +142,8 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
-        self._attr_unique_id = f"{coordinator.unique_id}"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self.field = field
