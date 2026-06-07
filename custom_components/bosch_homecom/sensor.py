@@ -1750,7 +1750,7 @@ class BoschComThermostatRoomTempSensor(_ThermostatDeviceSensorBase):
             icon="mdi:thermometer",
         )
         self._attr_translation_key = "thermostat_room_temp"
-        self._suggested_object_id = f"{dev_id}_room_temp"
+        self._attr_suggested_object_id = f"{dev_id}_room_temp"
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         self._attr_state_class = SensorStateClass.MEASUREMENT
