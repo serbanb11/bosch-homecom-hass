@@ -320,7 +320,7 @@
         "name": "Ladestromlimit"
       },
       "ventilation_summer_duration": {
-        "name": "Sommer-Bypass Dauer"
+        "name": "{zone} Sommer-Bypass Dauer"
       }
     },
     "button": {

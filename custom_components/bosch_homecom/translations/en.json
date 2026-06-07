@@ -318,7 +318,7 @@
         "name": "Charging Limit"
       },
       "ventilation_summer_duration": {
-        "name": "Summer bypass duration"
+        "name": "{zone} summer bypass duration"
       }
     },
     "button": {

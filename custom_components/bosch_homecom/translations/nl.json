@@ -318,7 +318,7 @@
         "name": "Laadlimiet"
       },
       "ventilation_summer_duration": {
-        "name": "Zomerbypass duur"
+        "name": "{zone} zomerbypass duur"
       }
     },
     "button": {
