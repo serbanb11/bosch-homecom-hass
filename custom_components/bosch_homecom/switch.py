@@ -7,12 +7,14 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homecom_alt.const import BOSCHCOM_DOMAIN, BOSCHCOM_ENDPOINT_GATEWAYS
 
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
     BoschComModuleCoordinatorRrc2,
+    BoschComModuleCoordinatorWddw2,
 )
 
 PARALLEL_UPDATES = 1
@@ -64,6 +66,12 @@ async def async_setup_entry(
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "rrc2":
             entities.extend(_build_rrc2_switches(coordinator))
+    for coordinator in coordinators:
+        if coordinator.data.device["deviceType"] == "wddw2":
+            if coordinator.wddw2_safety_temperature is not None:
+                entities.append(BoschComWddw2SafetyTempSwitch(coordinator=coordinator))
+            if coordinator.wddw2_holiday_mode is not None:
+                entities.append(BoschComWddw2HolidayModeSwitch(coordinator=coordinator))
     async_add_entities(entities)
 
 
@@ -489,3 +497,92 @@ def _build_rrc2_switches(
             )
 
     return entities
+
+
+class _BoschComWddw2SwitchBase(CoordinatorEntity, SwitchEntity):
+    """Base class for wddw2 on/off switches backed by a /resource path."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _resource_path: str = ""
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorWddw2,
+        unique_suffix: str,
+        translation_key: str,
+    ) -> None:
+        """Initialize wddw2 switch."""
+        super().__init__(coordinator)
+        self._coordinator = coordinator
+        self._attr_translation_key = translation_key
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+
+    def _get_current_value(self) -> str | None:
+        """Return the cached value from coordinator; subclasses override."""
+        return None
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True when the switch value is 'on'."""
+        value = self._get_current_value()
+        if value is None:
+            return None
+        return value == "on"
+
+    async def _async_put(self, value: str) -> None:
+        """Send PUT request to the resource path."""
+        device_id = self._coordinator.unique_id
+        url = (
+            BOSCHCOM_DOMAIN
+            + BOSCHCOM_ENDPOINT_GATEWAYS
+            + device_id
+            + self._resource_path
+        )
+        await self._coordinator.bhc._async_http_request(
+            "put", url, {"value": value}, 1
+        )  # noqa: SLF001
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on."""
+        await self._async_put("on")
+        await self._coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off."""
+        await self._async_put("off")
+        await self._coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        value = self._get_current_value()
+        self._attr_is_on = (value == "on") if value is not None else None
+        self.async_write_ha_state()
+
+
+class BoschComWddw2SafetyTempSwitch(_BoschComWddw2SwitchBase):
+    """Switch for wddw2 safety temperature (bath mode) on/off."""
+
+    _resource_path = "/resource/dhwCircuits/dhw1/safetyTemperature"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorWddw2) -> None:
+        """Initialize safety temperature switch."""
+        super().__init__(coordinator, "safety-temperature", "dhw_safety_temperature")
+
+    def _get_current_value(self) -> str | None:
+        return self._coordinator.wddw2_safety_temperature
+
+
+class BoschComWddw2HolidayModeSwitch(_BoschComWddw2SwitchBase):
+    """Switch for wddw2 holiday mode on/off."""
+
+    _resource_path = "/resource/system/holidayMode"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorWddw2) -> None:
+        """Initialize holiday mode switch."""
+        super().__init__(coordinator, "holiday-mode", "dhw_holiday_mode")
+
+    def _get_current_value(self) -> str | None:
+        return self._coordinator.wddw2_holiday_mode

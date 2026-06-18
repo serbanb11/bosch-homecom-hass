@@ -29,7 +29,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import BOSCH_SENSOR_DESCRIPTORS
+from .const import BOSCH_SENSOR_DESCRIPTORS, WDDW2_NOTIFICATION_CODES
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
@@ -476,7 +476,12 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
 
 
 class BoschComSensorNotificationsWddw2(BoschComSensorBase):
-    """BoschComSensor notifications."""
+    """BoschComSensor notifications for wddw2 devices.
+
+    Filters historical entries (act == 'H') from active state.
+    Human-readable descriptions are provided via WDDW2_NOTIFICATION_CODES.
+    Full history including historical entries is exposed in extra_state_attributes.
+    """
 
     _attr_has_entity_name = True
 
@@ -505,12 +510,34 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
 
     @property
     def state(self):
-        """Return Notifications."""
+        """Return active (non-historical) notifications as a newline-joined string."""
+        active = [
+            item
+            for item in (self.coordinator.data.notifications or [])
+            if "dcd" in item and item.get("act") != "H"
+        ]
+        if not active:
+            return "none"
         return "\n".join(
-            f"{item['dcd']}-{item['ccd']}"
-            for item in self.coordinator.data.notifications
-            if "dcd" in item and "ccd" in item
+            WDDW2_NOTIFICATION_CODES.get(item["dcd"].strip(), item["dcd"].strip())
+            for item in active
         )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose full notification history including historical entries."""
+        verlauf = [
+            {
+                "code": item.get("dcd", "").strip(),
+                "beschreibung": WDDW2_NOTIFICATION_CODES.get(
+                    item.get("dcd", "").strip(), item.get("dcd", "").strip()
+                ),
+                "status": "historisch" if item.get("act") == "H" else "aktiv",
+            }
+            for item in (self.coordinator.data.notifications or [])
+            if "dcd" in item
+        ]
+        return {"verlauf": verlauf} if verlauf else {}
 
 
 class BoschComSensorDhw(BoschComSensorBase):

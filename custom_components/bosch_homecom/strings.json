@@ -348,6 +348,12 @@
       },
       "plasmacluster": {
         "name": "Plasmacluster"
+      },
+      "dhw_safety_temperature": {
+        "name": "Safety Temperature"
+      },
+      "dhw_holiday_mode": {
+        "name": "Holiday Mode"
       }
     },
     "water_heater": {

@@ -1,3 +1,9 @@
+# Local development journal — never goes into upstream PR
+PROGRESS.md
+
+# Claude Code memory (auto-generated, not for version control)
+memory/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

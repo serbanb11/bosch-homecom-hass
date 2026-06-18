@@ -61,6 +61,12 @@
         },
         "wb_rfid_secure": {
           "default": "mdi:card-account-details"
+        },
+        "dhw_safety_temperature": {
+          "default": "mdi:thermometer-alert"
+        },
+        "dhw_holiday_mode": {
+          "default": "mdi:palm-tree"
         }
       },
       "text": {

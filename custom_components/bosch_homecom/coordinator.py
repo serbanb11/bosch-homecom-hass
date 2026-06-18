@@ -173,6 +173,43 @@ class BoschComModuleCoordinatorK40(BoschComModuleCoordinatorBase[BHCDeviceK40]):
 class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw2]):
     """A coordinator to manage the fetching of BoschCom data."""
 
+    def __init__(self, *args, **kwargs) -> None:
+        """Initialize wddw2 coordinator with extra state attributes."""
+        super().__init__(*args, **kwargs)
+        self.wddw2_safety_temperature: str | None = None
+        self.wddw2_holiday_mode: str | None = None
+        self.wddw2_temp_levels: dict[str, float] = {}
+
+    async def _async_update_data(self) -> BHCDeviceWddw2:
+        """Update data and additionally fetch wddw2-specific switch states."""
+        data = await super()._async_update_data()
+        try:
+            result = await self.bhc.async_action_universal_get(
+                self.unique_id, "/resource/dhwCircuits/dhw1/safetyTemperature"
+            )
+            self.wddw2_safety_temperature = (result or {}).get("value")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            result = await self.bhc.async_action_universal_get(
+                self.unique_id, "/resource/system/holidayMode"
+            )
+            self.wddw2_holiday_mode = (result or {}).get("value")
+        except Exception:  # noqa: BLE001
+            pass
+        for mode, path in (
+            ("manual", "/resource/dhwCircuits/dhw1/manualsetpoint"),
+            ("bath", "/resource/dhwCircuits/dhw1/temperatureLevels/bath"),
+        ):
+            try:
+                result = await self.bhc.async_action_universal_get(self.unique_id, path)
+                value = (result or {}).get("value")
+                if isinstance(value, (int, float)):
+                    self.wddw2_temp_levels[mode] = float(value)
+            except Exception:  # noqa: BLE001
+                pass
+        return data
+
     def _build_device_data(self, data: BHCDeviceWddw2) -> BHCDeviceWddw2:
         """Build WDDW2 device data."""
         return BHCDeviceWddw2(
