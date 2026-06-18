@@ -1,5 +1,7 @@
 """Bosch HomeCom Custom Component."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from homeassistant import config_entries, core
