@@ -106,4 +106,5 @@ BOSCH_SENSOR_DESCRIPTORS = {
 WDDW2_NOTIFICATION_CODES: dict[str, str] = {
     "E01": "Hohe Temperatur",
     "E07": "Luftblasen erkannt",
+    "E13": "Ausfall der Wasserdurchflussmessung",
 }
