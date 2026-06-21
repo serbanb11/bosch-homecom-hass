@@ -542,9 +542,10 @@ class _BoschComWddw2SwitchBase(CoordinatorEntity, SwitchEntity):
             + device_id
             + self._resource_path
         )
-        await self._coordinator.bhc._async_http_request(
+        await self._coordinator.bhc.get_token()  # noqa: SLF001
+        await self._coordinator.bhc._async_http_request(  # noqa: SLF001
             "put", url, {"value": value}, 1
-        )  # noqa: SLF001
+        )
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on."""

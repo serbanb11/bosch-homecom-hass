@@ -300,6 +300,40 @@
       },
       "energy_history_hourly": {
         "name": "Energy history (hourly)"
+      },
+      "dhw_operation_mode": {
+        "name": "Operation Mode",
+        "state": {
+          "manual": "Manual",
+          "bath": "Safety Temperature"
+        }
+      },
+      "dhw_air_box_temperature": {
+        "name": "Air Box Temperature"
+      },
+      "dhw_inlet_temperature": {
+        "name": "Inlet Temperature"
+      },
+      "dhw_outlet_temperature": {
+        "name": "Outlet Temperature"
+      },
+      "dhw_water_flow": {
+        "name": "Water Flow"
+      },
+      "dhw_heat_source_starts": {
+        "name": "Heat Source Starts"
+      },
+      "dhw_delta_t": {
+        "name": "Temperature Difference"
+      },
+      "dhw_notifications": {
+        "name": "Notifications",
+        "state": {
+          "none": "None"
+        }
+      },
+      "dhw_heating_active": {
+        "name": "Water Heating"
       }
     },
     "binary_sensor": {

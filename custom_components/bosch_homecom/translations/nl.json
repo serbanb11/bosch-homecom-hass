@@ -300,6 +300,40 @@
       },
       "energy_history_hourly": {
         "name": "Energiegeschiedenis (uurlijks)"
+      },
+      "dhw_operation_mode": {
+        "name": "Bedrijfsmodus",
+        "state": {
+          "manual": "Handmatig",
+          "bath": "Veiligheidstemperatuur"
+        }
+      },
+      "dhw_air_box_temperature": {
+        "name": "Luchttemperatuur (Box)"
+      },
+      "dhw_inlet_temperature": {
+        "name": "Ingangstemperatuur"
+      },
+      "dhw_outlet_temperature": {
+        "name": "Uitgangstemperatuur"
+      },
+      "dhw_water_flow": {
+        "name": "Waterstroom"
+      },
+      "dhw_heat_source_starts": {
+        "name": "Bedrijfscycli"
+      },
+      "dhw_delta_t": {
+        "name": "Temperatuurverschil"
+      },
+      "dhw_notifications": {
+        "name": "Meldingen",
+        "state": {
+          "none": "Geen"
+        }
+      },
+      "dhw_heating_active": {
+        "name": "Waterverwarming"
       }
     },
     "binary_sensor": {
@@ -347,6 +381,12 @@
       },
       "plasmacluster": {
         "name": "Plasmacluster"
+      },
+      "dhw_safety_temperature": {
+        "name": "Veiligheidstemperatuur"
+      },
+      "dhw_holiday_mode": {
+        "name": "Vakantiestand"
       }
     },
     "water_heater": {

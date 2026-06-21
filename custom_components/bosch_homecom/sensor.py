@@ -212,37 +212,29 @@ async def async_setup_entry(
             for sensor in _build_rrc2_sensors(coordinator, config_entry):
                 entities.append(sensor)
 
-        # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
+        # ---- WDDW2 ----
         elif device_type == "wddw2":
-            # Existing per-circuit DHW sensor
-            for ref in coordinator.data.dhw_circuits:
-                dhw_id = ref["id"].split("/")[-1]
-                if re.fullmatch(r"dhw\d", dhw_id):
-                    entities.append(
-                        BoschComSensorDhwWddw2(
-                            coordinator=coordinator,
-                            config_entry=config_entry,
-                            field=dhw_id,
-                        )
-                    )
-
-            # Issue #129: surface heat-source + water totals (top-level paths).
-            entities.extend(_build_wddw2_totals_sensors(coordinator))
-
-            # NEW: generic sensors from descriptors (BOSCH_SENSOR_DESCRIPTORS["wddw2"])
+            # Generic sensors from descriptors (BOSCH_SENSOR_DESCRIPTORS["wddw2"])
             wddw2_desc = BOSCH_SENSOR_DESCRIPTORS.get("wddw2", [])
             if wddw2_desc:
-                # If descriptors are per-circuit, try to expand per each dhwX
                 dhw_ids = [
                     ref["id"].split("/")[-1]
                     for ref in coordinator.data.dhw_circuits
                     if re.fullmatch(r"dhw\d", ref["id"].split("/")[-1])
-                ] or [
-                    None
-                ]  # fallback to single set if not per circuit
+                ] or [None]
+
+                dhw_by_id = {
+                    ref["id"].split("/")[-1]: ref
+                    for ref in coordinator.data.dhw_circuits
+                    if re.fullmatch(r"dhw\d", ref["id"].split("/")[-1])
+                }
 
                 for desc in wddw2_desc:
                     for dhw_id in dhw_ids:
+                        last_key = desc.get("path", [""])[-1]
+                        dhw = dhw_by_id.get(dhw_id) if dhw_id else None
+                        if dhw is not None and dhw.get(last_key) is None:
+                            continue
                         path = desc.get("path", [])
                         resolved_path = _resolve_path(path, dhw_id)
                         unique_suffix = (
@@ -254,16 +246,14 @@ async def async_setup_entry(
                             entities.append(
                                 BoschComGenericSensor(
                                     coordinator=coordinator,
-                                    name=(
-                                        desc["name"]
-                                        if not dhw_id
-                                        else f"{desc['name']} {dhw_id.upper()}"
-                                    ),
+                                    name=desc["name"],
                                     unique_suffix=unique_suffix,
                                     path=resolved_path,
                                     unit=desc.get("unit"),
                                     device_class=desc.get("device_class"),
                                     state_class=desc.get("state_class"),
+                                    translation_key=desc.get("translation_key"),
+                                    entity_category=desc.get("entity_category"),
                                 )
                             )
                         except Exception:  # keep onboarding even if one fails
@@ -271,7 +261,6 @@ async def async_setup_entry(
                                 "Failed to add generic sensor %s", unique_suffix
                             )
 
-            # NEW: derived sensors (single set; adjust to per-circuit if precisares)
             try:
                 entities.append(
                     BoschComDerivedDeltaTSensor(
@@ -497,7 +486,8 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
             unique_id=f"{coordinator.unique_id}-notifications",
             icon="mdi:bell",
         )
-        self._attr_translation_key = "notifications"
+        self._attr_translation_key = "dhw_notifications"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
         self._attr_suggested_object_id = "notifications"
         self._attr_should_poll = False
@@ -533,6 +523,7 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
                     item.get("dcd", "").strip(), item.get("dcd", "").strip()
                 ),
                 "status": "historisch" if item.get("act") == "H" else "aktiv",
+                "schwere": "Störung" if item.get("fc") == "8" else "Warnung",
             }
             for item in (self.coordinator.data.notifications or [])
             if "dcd" in item
@@ -1139,8 +1130,8 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
             icon="mdi:water-boiler",
         )
         self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": field}
-        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_translation_placeholders = {"circuit": re.sub(r"\D", "", field)}
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}-sensor"
         self._attr_suggested_object_id = field + "_sensor"
         self._attr_should_poll = False
         self.field = field
@@ -1284,17 +1275,22 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
         unit,
         device_class,
         state_class: Optional[str],
+        translation_key: Optional[str] = None,
+        entity_category: Optional[str] = None,
     ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._declared_unit = unit
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._resolver = DynamicPathResolver(path)
         self._attr_device_info = coordinator.device_info
-        self._attr_entity_category = None  # or EntityCategory.DIAGNOSTIC if you prefer
+        self._attr_entity_category = EntityCategory(entity_category) if entity_category else None
+        if translation_key:
+            self._attr_translation_key = translation_key
+        else:
+            self._attr_name = name
 
     def _coordinator_data_as_dict(self) -> dict:
         data = getattr(self.coordinator, "data", {}) or {}
@@ -1332,7 +1328,7 @@ class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, name: str, unique_suffix: str):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
+        self._attr_translation_key = "dhw_delta_t"
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
@@ -1428,11 +1424,10 @@ class BoschComHeatingActiveBinarySensor(CoordinatorEntity, BinarySensorEntity):
     ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
+        self._attr_translation_key = "dhw_heating_active"
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._delta_t_threshold = delta_t_threshold
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def is_on(self) -> bool:

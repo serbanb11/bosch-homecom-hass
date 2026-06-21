@@ -302,6 +302,40 @@
       },
       "energy_history_hourly": {
         "name": "Energieverlauf (stündlich)"
+      },
+      "dhw_operation_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "manual": "Manuell",
+          "bath": "Sicherheitstemperatur"
+        }
+      },
+      "dhw_air_box_temperature": {
+        "name": "Lufttemperatur (Box)"
+      },
+      "dhw_inlet_temperature": {
+        "name": "Eingangstemperatur"
+      },
+      "dhw_outlet_temperature": {
+        "name": "Ausgangstemperatur"
+      },
+      "dhw_water_flow": {
+        "name": "Wasserdurchfluss"
+      },
+      "dhw_heat_source_starts": {
+        "name": "Betriebszyklen"
+      },
+      "dhw_delta_t": {
+        "name": "Temperaturdifferenz"
+      },
+      "dhw_notifications": {
+        "name": "Benachrichtigungen",
+        "state": {
+          "none": "Keine"
+        }
+      },
+      "dhw_heating_active": {
+        "name": "Wassererwärmung"
       }
     },
     "binary_sensor": {

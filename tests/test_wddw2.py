@@ -87,6 +87,7 @@ def _mock_wddw2_coordinator(
     coord.async_request_refresh = AsyncMock()
     coord.bhc = Mock()
     coord.bhc._async_http_request = AsyncMock()
+    coord.bhc.get_token = AsyncMock()
     return coord
 
 
