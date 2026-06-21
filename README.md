@@ -51,6 +51,8 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 > **Tip:** If you're having trouble capturing the authorization code, try using Microsoft Edge -- some users have reported more consistent results with its Developer Tools.
 
+> **Tip:** As an alternative to capturing the code manually via Developer Tools, you can use the community-made [SingleKey Code Catcher](https://github.com/Tozzi89/SingleKey-Code-Catcher) Firefox add-on, which tracks the login flow and lets you copy the code directly (see [#142](https://github.com/serbanb11/bosch-homecom-hass/issues/142)). Note: this is a third-party tool, not maintained by this project.
+
 ## What You Get
 
 | Platform | RAC | K30/K40/RRC2 | ICOM | WDDW2 | Commodule |

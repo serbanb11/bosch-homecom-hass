@@ -82,7 +82,7 @@ class BoschComSwitchAirPurification(CoordinatorEntity, SwitchEntity):
         self._attr_translation_key = "plasmacluster"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = field
+        self._attr_suggested_object_id = field
         self._coordinator = coordinator
         self._attr_should_poll = False
 
@@ -150,7 +150,7 @@ class BoschComChildLockSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_translation_key = "child_lock"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}-childlock"
-        self._attr_name = field + "_childlock"
+        self._attr_suggested_object_id = field + "_childlock"
         self._coordinator = coordinator
         self._attr_should_poll = False
         self.field = field

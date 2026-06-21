@@ -7,14 +7,17 @@ from typing import Any
 
 from homeassistant import config_entries
 from homeassistant.components.water_heater import (
+    DOMAIN as WATER_HEATER_DOMAIN,
     WaterHeaterEntity,
     WaterHeaterEntityFeature,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import DOMAIN
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorWddw2
 
 
@@ -32,6 +35,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the BoschCom devices."""
     coordinators = config_entry.runtime_data
+    entity_registry = er.async_get(hass)
     entities = []
 
     for coordinator in coordinators:
@@ -39,14 +43,39 @@ async def async_setup_entry(
             for ref in coordinator.data.dhw_circuits:
                 dhw_id = ref["id"].split("/")[-1]
                 if re.fullmatch(r"dhw\d", dhw_id):
+                    _migrate_unique_id(entity_registry, coordinator.unique_id, dhw_id)
                     entities.append(
                         BoschComWddw2WaterHeater(coordinator=coordinator, field=dhw_id)
                     )
         elif coordinator.data.device.get("deviceType") in ("k40", "k30"):
+            _migrate_unique_id(entity_registry, coordinator.unique_id, "waterheater")
             entities.append(
                 BoschComK40WaterHeater(coordinator=coordinator, field="waterheater")
             )
     async_add_entities(entities)
+
+
+@callback
+def _migrate_unique_id(
+    entity_registry: er.EntityRegistry, device_unique_id: str, field: str
+) -> None:
+    """Migrate the legacy water heater unique_id to the per-circuit scheme.
+
+    Older versions registered the water heater with the bare device unique_id.
+    Rename that entry to ``{device_unique_id}-{field}`` so existing entities
+    (and their history) are preserved instead of being orphaned.
+    """
+    new_unique_id = f"{device_unique_id}-{field}"
+    entity_id = entity_registry.async_get_entity_id(
+        WATER_HEATER_DOMAIN, DOMAIN, device_unique_id
+    )
+    if entity_id is None:
+        return
+    # Only migrate when the target unique_id isn't already taken (e.g. a second
+    # DHW circuit must not steal the legacy entry once dhw1 has claimed it).
+    if entity_registry.async_get_entity_id(WATER_HEATER_DOMAIN, DOMAIN, new_unique_id):
+        return
+    entity_registry.async_update_entity(entity_id, new_unique_id=new_unique_id)
 
 
 class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
@@ -74,7 +103,8 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         """Initialize water heater entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "dhw"
-        # The K40 API does not have a circuit identifier type "dhw1", instead it uses a generic and deixo or more specific name in translation with placeholder
+        # The K40 API exposes a single DHW circuit without a numeric id, so the
+        # "circuit" placeholder is set to a fixed "dhw1" label for the name.
         self._attr_translation_placeholders = {"circuit": "dhw1"}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
@@ -98,7 +128,7 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         for ref in self.coordinator.data.dhw_circuits:
             dhw_id = ref["id"].split("/")[-1]
             await self.coordinator.bhc.async_put_dhw_operation_mode(
-                self._attr_unique_id, dhw_id, self._operation_map[operation_mode]
+                self.coordinator.unique_id, dhw_id, self._operation_map[operation_mode]
             )
         await self.coordinator.async_request_refresh()
 
@@ -173,7 +203,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             dhw_id = ref["id"].split("/")[-1]
             if dhw_id == self.field:
                 await self.coordinator.bhc.async_put_dhw_operation_mode(
-                    self._attr_unique_id, dhw_id, operation_mode
+                    self.coordinator.unique_id, dhw_id, operation_mode
                 )
         await self.coordinator.async_request_refresh()
 
@@ -196,10 +226,10 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
                 continue
             if current_mode != "manual":
                 await self.coordinator.bhc.async_put_dhw_operation_mode(
-                    self._attr_unique_id, dhw_id, "manual"
+                    self.coordinator.unique_id, dhw_id, "manual"
                 )
             await self.coordinator.bhc.async_set_dhw_temp_level(
-                self._attr_unique_id, dhw_id, "manual", t
+                self.coordinator.unique_id, dhw_id, "manual", t
             )
 
         # pede refresh para refletir no UI
