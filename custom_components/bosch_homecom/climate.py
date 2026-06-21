@@ -119,7 +119,7 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
         self._attr_translation_key = "ac"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}"
-        self._attr_name = field
+        self._attr_suggested_object_id = field
         self._attr_should_poll = False
 
         # Call this in __init__ so data is populated right away, since it's
@@ -324,7 +324,6 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschComK40 climate entity."""
 
     _attr_has_entity_name = True
-    _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [
         HVACMode.OFF,
@@ -346,9 +345,10 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         self._attr_translation_placeholders = {"circuit": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = field
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.OFF
+        self.field = field
+        self._attr_suggested_object_id = field
 
         # Call this in __init__ so data is populated right away, since it's
         # already available in the coordinator data.
@@ -368,17 +368,17 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         if isinstance(self.coordinator, BoschComModuleCoordinatorIcom):
             # icom: use temporaryRoomSetpoint to match the Bosch app behaviour
             await self.coordinator.async_set_temporary_room_setpoint(
-                self._attr_name, temperature
+                self.field, temperature
             )
         elif self._is_cooling():
             # In cooling mode the manualRoomSetpoint endpoint returns 404;
             # the writable setpoint is coolingRoomTempSetpoint instead.
             await self.coordinator.bhc.async_set_hc_cooling_room_temp_setpoint(
-                self.coordinator.unique_id, self._attr_name, temperature
+                self.coordinator.unique_id, self.field, temperature
             )
         else:
             await self.coordinator.bhc.async_set_hc_manual_room_setpoint(
-                self.coordinator.unique_id, self._attr_name, temperature
+                self.coordinator.unique_id, self.field, temperature
             )
 
         # Optimistically reflect the new setpoint immediately — the Bosch cloud
@@ -399,7 +399,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                 return
 
         await self.coordinator.bhc.async_put_hc_operation_mode(
-            self.coordinator.unique_id, self._attr_name, payload
+            self.coordinator.unique_id, self.field, payload
         )
 
         await self.coordinator.async_request_refresh()
@@ -470,7 +470,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         also covers cooling season while the compressor is idle.
         """
         for entry in self.coordinator.data.heating_circuits or []:
-            if entry.get("id") == f"/heatingCircuits/{self._attr_name}":
+            if entry.get("id") == f"/heatingCircuits/{self.field}":
                 suwi = (entry.get("currentSuWiMode") or {}).get("value")
                 heatcool = (entry.get("heatCoolMode") or {}).get("value")
                 return suwi == "cooling" or heatcool == "cooling"
@@ -483,7 +483,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
             return
 
         for entry in data.heating_circuits or []:
-            if entry.get("id") == f"/heatingCircuits/{self._attr_name}":
+            if entry.get("id") == f"/heatingCircuits/{self.field}":
                 self._set_heating_circuits(entry)
                 break
 
@@ -496,7 +496,6 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom zone climate entity."""
 
     _attr_has_entity_name = True
-    _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
@@ -509,14 +508,15 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         """Initialize zone climate entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "zone"
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = field
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.HEAT
         self.field = field
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None
+        self._attr_suggested_object_id = field
 
         self.set_attr()
 
@@ -631,14 +631,15 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         """Initialize RRC2 zone climate entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "zone"
+        self._attr_translation_placeholders = {"zone": field}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
-        self._attr_name = field
         self._attr_should_poll = False
         self._attr_hvac_mode = HVACMode.HEAT
         self.field = field
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None
+        self._attr_suggested_object_id = field
         self.set_attr()
 
     @callback

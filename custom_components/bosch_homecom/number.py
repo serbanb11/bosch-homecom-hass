@@ -220,11 +220,12 @@ class BoschComNumberVentilationSummerDuration(CoordinatorEntity, NumberEntity):
         """Initialize number entity."""
         super().__init__(coordinator)
         self._attr_translation_key = "ventilation_summer_duration"
+        self._attr_translation_placeholders = {"zone": zone_id}
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = (
             f"{coordinator.unique_id}-{zone_id}-summerbypass-duration"
         )
-        self._attr_name = zone_id + "_summerbypass_duration"
+        self._attr_suggested_object_id = zone_id + "_summerbypass_duration"
         self._attr_native_min_value = min_value
         self._attr_native_max_value = max_value
         self._coordinator = coordinator
