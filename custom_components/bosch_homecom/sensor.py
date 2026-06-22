@@ -230,6 +230,27 @@ async def async_setup_entry(
                 }
 
                 for desc in wddw2_desc:
+                    if desc.get("scope") == "device":
+                        unique_suffix = f"device-{desc['key']}"
+                        try:
+                            entities.append(
+                                BoschComGenericSensor(
+                                    coordinator=coordinator,
+                                    name=desc["name"],
+                                    unique_suffix=unique_suffix,
+                                    path=desc.get("path", []),
+                                    unit=desc.get("unit"),
+                                    device_class=desc.get("device_class"),
+                                    state_class=desc.get("state_class"),
+                                    translation_key=desc.get("translation_key"),
+                                    entity_category=desc.get("entity_category"),
+                                )
+                            )
+                        except Exception:  # keep onboarding even if one fails
+                            _LOGGER.debug(
+                                "Failed to add generic sensor %s", unique_suffix
+                            )
+                        continue
                     for dhw_id in dhw_ids:
                         last_key = desc.get("path", [""])[-1]
                         dhw = dhw_by_id.get(dhw_id) if dhw_id else None

@@ -335,6 +335,23 @@
       },
       "dhw_heating_active": {
         "name": "Water Heating"
+      },
+      "hs_actual_power": {
+        "name": "Power"
+      },
+      "hs_power_percentage": {
+        "name": "Power Percentage"
+      },
+      "hs_operation_hours": {
+        "name": "Operation Hours"
+      },
+      "hs_electricity_total": {
+        "name": "Electricity Consumption",
+        "description": "Estimated value calculated from installation date. Can be reset via the device display menu."
+      },
+      "water_total_consumption": {
+        "name": "Water Consumption",
+        "description": "Estimated value calculated from installation date. Can be reset via the device display menu."
       }
     },
     "binary_sensor": {

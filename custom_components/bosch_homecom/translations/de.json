@@ -336,6 +336,23 @@
       },
       "dhw_heating_active": {
         "name": "Wassererwärmung"
+      },
+      "hs_actual_power": {
+        "name": "Leistung"
+      },
+      "hs_power_percentage": {
+        "name": "Leistung (%)"
+      },
+      "hs_operation_hours": {
+        "name": "Betriebsstunden"
+      },
+      "hs_electricity_total": {
+        "name": "Stromverbrauch",
+        "description": "Schätzwert ab Installationsdatum. Kann im Anzeigemenü des Geräts zurückgesetzt werden."
+      },
+      "water_total_consumption": {
+        "name": "Wasserverbrauch",
+        "description": "Schätzwert ab Installationsdatum. Kann im Anzeigemenü des Geräts zurückgesetzt werden."
       }
     },
     "binary_sensor": {

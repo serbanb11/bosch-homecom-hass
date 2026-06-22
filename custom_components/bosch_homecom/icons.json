@@ -19,6 +19,24 @@
         }
       },
       "sensor": {
+        "dhw_operation_mode": {
+          "default": "mdi:shower-head"
+        },
+        "dhw_water_flow": {
+          "default": "mdi:waves"
+        },
+        "dhw_heating_active": {
+          "default": "mdi:heating-coil"
+        },
+        "dhw_heat_source_starts": {
+          "default": "mdi:counter"
+        },
+        "hs_operation_hours": {
+          "default": "mdi:timer-sand"
+        },
+        "hs_power_percentage": {
+          "default": "mdi:flash"
+        },
         "wb_state": {
           "default": "mdi:ev-station"
         },

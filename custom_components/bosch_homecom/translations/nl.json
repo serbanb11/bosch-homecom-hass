@@ -334,6 +334,23 @@
       },
       "dhw_heating_active": {
         "name": "Waterverwarming"
+      },
+      "hs_actual_power": {
+        "name": "Vermogen"
+      },
+      "hs_power_percentage": {
+        "name": "Vermogen (%)"
+      },
+      "hs_operation_hours": {
+        "name": "Bedrijfsuren"
+      },
+      "hs_electricity_total": {
+        "name": "Stroomverbruik",
+        "description": "Geschatte waarde berekend vanaf installatiedatum. Kan worden gereset via het displaymenu van het apparaat."
+      },
+      "water_total_consumption": {
+        "name": "Waterverbruik",
+        "description": "Geschatte waarde berekend vanaf installatiedatum. Kan worden gereset via het displaymenu van het apparaat."
       }
     },
     "binary_sensor": {

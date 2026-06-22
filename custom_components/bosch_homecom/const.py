@@ -6,7 +6,15 @@ from datetime import timedelta
 from typing import Final
 
 from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.const import UnitOfTemperature, UnitOfVolumeFlowRate
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+    UnitOfVolume,
+    UnitOfVolumeFlowRate,
+)
 
 DOMAIN = "bosch_homecom"
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
@@ -106,6 +114,58 @@ BOSCH_SENSOR_DESCRIPTORS = {
             "unit": None,
             "state_class": "total_increasing",
             "entity_category": "diagnostic",
+        },
+        {
+            "key": "hs_actual_power",
+            "translation_key": "hs_actual_power",
+            "path": ["heat_sources", "actualPower"],
+            "name": "Power",
+            "device_class": SensorDeviceClass.POWER,
+            "unit": UnitOfPower.KILO_WATT,
+            "state_class": "measurement",
+            "scope": "device",
+        },
+        {
+            "key": "hs_power_percentage",
+            "translation_key": "hs_power_percentage",
+            "path": ["heat_sources", "powerPercentage"],
+            "name": "Power Percentage",
+            "device_class": None,
+            "unit": PERCENTAGE,
+            "state_class": "measurement",
+            "entity_category": "diagnostic",
+            "scope": "device",
+        },
+        {
+            "key": "hs_operation_hours",
+            "translation_key": "hs_operation_hours",
+            "path": ["heat_sources", "operationHours"],
+            "name": "Operation Hours",
+            "device_class": None,
+            "unit": UnitOfTime.HOURS,
+            "state_class": "total_increasing",
+            "entity_category": "diagnostic",
+            "scope": "device",
+        },
+        {
+            "key": "hs_electricity_total",
+            "translation_key": "hs_electricity_total",
+            "path": ["heat_sources", "electricityTotalConsumption"],
+            "name": "Electricity Consumption",
+            "device_class": SensorDeviceClass.ENERGY,
+            "unit": UnitOfEnergy.KILO_WATT_HOUR,
+            "state_class": "total_increasing",
+            "scope": "device",
+        },
+        {
+            "key": "water_total_consumption",
+            "translation_key": "water_total_consumption",
+            "path": ["water_total_consumption"],
+            "name": "Water Consumption",
+            "device_class": SensorDeviceClass.WATER,
+            "unit": UnitOfVolume.LITERS,
+            "state_class": "total_increasing",
+            "scope": "device",
         },
     ]
 }
