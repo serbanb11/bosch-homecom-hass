@@ -423,6 +423,21 @@
             }
           }
         }
+      },
+      "dhw_wddw2": {
+        "name": "Warmwasser",
+        "state_attributes": {
+          "operation_mode": {
+            "state": {
+              "off": "Aus",
+              "low": "Niedrig (Eco)",
+              "high": "Hoch (Komfort)",
+              "eco": "Eco+",
+              "manual": "Manuell",
+              "ownprogram": "Eigenes Programm"
+            }
+          }
+        }
       }
     }
   }

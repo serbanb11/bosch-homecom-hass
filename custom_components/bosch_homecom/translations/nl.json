@@ -421,6 +421,21 @@
             }
           }
         }
+      },
+      "dhw_wddw2": {
+        "name": "Boiler",
+        "state_attributes": {
+          "operation_mode": {
+            "state": {
+              "off": "Uit",
+              "low": "Laag (Eco)",
+              "high": "Hoog (Comfort)",
+              "eco": "Eco+",
+              "manual": "Handmatig",
+              "ownprogram": "Eigen programma"
+            }
+          }
+        }
       }
     }
   }

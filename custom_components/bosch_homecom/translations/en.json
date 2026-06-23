@@ -421,6 +421,21 @@
             }
           }
         }
+      },
+      "dhw_wddw2": {
+        "name": "Water heater",
+        "state_attributes": {
+          "operation_mode": {
+            "state": {
+              "off": "Off",
+              "low": "Low (Eco)",
+              "high": "High (Comfort)",
+              "eco": "Eco+",
+              "manual": "Manual",
+              "ownprogram": "Own program"
+            }
+          }
+        }
       }
     }
   }
