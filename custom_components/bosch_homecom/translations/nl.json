@@ -206,6 +206,22 @@
           "default": "Standaard",
           "solar-eco": "Solar-Eco"
         }
+      },
+      "additional_heater_mode": {
+        "name": "Elektrische bijverwarming",
+        "state": {
+          "off": "Uit",
+          "manual": "Handmatig",
+          "auto": "Automatisch"
+        }
+      },
+      "silent_mode": {
+        "name": "Stille modus",
+        "state": {
+          "off": "Uit",
+          "auto": "Automatisch",
+          "on": "Aan"
+        }
       }
     },
     "sensor": {
@@ -300,6 +316,33 @@
       },
       "energy_history_hourly": {
         "name": "Energiegeschiedenis (uurlijks)"
+      },
+      "compressor_modulation": {
+        "name": "Compressor modulatie"
+      },
+      "supply_temperature": {
+        "name": "Aanvoertemperatuur"
+      },
+      "return_temperature": {
+        "name": "Retourtemperatuur"
+      },
+      "system_pressure": {
+        "name": "Systeemdruk"
+      },
+      "compressor_working_time": {
+        "name": "Compressor looptijd"
+      },
+      "heat_demand": {
+        "name": "Warmtevraag",
+        "state": {
+          "idle": "Uit",
+          "ch": "Verwarming",
+          "dhw": "Warm water",
+          "frost": "Vorstbeveiliging"
+        }
+      },
+      "compressor_starts": {
+        "name": "Compressor starts"
       }
     },
     "binary_sensor": {
@@ -319,6 +362,9 @@
       },
       "ventilation_summer_duration": {
         "name": "{zone} zomerbypass duur"
+      },
+      "dhw_charge_duration": {
+        "name": "Warm water laadduur"
       }
     },
     "button": {
@@ -330,6 +376,9 @@
       },
       "wb_pause_charging": {
         "name": "Laden pauzeren"
+      },
+      "dhw_extra_charge": {
+        "name": "Extra warm water"
       }
     },
     "switch": {

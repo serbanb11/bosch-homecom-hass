@@ -208,6 +208,22 @@
           "default": "Standard",
           "solar-eco": "Solar-Eco"
         }
+      },
+      "additional_heater_mode": {
+        "name": "Elektrischer Zuheizer",
+        "state": {
+          "off": "Aus",
+          "manual": "Manuell",
+          "auto": "Automatik"
+        }
+      },
+      "silent_mode": {
+        "name": "Flüstermodus",
+        "state": {
+          "off": "Aus",
+          "auto": "Automatik",
+          "on": "An"
+        }
       }
     },
     "sensor": {
@@ -302,6 +318,33 @@
       },
       "energy_history_hourly": {
         "name": "Energieverlauf (stündlich)"
+      },
+      "compressor_modulation": {
+        "name": "Kompressor Modulation"
+      },
+      "supply_temperature": {
+        "name": "Vorlauftemperatur"
+      },
+      "return_temperature": {
+        "name": "Rücklauftemperatur"
+      },
+      "system_pressure": {
+        "name": "Systemdruck"
+      },
+      "compressor_working_time": {
+        "name": "Kompressor Laufzeit"
+      },
+      "heat_demand": {
+        "name": "Wärmebedarf",
+        "state": {
+          "idle": "Aus",
+          "ch": "Heizung",
+          "dhw": "Warmwasser",
+          "frost": "Frostschutz"
+        }
+      },
+      "compressor_starts": {
+        "name": "Kompressor Starts"
       }
     },
     "binary_sensor": {
@@ -321,6 +364,9 @@
       },
       "ventilation_summer_duration": {
         "name": "{zone} Sommer-Bypass Dauer"
+      },
+      "dhw_charge_duration": {
+        "name": "Warmwasser Ladedauer"
       }
     },
     "button": {
@@ -332,6 +378,9 @@
       },
       "wb_pause_charging": {
         "name": "Laden pausieren"
+      },
+      "dhw_extra_charge": {
+        "name": "Extra Warmwasser"
       }
     },
     "switch": {
