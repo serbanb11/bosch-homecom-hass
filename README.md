@@ -12,7 +12,7 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 | Device Type | Examples |
 |-------------|----------|
 | **RAC** | Climate Class 3000i\*, 5000i, 6000i |
-| **K30 / K40** | Bosch boilers, Buderus Logatherm WLW 186i (MX300) |
+| **K30 / K40** | Bosch boilers, Bosch Compress 5800i/6800i heat pumps, Buderus Logatherm WLW 186i (MX300) |
 | **ICOM** | IVT Aero Series, Bosch Compress 7000i/7001i AW heat pumps |
 | **RRC2** | Bosch thermostats (CT200) |
 | **WDDW2** | Hydronext 5700s water heaters |
