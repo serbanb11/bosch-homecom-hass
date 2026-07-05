@@ -29,7 +29,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import BOSCH_SENSOR_DESCRIPTORS
+from .const import BOSCH_SENSOR_DESCRIPTORS, WDDW2_NOTIFICATION_CODES
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
@@ -254,16 +254,14 @@ async def async_setup_entry(
                             entities.append(
                                 BoschComGenericSensor(
                                     coordinator=coordinator,
-                                    name=(
-                                        desc["name"]
-                                        if not dhw_id
-                                        else f"{desc['name']} {dhw_id.upper()}"
-                                    ),
+                                    name=desc["name"],
                                     unique_suffix=unique_suffix,
                                     path=resolved_path,
                                     unit=desc.get("unit"),
                                     device_class=desc.get("device_class"),
                                     state_class=desc.get("state_class"),
+                                    translation_key=desc.get("translation_key"),
+                                    entity_category=desc.get("entity_category"),
                                 )
                             )
                         except Exception:  # keep onboarding even if one fails
@@ -476,7 +474,12 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
 
 
 class BoschComSensorNotificationsWddw2(BoschComSensorBase):
-    """BoschComSensor notifications."""
+    """BoschComSensor notifications for wddw2 devices.
+
+    Active (non-historical, ``act != 'H'``) fault codes drive the state; the
+    full history is exposed via ``extra_state_attributes`` with language-neutral
+    fields. Known codes are described via ``WDDW2_NOTIFICATION_CODES``.
+    """
 
     _attr_has_entity_name = True
 
@@ -496,21 +499,42 @@ class BoschComSensorNotificationsWddw2(BoschComSensorBase):
         self._attr_unique_id = f"{coordinator.unique_id}-notifications"
         self._attr_suggested_object_id = "notifications"
         self._attr_should_poll = False
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
-        _LOGGER.debug(
-            "Init BoschComSensorNotificationsWddw2: translation_key=%s, unique_id=%s",
-            self._attr_translation_key,
-            self._attr_unique_id,
-        )
+    @staticmethod
+    def _code(item: dict) -> str:
+        return str(item.get("dcd", "")).strip()
 
     @property
     def state(self):
-        """Return Notifications."""
-        return "\n".join(
-            f"{item['dcd']}-{item['ccd']}"
-            for item in self.coordinator.data.notifications
-            if "dcd" in item and "ccd" in item
-        )
+        """Return active (non-historical) notification codes, or 'none'."""
+        active = [
+            self._code(item)
+            for item in (self.coordinator.data.notifications or [])
+            if "dcd" in item and item.get("act") != "H"
+        ]
+        if not active:
+            return "none"
+        return "\n".join(WDDW2_NOTIFICATION_CODES.get(code, code) for code in active)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose the full notification history with language-neutral fields."""
+        history = [
+            {
+                "code": self._code(item),
+                "description": WDDW2_NOTIFICATION_CODES.get(
+                    self._code(item), self._code(item)
+                ),
+                # TODO(#73): act/fc semantics are inferred from observed
+                # TR4001 behaviour; confirm against homecom_alt issue #73.
+                "active": item.get("act") != "H",
+                "severity": "fault" if item.get("fc") == "8" else "warning",
+            }
+            for item in (self.coordinator.data.notifications or [])
+            if "dcd" in item
+        ]
+        return {"history": history} if history else {}
 
 
 class BoschComSensorDhw(BoschComSensorBase):
@@ -1257,17 +1281,24 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
         unit,
         device_class,
         state_class: Optional[str],
+        translation_key: Optional[str] = None,
+        entity_category: Optional[str] = None,
     ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
+        if translation_key:
+            self._attr_translation_key = translation_key
+        else:
+            self._attr_name = name
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._declared_unit = unit
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._resolver = DynamicPathResolver(path)
         self._attr_device_info = coordinator.device_info
-        self._attr_entity_category = None  # or EntityCategory.DIAGNOSTIC if you prefer
+        self._attr_entity_category = (
+            EntityCategory(entity_category) if entity_category else None
+        )
 
     def _coordinator_data_as_dict(self) -> dict:
         data = getattr(self.coordinator, "data", {}) or {}
@@ -2902,15 +2933,22 @@ class BoschComWddw2TotalsSensor(CoordinatorEntity, SensorEntity):
         state_class: SensorStateClass | None,
         unit: str | None,
         icon: str | None = None,
+        translation_key: str | None = None,
+        entity_category: str | None = None,
     ) -> None:
         """Initialize one WDDW2 totals sensor."""
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
-        self._attr_name = name_suffix
+        if translation_key:
+            self._attr_translation_key = translation_key
+        else:
+            self._attr_name = name_suffix
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._attr_native_unit_of_measurement = unit
+        if entity_category:
+            self._attr_entity_category = EntityCategory(entity_category)
         if icon:
             self._attr_icon = icon
         self._source = source
@@ -2961,6 +2999,7 @@ def _build_wddw2_totals_sensors(
                 state_class=SensorStateClass.TOTAL_INCREASING,
                 unit=UnitOfVolume.LITERS,
                 icon="mdi:water",
+                translation_key="water_total_consumption",
             )
         )
 
@@ -2978,6 +3017,7 @@ def _build_wddw2_totals_sensors(
                 device_class=SensorDeviceClass.ENERGY,
                 state_class=SensorStateClass.TOTAL_INCREASING,
                 unit=UnitOfEnergy.KILO_WATT_HOUR,
+                translation_key="hs_electricity_total",
             )
         )
     if isinstance(hs.get("operationHours"), dict) and "value" in hs["operationHours"]:
@@ -2991,6 +3031,8 @@ def _build_wddw2_totals_sensors(
                 device_class=SensorDeviceClass.DURATION,
                 state_class=SensorStateClass.TOTAL_INCREASING,
                 unit=UnitOfTime.HOURS,
+                translation_key="hs_operation_hours",
+                entity_category="diagnostic",
             )
         )
     if isinstance(hs.get("actualPower"), dict) and "value" in hs["actualPower"]:
@@ -3004,6 +3046,7 @@ def _build_wddw2_totals_sensors(
                 device_class=SensorDeviceClass.POWER,
                 state_class=SensorStateClass.MEASUREMENT,
                 unit=UnitOfPower.KILO_WATT,
+                translation_key="hs_actual_power",
             )
         )
     if isinstance(hs.get("powerPercentage"), dict) and (
@@ -3020,6 +3063,8 @@ def _build_wddw2_totals_sensors(
                 state_class=SensorStateClass.MEASUREMENT,
                 unit=PERCENTAGE,
                 icon="mdi:gauge",
+                translation_key="hs_power_percentage",
+                entity_category="diagnostic",
             )
         )
 

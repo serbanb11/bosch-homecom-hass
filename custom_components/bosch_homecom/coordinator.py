@@ -68,6 +68,7 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
         self.device = device
         self.entry = entry
         self.auth_provider = auth_provider
+        self.firmware = firmware["value"]
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -182,6 +183,7 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
             dhw_circuits=data.dhw_circuits,
             heat_sources=data.heat_sources,
             water_total_consumption=data.water_total_consumption,
+            holiday_mode=data.holiday_mode,
         )
 
 

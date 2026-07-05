@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Final
 
 from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import UnitOfTemperature, UnitOfVolumeFlowRate
 
 DOMAIN = "bosch_homecom"
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
@@ -53,52 +54,64 @@ BOSCH_SENSOR_DESCRIPTORS = {
     "wddw2": [
         {
             "key": "operation_mode",
+            "translation_key": "dhw_operation_mode",
             "path": ["dhw_circuits", "dhw1", "operationMode"],
-            "name": "DHW Operation Mode",
+            "name": "Operation Mode",
             "device_class": None,
             "unit": None,
             "state_class": None,
         },
         {
             "key": "air_box_temperature",
+            "translation_key": "dhw_air_box_temperature",
             "path": ["dhw_circuits", "dhw1", "airBoxTemperature"],
             "name": "Air Box Temperature",
             "device_class": SensorDeviceClass.TEMPERATURE,
-            "unit": None,
+            "unit": UnitOfTemperature.CELSIUS,
             "state_class": "measurement",
         },
         {
             "key": "inlet_temperature",
+            "translation_key": "dhw_inlet_temperature",
             "path": ["dhw_circuits", "dhw1", "inletTemperature"],
-            "name": "DHW Inlet Temperature",
+            "name": "Inlet Temperature",
             "device_class": SensorDeviceClass.TEMPERATURE,
-            "unit": None,
+            "unit": UnitOfTemperature.CELSIUS,
             "state_class": "measurement",
         },
         {
             "key": "outlet_temperature",
+            "translation_key": "dhw_outlet_temperature",
             "path": ["dhw_circuits", "dhw1", "outletTemperature"],
-            "name": "DHW Outlet Temperature",
+            "name": "Outlet Temperature",
             "device_class": SensorDeviceClass.TEMPERATURE,
-            "unit": None,
+            "unit": UnitOfTemperature.CELSIUS,
             "state_class": "measurement",
         },
         {
             "key": "water_flow",
+            "translation_key": "dhw_water_flow",
             "path": ["dhw_circuits", "dhw1", "waterFlow"],
-            "name": "DHW Water Flow",
+            "name": "Water Flow",
             "device_class": None,
-            "unit": None,  # a API já devolve "l/min" na unidade do nó
+            "unit": UnitOfVolumeFlowRate.LITERS_PER_MINUTE,
             "state_class": "measurement",
         },
-        # No WDDW2 o contador de arranques vem como nbStarts dentro do dhw1
         {
             "key": "heat_source_starts",
+            "translation_key": "dhw_heat_source_starts",
             "path": ["dhw_circuits", "dhw1", "nbStarts"],
             "name": "Heat Source Starts",
             "device_class": None,
             "unit": None,
             "state_class": "total_increasing",
+            "entity_category": "diagnostic",
         },
     ]
+}
+
+WDDW2_NOTIFICATION_CODES: dict[str, str] = {
+    "E01": "High temperature",
+    "E07": "Air bubbles detected",
+    "E13": "Water flow measurement failure",
 }
