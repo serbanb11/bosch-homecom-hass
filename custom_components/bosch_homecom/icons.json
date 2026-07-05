@@ -19,6 +19,21 @@
         }
       },
       "sensor": {
+        "dhw_operation_mode": {
+          "default": "mdi:shower-head"
+        },
+        "dhw_water_flow": {
+          "default": "mdi:waves"
+        },
+        "dhw_heat_source_starts": {
+          "default": "mdi:counter"
+        },
+        "hs_operation_hours": {
+          "default": "mdi:timer-sand"
+        },
+        "hs_power_percentage": {
+          "default": "mdi:gauge"
+        },
         "wb_state": {
           "default": "mdi:ev-station"
         },
@@ -61,6 +76,12 @@
         },
         "wb_rfid_secure": {
           "default": "mdi:card-account-details"
+        },
+        "dhw_safety_temperature": {
+          "default": "mdi:thermometer-alert"
+        },
+        "dhw_holiday_mode": {
+          "default": "mdi:palm-tree"
         }
       },
       "text": {

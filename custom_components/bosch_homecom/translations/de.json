@@ -345,6 +345,50 @@
       },
       "compressor_starts": {
         "name": "Kompressor Starts"
+      },
+      "dhw_operation_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "off": "Aus",
+          "low": "Niedrig (Eco)",
+          "high": "Hoch (Komfort)",
+          "eco": "Eco+",
+          "manual": "Manuell",
+          "bath": "Sicherheitstemperatur",
+          "ownprogram": "Eigenes Programm"
+        }
+      },
+      "dhw_air_box_temperature": {
+        "name": "Lufttemperatur (Box)"
+      },
+      "dhw_inlet_temperature": {
+        "name": "Eingangstemperatur"
+      },
+      "dhw_outlet_temperature": {
+        "name": "Ausgangstemperatur"
+      },
+      "dhw_water_flow": {
+        "name": "Wasserdurchfluss"
+      },
+      "dhw_heat_source_starts": {
+        "name": "Betriebszyklen"
+      },
+      "hs_actual_power": {
+        "name": "Leistung"
+      },
+      "hs_power_percentage": {
+        "name": "Leistung (%)"
+      },
+      "hs_operation_hours": {
+        "name": "Betriebsstunden"
+      },
+      "hs_electricity_total": {
+        "name": "Stromverbrauch",
+        "description": "Schätzwert ab Installationsdatum. Kann im Anzeigemenü des Geräts zurückgesetzt werden."
+      },
+      "water_total_consumption": {
+        "name": "Wasserverbrauch",
+        "description": "Schätzwert ab Installationsdatum. Kann im Anzeigemenü des Geräts zurückgesetzt werden."
       }
     },
     "binary_sensor": {
@@ -398,6 +442,12 @@
       },
       "plasmacluster": {
         "name": "Plasmacluster"
+      },
+      "dhw_safety_temperature": {
+        "name": "Sicherheitstemperatur"
+      },
+      "dhw_holiday_mode": {
+        "name": "Urlaubsmodus"
       }
     },
     "water_heater": {
@@ -414,6 +464,18 @@
               "ownprogram": "Eigenes Programm"
             }
           }
+        }
+      },
+      "dhw_wddw2": {
+        "name": "Warmwasser",
+        "state": {
+          "off": "Aus",
+          "low": "Niedrig (Eco)",
+          "high": "Hoch (Komfort)",
+          "eco": "Eco+",
+          "manual": "Manuell",
+          "bath": "Sicherheitstemperatur",
+          "ownprogram": "Eigenes Programm"
         }
       }
     }

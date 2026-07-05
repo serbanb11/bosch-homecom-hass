@@ -238,7 +238,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             name=c.device["deviceId"],
             manufacturer="Bosch",
             model=MODEL.get(c.device["deviceType"], c.device["deviceType"]),
-            sw_version=c.data.firmware,
+            sw_version=c.firmware,
         )
 
     entry.runtime_data = coordinators

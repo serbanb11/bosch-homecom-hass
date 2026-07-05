@@ -156,14 +156,17 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
 
 class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
-    """Representation of a BoschComWddw2 water heater entity."""
+    """Representation of a BoschComWddw2 water heater entity.
+
+    Operation modes are exposed as raw API values (``manual``, ``bath``, ...)
+    and localized via the entity ``state`` translations. Read-only devices
+    (e.g. Tronic TR4001, ``writeable == 0``) drop the corresponding supported
+    feature so the UI does not offer non-functional controls.
+    """
 
     _attr_has_entity_name = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_supported_features = (
-        WaterHeaterEntityFeature.OPERATION_MODE
-        | WaterHeaterEntityFeature.TARGET_TEMPERATURE
-    )
+    _attr_supported_features = WaterHeaterEntityFeature(0)
     _attr_target_temperature_step = 1
 
     def __init__(
@@ -173,8 +176,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     ) -> None:
         """Initialize water heater entity."""
         super().__init__(coordinator)
-        self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": field}
+        self._attr_translation_key = "dhw_wddw2"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_suggested_object_id = field + "_waterheater"
@@ -184,11 +186,10 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
         self._attr_min_temp = 36
         self._attr_max_temp = 60
-        self._attr_target_temperature = 45  # será atualizado em set_attr()
+        self._attr_target_temperature = None
         self._attr_current_temperature = None
 
-        # Call this in __init__ so data is populated right away, since it's
-        # already available in the coordinator data.
+        # Populate right away since the data is already in the coordinator.
         self.set_attr()
 
     @callback
@@ -197,19 +198,27 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         self.set_attr()
         self.async_write_ha_state()
 
+    def _circuit(self) -> dict | None:
+        """Return the dhw circuit this entity represents."""
+        for ref in self.coordinator.data.dhw_circuits or []:
+            if ref["id"].split("/")[-1] == self.field:
+                return ref
+        return None
+
     async def async_set_operation_mode(self, operation_mode: str) -> None:
         """Set new target operation mode."""
-        for ref in self.coordinator.data.dhw_circuits:
-            dhw_id = ref["id"].split("/")[-1]
-            if dhw_id == self.field:
-                await self.coordinator.bhc.async_put_dhw_operation_mode(
-                    self.coordinator.unique_id, dhw_id, operation_mode
-                )
+        ref = self._circuit()
+        if ref is None:
+            return
+        if (ref.get("operationMode") or {}).get("writeable", 1) == 0:
+            return
+        await self.coordinator.bhc.async_put_dhw_operation_mode(
+            self.coordinator.unique_id, self.field, operation_mode
+        )
         await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
-
+        """Set new target temperature (only on devices with a writable setpoint)."""
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
@@ -219,38 +228,48 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             return
         t = max(int(self._attr_min_temp), min(int(self._attr_max_temp), t))
 
-        current_mode = getattr(self, "_attr_current_operation", None)
-        for ref in self.coordinator.data.dhw_circuits:
-            dhw_id = ref["id"].split("/")[-1]
-            if dhw_id != self.field:
-                continue
-            if current_mode != "manual":
-                await self.coordinator.bhc.async_put_dhw_operation_mode(
-                    self.coordinator.unique_id, dhw_id, "manual"
-                )
-            await self.coordinator.bhc.async_set_dhw_temp_level(
-                self.coordinator.unique_id, dhw_id, "manual", t
-            )
+        ref = self._circuit()
+        if ref is None:
+            return
+        manual = (ref.get("tempLevel") or {}).get("manual") or {}
+        # Only write when the device explicitly reports a writable setpoint
+        # (mirrors the TARGET_TEMPERATURE capability detection).
+        if not manual.get("writeable"):
+            return
 
-        # pede refresh para refletir no UI
+        current_mode = getattr(self, "_attr_current_operation", None)
+        if current_mode != "manual":
+            await self.coordinator.bhc.async_put_dhw_operation_mode(
+                self.coordinator.unique_id, self.field, "manual"
+            )
+        await self.coordinator.bhc.async_set_dhw_temp_level(
+            self.coordinator.unique_id, self.field, "manual", t
+        )
         await self.coordinator.async_request_refresh()
 
     def _set_domestic_hot_water_circuits(
         self, domestic_hot_water_circuits: list[dict]
     ) -> None:
-        """Populate heating circuits."""
+        """Populate attributes and supported features from the dhw circuit."""
         for ref in domestic_hot_water_circuits:
             dhw_id = ref["id"].split("/")[-1]
             if dhw_id != self.field:
                 continue
 
-            op = (ref.get("operationMode") or {}).get("value")
-            allowed = (ref.get("operationMode") or {}).get("allowedValues") or []
-            self._attr_operation_list = allowed
-            self._attr_current_operation = op or self._attr_current_operation
+            features = WaterHeaterEntityFeature(0)
 
-            # limites do setpoint manual (usados no clamp e stepper)
-            manual = (ref.get("tempLevel") or {}).get("manual") or {}
+            op_node = ref.get("operationMode") or {}
+            op = op_node.get("value")
+            allowed = op_node.get("allowedValues") or []
+            if allowed:
+                self._attr_operation_list = allowed
+            if op:
+                self._attr_current_operation = op
+            if op_node.get("writeable", 1) != 0:
+                features |= WaterHeaterEntityFeature.OPERATION_MODE
+
+            temp_level = ref.get("tempLevel") or {}
+            manual = temp_level.get("manual") or {}
             self._attr_min_temp = manual.get("minValue", self._attr_min_temp)
             self._attr_max_temp = manual.get("maxValue", self._attr_max_temp)
 
@@ -258,15 +277,21 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             if unit_str:
                 self._attr_temperature_unit = _parse_temp_unit(unit_str)
 
-            # o setpoint alvo depende do modo atual: tempLevel[mode].value
-            tl = ref.get("tempLevel") or {}
-            set_for_mode = (tl.get(op) or {}).get("value")
+            set_for_mode = (temp_level.get(op) or {}).get("value")
             if isinstance(set_for_mode, (int, float)):
                 self._attr_target_temperature = set_for_mode
 
-            # se tiveres uma “current water temperature” real, podes meter aqui;
-            # caso não exista, deixa None para não confundir
-            self._attr_current_temperature = None
+            # Only offer temperature control when the setpoint is writable.
+            if manual.get("writeable"):
+                features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
+
+            outlet = ref.get("outletTemperature") or {}
+            if isinstance(outlet, dict) and isinstance(
+                outlet.get("value"), (int, float)
+            ):
+                self._attr_current_temperature = outlet["value"]
+
+            self._attr_supported_features = features
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""

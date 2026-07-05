@@ -100,6 +100,9 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
     assert dev_entry.manufacturer == MANUFACTURER
     assert dev_entry.name == "Boschcom_rac_123"
     assert dev_entry.model == "Residential Air Conditioning"
+    # sw_version must be a plain string, not a dict/list (regression for #145)
+    assert isinstance(dev_entry.sw_version, str)
+    assert dev_entry.sw_version == "1.0.0"
 
     with patch.object(
         hass.config_entries, "async_forward_entry_unload", return_value=True

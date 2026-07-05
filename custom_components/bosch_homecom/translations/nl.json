@@ -343,6 +343,50 @@
       },
       "compressor_starts": {
         "name": "Compressor starts"
+      },
+      "dhw_operation_mode": {
+        "name": "Bedrijfsmodus",
+        "state": {
+          "off": "Uit",
+          "low": "Laag (Eco)",
+          "high": "Hoog (Comfort)",
+          "eco": "Eco+",
+          "manual": "Handmatig",
+          "bath": "Veiligheidstemperatuur",
+          "ownprogram": "Eigen programma"
+        }
+      },
+      "dhw_air_box_temperature": {
+        "name": "Luchttemperatuur (Box)"
+      },
+      "dhw_inlet_temperature": {
+        "name": "Ingangstemperatuur"
+      },
+      "dhw_outlet_temperature": {
+        "name": "Uitgangstemperatuur"
+      },
+      "dhw_water_flow": {
+        "name": "Waterstroom"
+      },
+      "dhw_heat_source_starts": {
+        "name": "Bedrijfscycli"
+      },
+      "hs_actual_power": {
+        "name": "Vermogen"
+      },
+      "hs_power_percentage": {
+        "name": "Vermogen (%)"
+      },
+      "hs_operation_hours": {
+        "name": "Bedrijfsuren"
+      },
+      "hs_electricity_total": {
+        "name": "Stroomverbruik",
+        "description": "Geschatte waarde berekend vanaf installatiedatum. Kan worden gereset via het displaymenu van het apparaat."
+      },
+      "water_total_consumption": {
+        "name": "Waterverbruik",
+        "description": "Geschatte waarde berekend vanaf installatiedatum. Kan worden gereset via het displaymenu van het apparaat."
       }
     },
     "binary_sensor": {
@@ -396,6 +440,12 @@
       },
       "plasmacluster": {
         "name": "Plasmacluster"
+      },
+      "dhw_safety_temperature": {
+        "name": "Veiligheidstemperatuur"
+      },
+      "dhw_holiday_mode": {
+        "name": "Vakantiestand"
       }
     },
     "water_heater": {
@@ -412,6 +462,18 @@
               "ownprogram": "Eigen programma"
             }
           }
+        }
+      },
+      "dhw_wddw2": {
+        "name": "Boiler",
+        "state": {
+          "off": "Uit",
+          "low": "Laag (Eco)",
+          "high": "Hoog (Comfort)",
+          "eco": "Eco+",
+          "manual": "Handmatig",
+          "bath": "Veiligheidstemperatuur",
+          "ownprogram": "Eigen programma"
         }
       }
     }
