@@ -410,60 +410,37 @@ class BoschComSelectProgram(CoordinatorEntity, SelectEntity):
         programs = next(
             (
                 ref
-                for ref in self._coordinator.data.switch_programs
+                for ref in (self._coordinator.data.switch_programs or [])
                 if "activeProgram" in ref["id"]
             ),
             None,
         )
-        return programs["allowedValues"] + ["off"]
+        if programs is None:
+            return ["off"]
+        return programs.get("allowedValues", []) + ["off"]
 
     @property
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
+        programs = self._coordinator.data.switch_programs or []
         enabled = next(
-            (
-                ref
-                for ref in self._coordinator.data.switch_programs
-                if "switchPrograms/enabled" in ref["id"]
-            ),
+            (ref for ref in programs if "switchPrograms/enabled" in ref["id"]),
             None,
         )
-        if enabled["value"] == "off":
+        if enabled is None:
+            return None
+        if enabled.get("value") == "off":
             return "off"
 
         program = next(
-            (
-                ref
-                for ref in self._coordinator.data.switch_programs
-                if "activeProgram" in ref["id"]
-            ),
+            (ref for ref in programs if "activeProgram" in ref["id"]),
             None,
         )
-        return program["value"]
+        return program.get("value") if program else None
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        enabled = next(
-            (
-                ref
-                for ref in self._coordinator.data.switch_programs
-                if "switchPrograms/enabled" in ref["id"]
-            ),
-            None,
-        )
-        if enabled["value"] == "off":
-            self._attr_current_option = "off"
-
-        program = next(
-            (
-                ref
-                for ref in self._coordinator.data.switch_programs
-                if "activeProgram" in ref["id"]
-            ),
-            None,
-        )
-        self._attr_current_option = program["value"]
         self.async_write_ha_state()
 
 
@@ -870,14 +847,14 @@ class BoschComSelectAwayMode(CoordinatorEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
-
-        return self.coordinator.data.away_mode["value"]
+        away_mode = self.coordinator.data.away_mode
+        if away_mode is None:
+            return None
+        return away_mode.get("value")
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-
-        self._attr_current_option = self.coordinator.data.away_mode["value"]
         self.async_write_ha_state()
 
 

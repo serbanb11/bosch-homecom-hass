@@ -128,30 +128,18 @@ class BoschComSwitchAirPurification(CoordinatorEntity, SwitchEntity):
         airPurificationMode = next(
             (
                 ref
-                for ref in self._coordinator.data.advanced_functions
+                for ref in (self._coordinator.data.advanced_functions or [])
                 if "airPurificationMode" in ref["id"]
             ),
             None,
         )
-        if airPurificationMode["value"] == "on":
-            return True
-        return False
+        if airPurificationMode is None:
+            return None
+        return airPurificationMode.get("value") == "on"
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        airPurificationMode = next(
-            (
-                ref
-                for ref in self._coordinator.data.advanced_functions
-                if "airPurificationMode" in ref["id"]
-            ),
-            None,
-        )
-        if airPurificationMode["value"] == "on":
-            self._attr_is_on = True
-        else:
-            self._attr_is_on = False
         self.async_write_ha_state()
 
 
