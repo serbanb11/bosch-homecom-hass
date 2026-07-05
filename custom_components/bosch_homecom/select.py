@@ -192,6 +192,33 @@ async def async_setup_entry(
                             allowed_values=allowed_values,
                         )
                     )
+    # Extra K40 select entities from extra_data
+    for coordinator in coordinators:
+        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+            extra = coordinator.extra_data
+            ah = extra.get("additional_heater")
+            if isinstance(ah, dict) and "allowedValues" in ah:
+                entities.append(
+                    BoschComK40ExtraSelect(
+                        coordinator,
+                        "additional_heater",
+                        "additional_heater_mode",
+                        "additional_heater",
+                        ah["allowedValues"],
+                    )
+                )
+            sm = extra.get("silent_mode")
+            if isinstance(sm, dict) and "allowedValues" in sm:
+                entities.append(
+                    BoschComK40ExtraSelect(
+                        coordinator,
+                        "silent_mode",
+                        "silent_mode",
+                        "silent_mode",
+                        sm["allowedValues"],
+                    )
+                )
+
     async_add_entities(entities)
 
 
@@ -1172,4 +1199,54 @@ class BoschComCommoduleChargingStrategySelect(CoordinatorEntity, SelectEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._attr_current_option = self._read_value()
+        self.async_write_ha_state()
+
+
+# ===================================================================
+# Extra K40 selects (endpoints not yet in homecom_alt library)
+# ===================================================================
+
+
+class BoschComK40ExtraSelect(CoordinatorEntity, SelectEntity):
+    """Select entity backed by coordinator.extra_data with allowedValues."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        key: str,
+        translation_key: str,
+        unique_suffix: str,
+        allowed_values: list[str],
+    ) -> None:
+        """Initialize extra select entity."""
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_translation_key = translation_key
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_suggested_object_id = unique_suffix
+        self._attr_options = allowed_values
+
+    @property
+    def current_option(self) -> str | None:
+        """Return current value from extra_data."""
+        data = self.coordinator.extra_data.get(self._key)
+        if data and isinstance(data, dict):
+            return data.get("value")
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the option via PUT."""
+        await self.coordinator.async_put_extra_endpoint(self._key, option)
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        data = self.coordinator.extra_data.get(self._key)
+        if data and isinstance(data, dict):
+            self._attr_current_option = data.get("value")
         self.async_write_ha_state()

@@ -25,6 +25,7 @@ from homeassistant.const import (
     UnitOfTime,
     UnitOfVolume,
 )
+from homeassistant.core import callback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -379,6 +380,70 @@ async def async_setup_entry(
             )
         except Exception:
             _LOGGER.exception("Failed to dump coordinator data for %s", devtype)
+
+    # K40 sensors from heat_sources (already fetched by homecom_alt bulk API)
+    for coordinator in coordinators:
+        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+            hs = coordinator.data.heat_sources or {}
+            if hs.get("actualModulation"):
+                entities.append(
+                    BoschComK40ExtraSensor(
+                        coordinator,
+                        "actualModulation",
+                        "compressor_modulation",
+                        "compressor_modulation",
+                        native_unit="%",
+                    )
+                )
+            if hs.get("actualSupplyTemperature"):
+                entities.append(
+                    BoschComK40ExtraSensor(
+                        coordinator,
+                        "actualSupplyTemperature",
+                        "supply_temperature",
+                        "supply_temperature",
+                        device_class=SensorDeviceClass.TEMPERATURE,
+                        native_unit="°C",
+                    )
+                )
+            if hs.get("returnTemperature"):
+                entities.append(
+                    BoschComK40ExtraSensor(
+                        coordinator,
+                        "returnTemperature",
+                        "return_temperature",
+                        "return_temperature",
+                        device_class=SensorDeviceClass.TEMPERATURE,
+                        native_unit="°C",
+                    )
+                )
+            if hs.get("systemPressure"):
+                entities.append(
+                    BoschComK40ExtraSensor(
+                        coordinator,
+                        "systemPressure",
+                        "system_pressure",
+                        "system_pressure",
+                        device_class=SensorDeviceClass.PRESSURE,
+                        native_unit="bar",
+                    )
+                )
+            if hs.get("totalWorkingTime"):
+                entities.append(
+                    BoschComK40ExtraSensor(
+                        coordinator,
+                        "totalWorkingTime",
+                        "compressor_working_time",
+                        "compressor_working_time",
+                        device_class=SensorDeviceClass.DURATION,
+                        state_class=SensorStateClass.TOTAL_INCREASING,
+                        native_unit="s",
+                    )
+                )
+            if hs.get("actualHeatDemand"):
+                entities.append(BoschComK40HeatDemandSensor(coordinator))
+            if hs.get("starts"):
+                entities.append(BoschComK40StartCountsSensor(coordinator))
 
     if entities:
         async_add_entities(entities)
@@ -3069,3 +3134,157 @@ def _build_wddw2_totals_sensors(
         )
 
     return entities
+
+
+# ===================================================================
+# Extra K40 sensors (endpoints not yet in homecom_alt library)
+# ===================================================================
+
+
+class BoschComK40ExtraSensor(CoordinatorEntity, SensorEntity):
+    """Sensor reading a float value from coordinator.extra_data."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        key: str,
+        translation_key: str,
+        unique_suffix: str,
+        device_class: SensorDeviceClass | None = None,
+        state_class: SensorStateClass | None = SensorStateClass.MEASUREMENT,
+        native_unit: str | None = None,
+        convert_seconds_to_hours: bool = False,
+    ) -> None:
+        """Initialize extra sensor."""
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_translation_key = translation_key
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
+        self._attr_suggested_object_id = unique_suffix
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = native_unit
+        self._convert_s_to_h = convert_seconds_to_hours
+
+    @property
+    def native_value(self) -> float | int | None:
+        """Return current value."""
+        hs = self.coordinator.data.heat_sources or {}
+        data = hs.get(self._key)
+        if data and isinstance(data, dict):
+            val = data.get("value")
+            if val is not None and self._convert_s_to_h:
+                return round(val / 3600, 1)
+            # Return int for whole numbers (removes .0 display)
+            if val is not None and val == int(val):
+                return int(val)
+            return val
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        hs = self.coordinator.data.heat_sources or {}
+        data = hs.get(self._key)
+        if data and isinstance(data, dict):
+            val = data.get("value")
+            if val is not None and self._convert_s_to_h:
+                self._attr_native_value = round(val / 3600, 1)
+            elif val is not None and val == int(val):
+                self._attr_native_value = int(val)
+            else:
+                self._attr_native_value = val
+        else:
+            self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+class BoschComK40HeatDemandSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for actualHeatDemand (what the compressor is doing)."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize heat demand sensor."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "heat_demand"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-heat_demand"
+        self._attr_suggested_object_id = "heat_demand"
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = ["idle", "ch", "dhw", "frost"]
+
+    @property
+    def native_value(self) -> str | None:
+        """Return current demand (first active or 'idle')."""
+        hs = self.coordinator.data.heat_sources or {}
+        data = hs.get("actualHeatDemand")
+        if data and isinstance(data, dict):
+            values = data.get("values", [])
+            active = [v for v in values if v]
+            return active[0] if active else "idle"
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        hs = self.coordinator.data.heat_sources or {}
+        data = hs.get("actualHeatDemand")
+        if data and isinstance(data, dict):
+            values = data.get("values", [])
+            active = [v for v in values if v]
+            self._attr_native_value = active[0] if active else "idle"
+        else:
+            self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+class BoschComK40StartCountsSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for numberOfStarts (total with per-domain breakdown)."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize start counts sensor."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "compressor_starts"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-compressor_starts"
+        self._attr_suggested_object_id = "compressor_starts"
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_native_unit_of_measurement = "starts"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return total starts."""
+        hs = self.coordinator.data.heat_sources or {}
+        data = hs.get("starts")
+        if data and isinstance(data, dict):
+            for entry in data.get("values", []):
+                if isinstance(entry, dict) and "total" in entry:
+                    return int(entry["total"])
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Return per-domain breakdown."""
+        hs = self.coordinator.data.heat_sources or {}
+        data = hs.get("starts")
+        if data and isinstance(data, dict):
+            attrs = {}
+            for entry in data.get("values", []):
+                if isinstance(entry, dict):
+                    attrs.update(entry)
+            return attrs if attrs else None
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        self.async_write_ha_state()

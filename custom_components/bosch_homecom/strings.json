@@ -188,6 +188,22 @@
           "off": "Off"
         }
       },
+      "additional_heater_mode": {
+        "name": "Additional heater",
+        "state": {
+          "off": "Off",
+          "manual": "Manual",
+          "auto": "Auto"
+        }
+      },
+      "silent_mode": {
+        "name": "Silent mode",
+        "state": {
+          "off": "Off",
+          "auto": "Auto",
+          "on": "On"
+        }
+      },
       "hc_night_switch_mode": {
         "name": "{circuit} night switch mode"
       },
@@ -217,6 +233,33 @@
           "manual": "Manual",
           "auto": "Auto"
         }
+      },
+      "compressor_modulation": {
+        "name": "Compressor modulation"
+      },
+      "supply_temperature": {
+        "name": "Supply temperature"
+      },
+      "return_temperature": {
+        "name": "Return temperature"
+      },
+      "system_pressure": {
+        "name": "System pressure"
+      },
+      "compressor_working_time": {
+        "name": "Compressor working time"
+      },
+      "heat_demand": {
+        "name": "Heat demand",
+        "state": {
+          "idle": "Idle",
+          "ch": "Central heating",
+          "dhw": "Domestic hot water",
+          "frost": "Frost protection"
+        }
+      },
+      "compressor_starts": {
+        "name": "Compressor starts"
       },
       "indoor_humidity": {
         "name": "Indoor Humidity"
@@ -364,6 +407,9 @@
       },
       "ventilation_summer_duration": {
         "name": "{zone} summer bypass duration"
+      },
+      "dhw_charge_duration": {
+        "name": "DHW charge duration"
       }
     },
     "button": {
@@ -375,6 +421,9 @@
       },
       "wb_pause_charging": {
         "name": "Pause Charging"
+      },
+      "dhw_extra_charge": {
+        "name": "Extra hot water"
       }
     },
     "switch": {

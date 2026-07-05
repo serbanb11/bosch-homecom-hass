@@ -8,7 +8,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_WB_LABEL, DEFAULT_WB_LABEL
-from .coordinator import BoschComModuleCoordinatorCommodule
+from .coordinator import (
+    BoschComModuleCoordinatorCommodule,
+    BoschComModuleCoordinatorK40,
+)
 
 PARALLEL_UPDATES = 1
 
@@ -40,6 +43,13 @@ async def async_setup_entry(
                         coordinator=coordinator, cp_id=cp_id
                     )
                 )
+    # Extra K40 button entities
+    for coordinator in coordinators:
+        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+            # DHW charge button — available if device has dhw_circuits
+            if coordinator.data.dhw_circuits:
+                entities.append(BoschComK40DhwChargeButton(coordinator))
+
     async_add_entities(entities)
 
 
@@ -126,3 +136,30 @@ class BoschComCommodulePauseChargingButton(CoordinatorEntity, ButtonEntity):
             device_id, self._cp_id, label
         )
         await self._coordinator.async_request_refresh()
+
+
+# ===================================================================
+# Extra K40 button (endpoints not yet in homecom_alt library)
+# ===================================================================
+
+
+class BoschComK40DhwChargeButton(CoordinatorEntity, ButtonEntity):
+    """Button to trigger a one-time DHW charge (extra hot water)."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize DHW charge button."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "dhw_extra_charge"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-dhw_extra_charge"
+        self._attr_suggested_object_id = "dhw_extra_charge"
+
+    async def async_press(self) -> None:
+        """Trigger a single hot water charge."""
+        await self.coordinator.bhc.async_set_dhw_charge(
+            self.coordinator.data.device["deviceId"], "dhw1", "start"
+        )
+        await self.coordinator.async_request_refresh()

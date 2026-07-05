@@ -147,6 +147,50 @@ class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
 class BoschComModuleCoordinatorK40(BoschComModuleCoordinatorBase[BHCDeviceK40]):
     """A coordinator to manage the fetching of BoschCom data."""
 
+    # Endpoints not yet covered by the homecom_alt library bulk fetch.
+    # Once these are upstreamed to homecom_alt, they can be removed here.
+    EXTRA_ENDPOINTS = {
+        "additional_heater": "/resource/heatSources/additionalHeater/operationMode",
+        "silent_mode": "/resource/system/silentMode/enabled",
+        "dhw_charge_duration": "/resource/dhwCircuits/dhw1/chargeDuration",
+    }
+
+    def __init__(self, *args, **kwargs) -> None:
+        """Initialize K40 coordinator with extra endpoint state."""
+        super().__init__(*args, **kwargs)
+        self.extra_data: dict[str, dict | None] = {}
+
+    async def _async_update_data(self) -> BHCDeviceK40:
+        """Update data via library, then fetch extra endpoints."""
+        data = await super()._async_update_data()
+        await self._fetch_extra_endpoints()
+        return data
+
+    async def _fetch_extra_endpoints(self) -> None:
+        """Fetch extra endpoints not in homecom_alt, failing gracefully."""
+        for key, path in self.EXTRA_ENDPOINTS.items():
+            try:
+                result = await self.bhc.async_action_universal_get(self.unique_id, path)
+                self.extra_data[key] = result if result else None
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Device %s: endpoint %s not available", self.unique_id, key
+                )
+                self.extra_data[key] = None
+
+    async def async_put_extra_endpoint(self, key: str, value) -> None:
+        """PUT a value to an extra endpoint by key."""
+        from homecom_alt.const import BOSCHCOM_DOMAIN, BOSCHCOM_ENDPOINT_GATEWAYS
+
+        path = self.EXTRA_ENDPOINTS[key]
+        await self.bhc.get_token()
+        await self.bhc._async_http_request(
+            "put",
+            BOSCHCOM_DOMAIN + BOSCHCOM_ENDPOINT_GATEWAYS + self.unique_id + path,
+            {"value": value},
+            1,
+        )
+
     def _build_device_data(self, data: BHCDeviceK40) -> BHCDeviceK40:
         """Build K40 device data."""
         return BHCDeviceK40(

@@ -57,6 +57,14 @@ async def async_setup_entry(
             entities.extend(_build_rrc2_numbers(coordinator))
         if coordinator.data.device["deviceType"] == "icom":
             entities.extend(_build_icom_dhw_numbers(coordinator))
+    # Extra K40 number entities
+    for coordinator in coordinators:
+        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+            # DHW charge duration — available if extra_data has it
+            dhw_dur = coordinator.extra_data.get("dhw_charge_duration")
+            if isinstance(dhw_dur, dict) and dhw_dur.get("writeable"):
+                entities.append(BoschComK40DhwChargeDurationNumber(coordinator))
+
     async_add_entities(entities)
 
 
@@ -610,3 +618,50 @@ def _build_icom_dhw_numbers(
             )
 
     return entities
+
+
+# ===================================================================
+# Extra K40 number (endpoints not yet in homecom_alt library)
+# ===================================================================
+
+
+class BoschComK40DhwChargeDurationNumber(CoordinatorEntity, NumberEntity):
+    """Number entity for DHW charge duration in minutes."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize DHW charge duration number."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "dhw_charge_duration"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-dhw_charge_duration"
+        self._attr_suggested_object_id = "dhw_charge_duration"
+        self._attr_native_unit_of_measurement = "min"
+        self._attr_native_min_value = 60
+        self._attr_native_max_value = 2880
+        self._attr_native_step = 30
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current duration value."""
+        data = self.coordinator.extra_data.get("dhw_charge_duration")
+        if data and isinstance(data, dict):
+            return data.get("value")
+        return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the charge duration."""
+        await self.coordinator.bhc.async_set_dhw_charge_duration(
+            self.coordinator.data.device["deviceId"], "dhw1", str(int(value))
+        )
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        data = self.coordinator.extra_data.get("dhw_charge_duration")
+        if data and isinstance(data, dict):
+            self._attr_native_value = data.get("value")
+        self.async_write_ha_state()
