@@ -57,9 +57,12 @@ async def async_setup_entry(
             entities.extend(_build_rrc2_numbers(coordinator))
         if coordinator.data.device["deviceType"] == "icom":
             entities.extend(_build_icom_dhw_numbers(coordinator))
-    # Extra K40 number entities
+    # Extra K40/ICOM number entities
     for coordinator in coordinators:
-        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+        if isinstance(
+            coordinator,
+            (BoschComModuleCoordinatorK40, BoschComModuleCoordinatorIcom),
+        ):
             # DHW charge duration — available if extra_data has it
             dhw_dur = coordinator.extra_data.get("dhw_charge_duration")
             if isinstance(dhw_dur, dict) and dhw_dur.get("writeable"):

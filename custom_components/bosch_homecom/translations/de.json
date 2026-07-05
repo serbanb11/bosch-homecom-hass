@@ -383,12 +383,10 @@
         "name": "Betriebsstunden"
       },
       "hs_electricity_total": {
-        "name": "Stromverbrauch",
-        "description": "Schätzwert ab Installationsdatum. Kann im Anzeigemenü des Geräts zurückgesetzt werden."
+        "name": "Stromverbrauch"
       },
       "water_total_consumption": {
-        "name": "Wasserverbrauch",
-        "description": "Schätzwert ab Installationsdatum. Kann im Anzeigemenü des Geräts zurückgesetzt werden."
+        "name": "Wasserverbrauch"
       }
     },
     "binary_sensor": {

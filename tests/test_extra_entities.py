@@ -10,7 +10,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.bosch_homecom.button import BoschComK40DhwChargeButton
 from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DOMAIN
-from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorK40
+from custom_components.bosch_homecom.coordinator import (
+    BoschComModuleCoordinatorIcom,
+    BoschComModuleCoordinatorK40,
+)
 from custom_components.bosch_homecom.number import BoschComK40DhwChargeDurationNumber
 from custom_components.bosch_homecom.select import BoschComK40ExtraSelect
 from custom_components.bosch_homecom.sensor import (
@@ -194,7 +197,8 @@ def _mock_coordinator(extra_data=None, heat_sources=None):
     coordinator.bhc = MagicMock()
     coordinator.bhc.async_set_dhw_charge = AsyncMock()
     coordinator.bhc.async_set_dhw_charge_duration = AsyncMock()
-    coordinator.async_put_extra_endpoint = AsyncMock()
+    coordinator.bhc.async_put_additional_heater_mode = AsyncMock()
+    coordinator.bhc.async_put_silent_mode = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
     return coordinator
 
@@ -206,71 +210,73 @@ def _mock_coordinator(extra_data=None, heat_sources=None):
 
 @pytest.mark.asyncio
 async def test_k40_coordinator_fetches_extra_endpoints(hass, entry, device, firmware):
-    """Test that K40 coordinator fetches all extra endpoints."""
+    """K40 coordinator fetches all extra endpoints via public library getters."""
     entry.add_to_hass(hass)
     bhc = MagicMock()
     bhc.get_token = AsyncMock()
     bhc.async_update = AsyncMock(return_value=_make_k40_data())
-    bhc.async_action_universal_get = AsyncMock(return_value={"value": "test"})
+    bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
+    bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
+    bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
     )
     await coordinator._async_update_data()
 
-    # Should have called universal_get for each extra endpoint
-    assert bhc.async_action_universal_get.call_count == len(
-        BoschComModuleCoordinatorK40.EXTRA_ENDPOINTS
-    )
-    # All keys should be in extra_data
-    for key in BoschComModuleCoordinatorK40.EXTRA_ENDPOINTS:
-        assert key in coordinator.extra_data
+    bhc.async_get_additional_heater_mode.assert_awaited_once()
+    bhc.async_get_silent_mode.assert_awaited_once()
+    bhc.async_get_dhw_charge_duration.assert_awaited_once()
+    for key in BoschComModuleCoordinatorK40.EXTRA_KEYS:
+        assert coordinator.extra_data.get(key) is not None
 
 
 @pytest.mark.asyncio
 async def test_k40_coordinator_extra_endpoint_failure_graceful(
     hass, entry, device, firmware
 ):
-    """Test that a failing endpoint doesn't crash the update."""
+    """A failing endpoint doesn't crash the update; its value becomes None."""
+    from homecom_alt import ApiError
+
     entry.add_to_hass(hass)
     bhc = MagicMock()
     bhc.get_token = AsyncMock()
     bhc.async_update = AsyncMock(return_value=_make_k40_data())
-    bhc.async_action_universal_get = AsyncMock(side_effect=Exception("timeout"))
+    bhc.async_get_additional_heater_mode = AsyncMock(side_effect=ApiError("boom"))
+    bhc.async_get_silent_mode = AsyncMock(side_effect=ApiError("boom"))
+    bhc.async_get_dhw_charge_duration = AsyncMock(side_effect=ApiError("boom"))
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
     )
     data = await coordinator._async_update_data()
 
-    # Should not crash
     assert data is not None
-    # All keys should be None
-    for key in BoschComModuleCoordinatorK40.EXTRA_ENDPOINTS:
+    for key in BoschComModuleCoordinatorK40.EXTRA_KEYS:
         assert coordinator.extra_data[key] is None
 
 
 @pytest.mark.asyncio
-async def test_k40_coordinator_put_extra_endpoint(hass, entry, device, firmware):
-    """Test PUT to an extra endpoint."""
+async def test_icom_coordinator_shares_extra_endpoints(hass, entry, firmware):
+    """ICOM coordinator shares the extra-endpoint mixin, so ICOM is supported."""
     entry.add_to_hass(hass)
+    icom_device = {"deviceId": "102128202", "deviceType": "icom"}
     bhc = MagicMock()
     bhc.get_token = AsyncMock()
-    bhc.async_update = AsyncMock(return_value=_make_k40_data())
-    bhc.async_action_universal_get = AsyncMock(return_value={})
-    bhc._async_http_request = AsyncMock()
-
-    coordinator = BoschComModuleCoordinatorK40(
-        hass, bhc, device, firmware, entry, auth_provider=False
+    bhc.async_get_additional_heater_mode = AsyncMock(
+        return_value={"value": "auto", "allowedValues": ["off", "auto"]}
     )
-    await coordinator.async_put_extra_endpoint("silent_mode", "on")
+    bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
+    bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
 
-    bhc.get_token.assert_awaited()
-    bhc._async_http_request.assert_awaited_once()
-    args = bhc._async_http_request.call_args[0]
-    assert args[0] == "put"
-    assert "silentMode/enabled" in args[1]
-    assert args[2] == {"value": "on"}
+    coordinator = BoschComModuleCoordinatorIcom(
+        hass, bhc, icom_device, firmware, entry, auth_provider=False
+    )
+    assert hasattr(coordinator, "extra_data")
+    await coordinator._fetch_extra_endpoints()
+
+    for key in BoschComModuleCoordinatorIcom.EXTRA_KEYS:
+        assert coordinator.extra_data.get(key) is not None
 
 
 # ===================================================================
@@ -349,13 +355,14 @@ def test_extra_select_current_option():
         "silent_mode",
         "silent_mode",
         ["off", "auto", "on"],
+        "async_put_silent_mode",
     )
     assert select.current_option == "off"
 
 
 @pytest.mark.asyncio
 async def test_extra_select_set_option():
-    """Test BoschComK40ExtraSelect calls PUT on select."""
+    """BoschComK40ExtraSelect writes via the public library setter."""
     coordinator = _mock_coordinator()
     select = BoschComK40ExtraSelect(
         coordinator,
@@ -363,10 +370,11 @@ async def test_extra_select_set_option():
         "silent_mode",
         "silent_mode",
         ["off", "auto", "on"],
+        "async_put_silent_mode",
     )
     await select.async_select_option("on")
 
-    coordinator.async_put_extra_endpoint.assert_awaited_once_with("silent_mode", "on")
+    coordinator.bhc.async_put_silent_mode.assert_awaited_once_with("102128202", "on")
     coordinator.async_request_refresh.assert_awaited_once()
 
 

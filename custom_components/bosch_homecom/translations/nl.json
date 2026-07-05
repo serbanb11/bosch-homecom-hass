@@ -381,12 +381,10 @@
         "name": "Bedrijfsuren"
       },
       "hs_electricity_total": {
-        "name": "Stroomverbruik",
-        "description": "Geschatte waarde berekend vanaf installatiedatum. Kan worden gereset via het displaymenu van het apparaat."
+        "name": "Stroomverbruik"
       },
       "water_total_consumption": {
-        "name": "Waterverbruik",
-        "description": "Geschatte waarde berekend vanaf installatiedatum. Kan worden gereset via het displaymenu van het apparaat."
+        "name": "Waterverbruik"
       }
     },
     "binary_sensor": {

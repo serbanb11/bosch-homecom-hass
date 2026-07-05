@@ -381,9 +381,12 @@ async def async_setup_entry(
         except Exception:
             _LOGGER.exception("Failed to dump coordinator data for %s", devtype)
 
-    # K40 sensors from heat_sources (already fetched by homecom_alt bulk API)
+    # K40/ICOM sensors from heat_sources (already fetched by homecom_alt bulk API)
     for coordinator in coordinators:
-        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+        if isinstance(
+            coordinator,
+            (BoschComModuleCoordinatorK40, BoschComModuleCoordinatorIcom),
+        ):
             hs = coordinator.data.heat_sources or {}
             if hs.get("actualModulation"):
                 entities.append(

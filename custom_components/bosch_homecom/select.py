@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
+    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
     BoschComModuleCoordinatorRrc2,
@@ -192,9 +193,12 @@ async def async_setup_entry(
                             allowed_values=allowed_values,
                         )
                     )
-    # Extra K40 select entities from extra_data
+    # Extra K40/ICOM select entities from extra_data
     for coordinator in coordinators:
-        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+        if isinstance(
+            coordinator,
+            (BoschComModuleCoordinatorK40, BoschComModuleCoordinatorIcom),
+        ):
             extra = coordinator.extra_data
             ah = extra.get("additional_heater")
             if isinstance(ah, dict) and "allowedValues" in ah:
@@ -205,6 +209,7 @@ async def async_setup_entry(
                         "additional_heater_mode",
                         "additional_heater",
                         ah["allowedValues"],
+                        "async_put_additional_heater_mode",
                     )
                 )
             sm = extra.get("silent_mode")
@@ -216,6 +221,7 @@ async def async_setup_entry(
                         "silent_mode",
                         "silent_mode",
                         sm["allowedValues"],
+                        "async_put_silent_mode",
                     )
                 )
 
@@ -1220,10 +1226,12 @@ class BoschComK40ExtraSelect(CoordinatorEntity, SelectEntity):
         translation_key: str,
         unique_suffix: str,
         allowed_values: list[str],
+        putter: str,
     ) -> None:
         """Initialize extra select entity."""
         super().__init__(coordinator)
         self._key = key
+        self._putter = putter
         self._attr_translation_key = translation_key
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
@@ -1239,8 +1247,10 @@ class BoschComK40ExtraSelect(CoordinatorEntity, SelectEntity):
         return None
 
     async def async_select_option(self, option: str) -> None:
-        """Set the option via PUT."""
-        await self.coordinator.async_put_extra_endpoint(self._key, option)
+        """Set the option."""
+        await getattr(self.coordinator.bhc, self._putter)(
+            self.coordinator.unique_id, option
+        )
         await self.coordinator.async_request_refresh()
 
     @callback

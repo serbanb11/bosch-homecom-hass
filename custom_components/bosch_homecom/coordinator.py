@@ -144,52 +144,62 @@ class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
         )
 
 
-class BoschComModuleCoordinatorK40(BoschComModuleCoordinatorBase[BHCDeviceK40]):
-    """A coordinator to manage the fetching of BoschCom data."""
+class _K40ExtraEndpointsMixin:
+    """Fetch/cache K40-family endpoints not in the homecom_alt bulk update.
 
-    # Endpoints not yet covered by the homecom_alt library bulk fetch.
-    # Once these are upstreamed to homecom_alt, they can be removed here.
-    EXTRA_ENDPOINTS = {
-        "additional_heater": "/resource/heatSources/additionalHeater/operationMode",
-        "silent_mode": "/resource/system/silentMode/enabled",
-        "dhw_charge_duration": "/resource/dhwCircuits/dhw1/chargeDuration",
-    }
+    ``additionalHeater``, ``silentMode`` and ``dhwChargeDuration`` are exposed
+    by homecom_alt as standalone getters/setters (not part of ``async_update``),
+    so they are fetched separately and cached in ``extra_data``. Shared by the
+    K40 and ICOM coordinators. Endpoints the device does not support resolve to
+    ``None`` and simply produce no entity.
+    """
+
+    EXTRA_KEYS = ("additional_heater", "silent_mode", "dhw_charge_duration")
 
     def __init__(self, *args, **kwargs) -> None:
-        """Initialize K40 coordinator with extra endpoint state."""
+        """Initialize coordinator with the extra-endpoint cache."""
         super().__init__(*args, **kwargs)
         self.extra_data: dict[str, dict | None] = {}
 
-    async def _async_update_data(self) -> BHCDeviceK40:
-        """Update data via library, then fetch extra endpoints."""
+    async def _async_update_data(self):
+        """Update via library, then fetch the standalone endpoints."""
         data = await super()._async_update_data()
         await self._fetch_extra_endpoints()
         return data
 
     async def _fetch_extra_endpoints(self) -> None:
-        """Fetch extra endpoints not in homecom_alt, failing gracefully."""
-        for key, path in self.EXTRA_ENDPOINTS.items():
+        """Fetch standalone endpoints via the library, caching None on failure."""
+        thunks = {
+            "additional_heater": lambda: self.bhc.async_get_additional_heater_mode(
+                self.unique_id
+            ),
+            "silent_mode": lambda: self.bhc.async_get_silent_mode(self.unique_id),
+            "dhw_charge_duration": lambda: self.bhc.async_get_dhw_charge_duration(
+                self.unique_id, "dhw1"
+            ),
+        }
+        for key, thunk in thunks.items():
             try:
-                result = await self.bhc.async_action_universal_get(self.unique_id, path)
-                self.extra_data[key] = result if result else None
-            except Exception:  # noqa: BLE001
+                result = await thunk()
+            except (
+                ApiError,
+                InvalidSensorDataError,
+                NotRespondingError,
+                RetryError,
+                TimeoutError,
+            ):
                 _LOGGER.debug(
                     "Device %s: endpoint %s not available", self.unique_id, key
                 )
                 self.extra_data[key] = None
+                continue
+            self.extra_data[key] = result if result else None
 
-    async def async_put_extra_endpoint(self, key: str, value) -> None:
-        """PUT a value to an extra endpoint by key."""
-        from homecom_alt.const import BOSCHCOM_DOMAIN, BOSCHCOM_ENDPOINT_GATEWAYS
 
-        path = self.EXTRA_ENDPOINTS[key]
-        await self.bhc.get_token()
-        await self.bhc._async_http_request(
-            "put",
-            BOSCHCOM_DOMAIN + BOSCHCOM_ENDPOINT_GATEWAYS + self.unique_id + path,
-            {"value": value},
-            1,
-        )
+class BoschComModuleCoordinatorK40(
+    _K40ExtraEndpointsMixin, BoschComModuleCoordinatorBase[BHCDeviceK40]
+):
+    """A coordinator to manage the fetching of BoschCom data."""
 
     def _build_device_data(self, data: BHCDeviceK40) -> BHCDeviceK40:
         """Build K40 device data."""
@@ -231,7 +241,9 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
         )
 
 
-class BoschComModuleCoordinatorIcom(BoschComModuleCoordinatorBase[BHCDeviceIcom]):
+class BoschComModuleCoordinatorIcom(
+    _K40ExtraEndpointsMixin, BoschComModuleCoordinatorBase[BHCDeviceIcom]
+):
     """A coordinator for icom heat pumps (subset of K40 endpoint surface)."""
 
     def _build_device_data(self, data: BHCDeviceIcom) -> BHCDeviceIcom:

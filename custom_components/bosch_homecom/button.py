@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_WB_LABEL, DEFAULT_WB_LABEL
 from .coordinator import (
     BoschComModuleCoordinatorCommodule,
+    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
 
@@ -43,9 +44,12 @@ async def async_setup_entry(
                         coordinator=coordinator, cp_id=cp_id
                     )
                 )
-    # Extra K40 button entities
+    # Extra K40/ICOM button entities
     for coordinator in coordinators:
-        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+        if isinstance(
+            coordinator,
+            (BoschComModuleCoordinatorK40, BoschComModuleCoordinatorIcom),
+        ):
             # DHW charge button — available if device has dhw_circuits
             if coordinator.data.dhw_circuits:
                 entities.append(BoschComK40DhwChargeButton(coordinator))
