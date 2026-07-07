@@ -357,5 +357,37 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.ONLY,
     )
 
+    async def get_recordings_service(call: ServiceCall) -> ServiceResponse:
+        """Service to fetch /recordings/* endpoints via bulk POST.
+
+        The single-endpoint universal GET returns empty for /recordings/*
+        (that tier is only exposed via POST /pointt-api/api/v1/bulk).
+        Reuses async_request_bulk from homecom_alt.
+        """
+        device_id = str(call.data.get("device_id"))
+        coordinator = _find_coordinator_by_device_id(hass, device_id)
+        if coordinator is None:
+            _LOGGER.error("Coordinator not found for device %s", device_id)
+            return {}
+        paths = call.data.get("paths")
+        if paths is None:
+            _LOGGER.error("Missing paths argument")
+            return {}
+        if isinstance(paths, str):
+            paths = [paths]
+        if not isinstance(paths, list) or not paths:
+            _LOGGER.error("paths must be a non-empty list of strings")
+            return {}
+        result = await coordinator.bhc.async_request_bulk(device_id, paths)
+        return result or {}
+
+    # Register our service with Home Assistant.
+    hass.services.async_register(
+        DOMAIN,
+        "get_recordings_service",
+        get_recordings_service,
+        supports_response=SupportsResponse.ONLY,
+    )
+
     # Return boolean to indicate that initialization was successfully.
     return True
