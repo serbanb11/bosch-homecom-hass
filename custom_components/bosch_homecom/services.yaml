@@ -74,3 +74,29 @@ get_custom_path_service:
       required: true
       default: "/resource/notifications"
       example: "/resource/notifications"
+
+get_recordings_service:
+  name: Fetch Recording Endpoints
+  description: >-
+    Fetch /recordings/* endpoints via bulk POST (the single-endpoint universal
+    GET returns empty for /recordings/*, that tier is only exposed via POST
+    /pointt-api/api/v1/bulk). Use this to fetch daily energy/recording data
+    like emon totals and ventilation heat recovery.
+  fields:
+    device_id:
+      name: device_id
+      description: The device id to fetch data from
+      required: true
+      default: "100000000"
+      example: "100000000"
+    paths:
+      name: paths
+      description: >-
+        List of /recordings paths. Each path may include a ?interval=YYYY-MM-DD
+        query string. Max 30 per call (auto-chunked).
+      required: true
+      example: |
+        - /recordings/heatSources/emon/ventilation/heatRecovered?interval=2026-07-06
+        - /recordings/heatSources/emon/total/outputProduced?interval=2026-07-06
+      selector:
+        object:
