@@ -296,9 +296,7 @@ def _make_recording_payload(hourly_kwh: list[float]) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_k40_coordinator_fetches_recordings(
-    hass, entry, device, firmware
-):
+async def test_k40_coordinator_fetches_recordings(hass, entry, device, firmware):
     """K40 coordinator sums hourly buckets from /recordings/emon/* endpoints."""
     entry.add_to_hass(hass)
 
@@ -348,9 +346,7 @@ async def test_k40_coordinator_fetches_recordings(
 
 
 @pytest.mark.asyncio
-async def test_k40_coordinator_recordings_rate_limited(
-    hass, entry, device, firmware
-):
+async def test_k40_coordinator_recordings_rate_limited(hass, entry, device, firmware):
     """Second update within the interval must not re-fetch energy recordings."""
     entry.add_to_hass(hass)
     bhc = MagicMock()
