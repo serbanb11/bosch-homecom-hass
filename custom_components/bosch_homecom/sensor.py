@@ -448,6 +448,40 @@ async def async_setup_entry(
             if hs.get("starts"):
                 entities.append(BoschComK40StartCountsSensor(coordinator))
 
+            # Energy recordings sensors — the 5 top-level totals + heatRecovered
+            # are enabled by default (main use case: Energy Dashboard),
+            # the 8 per-mode breakdowns are disabled by default (diagnostics).
+            energy_defaults_on = {
+                "energy_compressor_total",
+                "energy_eheater_total",
+                "energy_ventilation_total",
+                "heat_produced_total",
+                "heat_recovered_ventilation",
+            }
+            for key in (
+                "energy_compressor_total",
+                "energy_eheater_total",
+                "energy_ventilation_total",
+                "heat_produced_total",
+                "heat_recovered_ventilation",
+                "energy_compressor_ch",
+                "energy_eheater_ch",
+                "heat_produced_ch",
+                "energy_compressor_dhw",
+                "energy_eheater_dhw",
+                "heat_produced_dhw",
+                "energy_compressor_cooling",
+                "heat_produced_cooling",
+            ):
+                entities.append(
+                    BoschComK40EnergyRecordingSensor(
+                        coordinator,
+                        key,
+                        key,
+                        enabled_default=key in energy_defaults_on,
+                    )
+                )
+
     if entities:
         async_add_entities(entities)
 
@@ -3290,4 +3324,49 @@ class BoschComK40StartCountsSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data."""
+        self.async_write_ha_state()
+
+
+class BoschComK40EnergyRecordingSensor(CoordinatorEntity, SensorEntity):
+    """Cumulative-today energy sensor from /recordings/heatSources/emon/*.
+
+    State is the sum of hourly buckets returned by the recording endpoint for
+    today. Bosch adds a new hourly bucket every ~1h with a 1-2h lag; the value
+    is monotonically increasing within the day and resets to 0 at midnight,
+    matching HA's ``total_increasing`` reset semantic. On fetch failure the
+    previous value is kept (see coordinator._fetch_energy_recordings), so no
+    spurious reset is reported to HA statistics.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "kWh"
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        key: str,
+        translation_key: str,
+        enabled_default: bool,
+    ) -> None:
+        """Initialize energy recording sensor."""
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_translation_key = translation_key
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{key}"
+        self._attr_suggested_object_id = key
+        self._attr_entity_registry_enabled_default = enabled_default
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current cumulative-today kWh."""
+        return self.coordinator.energy_recordings.get(self._key)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        self._attr_native_value = self.coordinator.energy_recordings.get(self._key)
         self.async_write_ha_state()

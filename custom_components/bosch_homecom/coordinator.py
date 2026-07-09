@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from datetime import timedelta
 import logging
 from typing import TypeVar
 
@@ -11,6 +12,7 @@ from homeassistant.const import CONF_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 from homecom_alt import (
     ApiError,
     AuthFailedError,
@@ -144,6 +146,30 @@ class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
         )
 
 
+ENERGY_RECORDINGS_POLL_INTERVAL = timedelta(hours=1)
+
+# Maps (path_suffix under /recordings/heatSources/emon/) -> local key stored
+# in coordinator.energy_recordings. Discovered via refEnum browsability at
+# GET /resource/recordings/heatSources/emon on a K40 (Bosch Compress 5800iAW).
+# Endpoints the device does not support silently drop out of the bulk response
+# (existing _log_endpoint_status handling) and the previous good value is kept.
+ENERGY_RECORDING_PATHS: dict[str, str] = {
+    "total/compressor": "energy_compressor_total",
+    "total/eheater": "energy_eheater_total",
+    "total/ventilation": "energy_ventilation_total",
+    "total/outputProduced": "heat_produced_total",
+    "ventilation/heatRecovered": "heat_recovered_ventilation",
+    "ch/compressor": "energy_compressor_ch",
+    "ch/eheater": "energy_eheater_ch",
+    "ch/outputProduced": "heat_produced_ch",
+    "dhw/compressor": "energy_compressor_dhw",
+    "dhw/eheater": "energy_eheater_dhw",
+    "dhw/outputProduced": "heat_produced_dhw",
+    "cooling/compressor": "energy_compressor_cooling",
+    "cooling/outputProduced": "heat_produced_cooling",
+}
+
+
 class _K40ExtraEndpointsMixin:
     """Fetch/cache K40-family endpoints not in the homecom_alt bulk update.
 
@@ -152,6 +178,13 @@ class _K40ExtraEndpointsMixin:
     so they are fetched separately and cached in ``extra_data``. Shared by the
     K40 and ICOM coordinators. Endpoints the device does not support resolve to
     ``None`` and simply produce no entity.
+
+    Also fetches the ``/recordings/heatSources/emon/*`` energy time-series at a
+    slower cadence (see ENERGY_RECORDINGS_POLL_INTERVAL) and caches per-path
+    cumulative-today values in ``energy_recordings``. On network or per-endpoint
+    failures the previous good value is kept — the sensors thus stay flat at
+    their last good number rather than resetting to zero, which would trip HA's
+    ``total_increasing`` reset detection.
     """
 
     EXTRA_KEYS = ("additional_heater", "silent_mode", "dhw_charge_duration")
@@ -160,11 +193,14 @@ class _K40ExtraEndpointsMixin:
         """Initialize coordinator with the extra-endpoint cache."""
         super().__init__(*args, **kwargs)
         self.extra_data: dict[str, dict | None] = {}
+        self.energy_recordings: dict[str, float] = {}
+        self._last_energy_recordings_fetch = None
 
     async def _async_update_data(self):
         """Update via library, then fetch the standalone endpoints."""
         data = await super()._async_update_data()
         await self._fetch_extra_endpoints()
+        await self._fetch_energy_recordings()
         return data
 
     async def _fetch_extra_endpoints(self) -> None:
@@ -194,6 +230,63 @@ class _K40ExtraEndpointsMixin:
                 self.extra_data[key] = None
                 continue
             self.extra_data[key] = result if result else None
+
+    async def _fetch_energy_recordings(self) -> None:
+        """Fetch /recordings/heatSources/emon/* time-series (hourly, rate-limited).
+
+        Runs at most once per ENERGY_RECORDINGS_POLL_INTERVAL. The bulk
+        endpoint accepts up to 30 paths per call — 13 fits comfortably.
+        """
+        now = dt_util.utcnow()
+        if (
+            self._last_energy_recordings_fetch is not None
+            and now - self._last_energy_recordings_fetch
+            < ENERGY_RECORDINGS_POLL_INTERVAL
+        ):
+            return
+
+        today = dt_util.now().strftime("%Y-%m-%d")
+        paths = [
+            f"/recordings/heatSources/emon/{suffix}?interval={today}"
+            for suffix in ENERGY_RECORDING_PATHS
+        ]
+        try:
+            result = await self.bhc.async_request_bulk(self.unique_id, paths)
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            RetryError,
+            TimeoutError,
+        ):
+            _LOGGER.debug(
+                "Device %s: energy recordings fetch failed, keeping last values",
+                self.unique_id,
+            )
+            return
+
+        if not result:
+            return
+
+        for suffix, key in ENERGY_RECORDING_PATHS.items():
+            path = f"/recordings/heatSources/emon/{suffix}?interval={today}"
+            payload = result.get(path)
+            if not isinstance(payload, dict):
+                # Endpoint not supported on this device (404/403) or unexpected shape.
+                # Keep previous good value if any.
+                continue
+            recording = payload.get("recording") or []
+            if not isinstance(recording, list):
+                continue
+            total = 0.0
+            for item in recording:
+                if isinstance(item, dict):
+                    y = item.get("y")
+                    if isinstance(y, (int, float)):
+                        total += y
+            self.energy_recordings[key] = round(total, 3)
+
+        self._last_energy_recordings_fetch = now
 
 
 class BoschComModuleCoordinatorK40(
