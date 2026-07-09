@@ -426,6 +426,9 @@
       },
       "heat_produced_cooling": {
         "name": "Wärme erzeugt Kühlung"
+      },
+      "supply_temp_avg_today": {
+        "name": "Vorlauftemperatur (Tages-Ø)"
       }
     },
     "binary_sensor": {

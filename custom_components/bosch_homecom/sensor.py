@@ -448,15 +448,32 @@ async def async_setup_entry(
             if hs.get("starts"):
                 entities.append(BoschComK40StartCountsSensor(coordinator))
 
-            # Energy recordings sensors — the 5 top-level totals + heatRecovered
-            # are enabled by default (main use case: Energy Dashboard),
-            # the 8 per-mode breakdowns are disabled by default (diagnostics).
-            energy_defaults_on = {
+            # Recording sensors from /recordings/heatSources/*.
+            # Enabled-by-default policy:
+            #   - Top-level totals (5) + supply temperature avg (1) = main use.
+            #   - Per-mode breakdowns (8) = diagnostics, users enable per entity.
+            defaults_on = {
                 "energy_compressor_total",
                 "energy_eheater_total",
                 "energy_ventilation_total",
                 "heat_produced_total",
                 "heat_recovered_ventilation",
+                "supply_temp_avg_today",
+            }
+            energy_keys = {
+                "energy_compressor_total",
+                "energy_eheater_total",
+                "energy_ventilation_total",
+                "heat_produced_total",
+                "heat_recovered_ventilation",
+                "energy_compressor_ch",
+                "energy_eheater_ch",
+                "heat_produced_ch",
+                "energy_compressor_dhw",
+                "energy_eheater_dhw",
+                "heat_produced_dhw",
+                "energy_compressor_cooling",
+                "heat_produced_cooling",
             }
             for key in (
                 "energy_compressor_total",
@@ -472,13 +489,25 @@ async def async_setup_entry(
                 "heat_produced_dhw",
                 "energy_compressor_cooling",
                 "heat_produced_cooling",
+                "supply_temp_avg_today",
             ):
+                if key in energy_keys:
+                    dev_class = SensorDeviceClass.ENERGY
+                    state_class = SensorStateClass.TOTAL_INCREASING
+                    unit = "kWh"
+                else:  # supply_temp_avg_today
+                    dev_class = SensorDeviceClass.TEMPERATURE
+                    state_class = SensorStateClass.MEASUREMENT
+                    unit = "°C"
                 entities.append(
-                    BoschComK40EnergyRecordingSensor(
+                    BoschComK40RecordingSensor(
                         coordinator,
                         key,
                         key,
-                        enabled_default=key in energy_defaults_on,
+                        device_class=dev_class,
+                        state_class=state_class,
+                        native_unit=unit,
+                        enabled_default=key in defaults_on,
                     )
                 )
 
@@ -3327,46 +3356,54 @@ class BoschComK40StartCountsSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
-class BoschComK40EnergyRecordingSensor(CoordinatorEntity, SensorEntity):
-    """Cumulative-today energy sensor from /recordings/heatSources/emon/*.
+class BoschComK40RecordingSensor(CoordinatorEntity, SensorEntity):
+    """Today's-so-far value derived from a /recordings/heatSources/* time-series.
 
-    State is the sum of hourly buckets returned by the recording endpoint for
-    today. Bosch adds a new hourly bucket every ~1h with a 1-2h lag; the value
-    is monotonically increasing within the day and resets to 0 at midnight,
-    matching HA's ``total_increasing`` reset semantic. On fetch failure the
-    previous value is kept (see coordinator._fetch_energy_recordings), so no
-    spurious reset is reported to HA statistics.
+    For energy endpoints (``sum`` aggregation in RECORDING_PATHS), the state is
+    the cumulative kWh for today so far. Bosch adds a new hourly bucket every
+    ~1h with a 1-2h lag; the value is monotonically increasing within the day
+    and resets to 0 at midnight, matching HA's ``total_increasing`` reset
+    semantic. On fetch failure the previous value is kept
+    (see coordinator._fetch_recordings), so no spurious reset is reported to
+    HA statistics.
+
+    For sensor endpoints (``avg`` aggregation), the state is today's running
+    average across all hourly buckets so far — with ``state_class: measurement``
+    (not total_increasing) since it is not cumulative.
     """
 
     _attr_has_entity_name = True
     _attr_should_poll = False
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = "kWh"
 
     def __init__(
         self,
         coordinator: BoschComModuleCoordinatorK40,
         key: str,
         translation_key: str,
+        device_class: SensorDeviceClass,
+        state_class: SensorStateClass,
+        native_unit: str,
         enabled_default: bool,
     ) -> None:
-        """Initialize energy recording sensor."""
+        """Initialize recording sensor."""
         super().__init__(coordinator)
         self._key = key
         self._attr_translation_key = translation_key
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{key}"
         self._attr_suggested_object_id = key
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        self._attr_native_unit_of_measurement = native_unit
         self._attr_entity_registry_enabled_default = enabled_default
 
     @property
     def native_value(self) -> float | None:
-        """Return current cumulative-today kWh."""
-        return self.coordinator.energy_recordings.get(self._key)
+        """Return today's-so-far value from the coordinator cache."""
+        return self.coordinator.recordings.get(self._key)
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data."""
-        self._attr_native_value = self.coordinator.energy_recordings.get(self._key)
+        self._attr_native_value = self.coordinator.recordings.get(self._key)
         self.async_write_ha_state()

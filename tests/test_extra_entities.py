@@ -218,6 +218,7 @@ async def test_k40_coordinator_fetches_extra_endpoints(hass, entry, device, firm
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_request_bulk = AsyncMock(return_value={})
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
@@ -245,6 +246,7 @@ async def test_k40_coordinator_extra_endpoint_failure_graceful(
     bhc.async_get_additional_heater_mode = AsyncMock(side_effect=ApiError("boom"))
     bhc.async_get_silent_mode = AsyncMock(side_effect=ApiError("boom"))
     bhc.async_get_dhw_charge_duration = AsyncMock(side_effect=ApiError("boom"))
+    bhc.async_request_bulk = AsyncMock(side_effect=ApiError("boom"))
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
@@ -277,6 +279,126 @@ async def test_icom_coordinator_shares_extra_endpoints(hass, entry, firmware):
 
     for key in BoschComModuleCoordinatorIcom.EXTRA_KEYS:
         assert coordinator.extra_data.get(key) is not None
+
+
+# ===================================================================
+# Energy recordings tests (_fetch_recordings)
+# ===================================================================
+
+
+def _make_recording_payload(hourly_kwh: list[float]) -> dict:
+    """Build a Bosch yRecording payload with the given hourly buckets."""
+    return {
+        "type": "yRecording",
+        "unitOfMeasure": "kWh",
+        "recording": [{"y": v, "c": 1} for v in hourly_kwh],
+    }
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_fetches_recordings(
+    hass, entry, device, firmware
+):
+    """K40 coordinator sums hourly buckets from /recordings/emon/* endpoints."""
+    entry.add_to_hass(hass)
+
+    # Distinguishable payloads: sum for kWh, avg (y/c) for supply temperature
+    def _bulk_response(dev_id, paths):
+        assert dev_id == "102128202"
+        assert len(paths) == 14  # 13 emon + 1 actualSupplyTemperature
+        result = {}
+        for p in paths:
+            if "emon/total/ventilation" in p:
+                result[p] = _make_recording_payload([0.04, 0.04, 0.04, 0.05])  # 0.17
+            elif "emon/total/compressor" in p:
+                result[p] = _make_recording_payload([1.5, 2.0, 0.5])  # 4.0
+            elif "actualSupplyTemperature" in p:
+                # Avg aggregation: y/c per bucket, then overall sum(y)/sum(c)
+                # 2700/100 = 27.0, 4500/150 = 30.0. Overall 7200/250 = 28.80
+                result[p] = {
+                    "type": "yRecording",
+                    "unitOfMeasure": "C",
+                    "recording": [
+                        {"y": 2700.0, "c": 100},
+                        {"y": 4500.0, "c": 150},
+                    ],
+                }
+        return result
+
+    bhc = MagicMock()
+    bhc.get_token = AsyncMock()
+    bhc.async_update = AsyncMock(return_value=_make_k40_data())
+    bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
+    bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
+    bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_request_bulk = AsyncMock(side_effect=_bulk_response)
+
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    await coordinator._async_update_data()
+
+    # Successful fetches produced expected values
+    assert coordinator.recordings["energy_ventilation_total"] == 0.17
+    assert coordinator.recordings["energy_compressor_total"] == 4.0
+    # Avg-aggregation: sum(y)=7200 / sum(c)=250 = 28.80
+    assert coordinator.recordings["supply_temp_avg_today"] == 28.80
+    # Endpoints not in the response keep no value at all (dict absence)
+    assert "heat_produced_total" not in coordinator.recordings
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_recordings_rate_limited(
+    hass, entry, device, firmware
+):
+    """Second update within the interval must not re-fetch energy recordings."""
+    entry.add_to_hass(hass)
+    bhc = MagicMock()
+    bhc.get_token = AsyncMock()
+    bhc.async_update = AsyncMock(return_value=_make_k40_data())
+    bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
+    bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
+    bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_request_bulk = AsyncMock(return_value={})
+
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+
+    # First call fetches; subsequent calls within the 1h interval don't.
+    assert bhc.async_request_bulk.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_recordings_failure_keeps_last_good(
+    hass, entry, device, firmware
+):
+    """On API failure, previous good values are retained (no reset to zero/None)."""
+    from homecom_alt import ApiError
+
+    entry.add_to_hass(hass)
+    bhc = MagicMock()
+    bhc.get_token = AsyncMock()
+    bhc.async_update = AsyncMock(return_value=_make_k40_data())
+    bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
+    bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
+    bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_request_bulk = AsyncMock(side_effect=ApiError("network dead"))
+
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    # Seed a known-good value that should survive the failure
+    coordinator.recordings["energy_compressor_total"] = 42.0
+
+    data = await coordinator._async_update_data()
+
+    assert data is not None
+    # Value preserved through the failed fetch — no reset
+    assert coordinator.recordings["energy_compressor_total"] == 42.0
 
 
 # ===================================================================

@@ -424,6 +424,9 @@
       },
       "heat_produced_cooling": {
         "name": "Heat produced cooling"
+      },
+      "supply_temp_avg_today": {
+        "name": "Supply temperature (today average)"
       }
     },
     "binary_sensor": {
