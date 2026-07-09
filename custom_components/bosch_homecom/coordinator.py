@@ -277,11 +277,17 @@ class _K40ExtraEndpointsMixin:
             RetryError,
             TimeoutError,
         ):
+            # Transport failure — don't set the timestamp so the next regular
+            # coordinator tick retries immediately.
             _LOGGER.debug(
                 "Device %s: recordings fetch failed, keeping last values",
                 self.unique_id,
             )
             return
+
+        # HTTP call succeeded (even if empty) — mark the tick to enforce the
+        # rate-limit for the next hour regardless of payload contents.
+        self._last_recordings_fetch = now
 
         if not result:
             return
@@ -312,8 +318,6 @@ class _K40ExtraEndpointsMixin:
                     self.recordings[meta["key"]] = round(y_sum / c_sum, 2)
             else:  # "sum"
                 self.recordings[meta["key"]] = round(y_sum, 3)
-
-        self._last_recordings_fetch = now
 
 
 class BoschComModuleCoordinatorK40(
