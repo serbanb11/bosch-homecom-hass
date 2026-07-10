@@ -657,7 +657,7 @@ class BoschComK40DhwChargeDurationNumber(CoordinatorEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set the charge duration."""
         await self.coordinator.bhc.async_set_dhw_charge_duration(
-            self.coordinator.data.device["deviceId"], "dhw1", str(int(value))
+            self.coordinator.data.device["deviceId"], "dhw1", int(value)
         )
         await self.coordinator.async_request_refresh()
 
