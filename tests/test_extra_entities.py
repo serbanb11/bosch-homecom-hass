@@ -397,6 +397,65 @@ async def test_k40_coordinator_recordings_failure_keeps_last_good(
     assert coordinator.recordings["energy_compressor_total"] == 42.0
 
 
+@pytest.mark.asyncio
+async def test_k40_coordinator_recordings_skips_future_slots(
+    hass, entry, device, firmware
+):
+    """Placeholders with c<=0 (future / unpopulated hours) must not be counted.
+
+    Regression for the bug reported by @ombuyse in PR #155: the Buderus
+    Logatherm WLW166i returns ``{"c": 0, "y": 1.0}`` for every hour of the
+    current day that is not yet populated. Both ``sum`` and ``avg``
+    aggregations must skip those entries.
+    """
+    entry.add_to_hass(hass)
+
+    def _bulk_response(dev_id, paths):
+        result = {}
+        for p in paths:
+            if "emon/total/compressor" in p:
+                # 3 real hours totalling 9 kWh, followed by 11 c=0 y=1 slots.
+                # Bug: 9 + 11 = 20. Fixed: 9.
+                real = [{"y": 3.0, "c": 1}, {"y": 2.0, "c": 1}, {"y": 4.0, "c": 1}]
+                future = [{"y": 1.0, "c": 0}] * 11
+                result[p] = {
+                    "type": "yRecording",
+                    "unitOfMeasure": "kWh",
+                    "recording": real + future,
+                }
+            elif "actualSupplyTemperature" in p:
+                # 2 real buckets averaging to 28.0, one c=0 y=999 placeholder.
+                # Bug: (2700+4500+999)/(100+150) = 32.796. Fixed: 7200/250 = 28.80.
+                result[p] = {
+                    "type": "yRecording",
+                    "unitOfMeasure": "C",
+                    "recording": [
+                        {"y": 2700.0, "c": 100},
+                        {"y": 4500.0, "c": 150},
+                        {"y": 999.0, "c": 0},
+                    ],
+                }
+        return result
+
+    bhc = MagicMock()
+    bhc.get_token = AsyncMock()
+    bhc.async_update = AsyncMock(return_value=_make_k40_data())
+    bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
+    bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
+    bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_request_bulk = AsyncMock(side_effect=_bulk_response)
+
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    await coordinator._async_update_data()
+
+    # Sum aggregation: only the 3 real hours count.
+    assert coordinator.recordings["energy_compressor_total"] == 9.0
+    # Avg aggregation: only the 2 real buckets count, placeholder ignored.
+    assert coordinator.recordings["supply_temp_avg_today"] == 28.80
+
+
 # ===================================================================
 # Sensor entity tests
 # ===================================================================

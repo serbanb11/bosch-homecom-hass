@@ -307,12 +307,19 @@ class _K40ExtraEndpointsMixin:
             for item in recording:
                 if not isinstance(item, dict):
                     continue
-                y = item.get("y")
                 c = item.get("c")
+                # Skip future / unpopulated hour slots. Some devices (e.g.
+                # Buderus Logatherm WLW166i) return {"c": 0, "y": 1.0} for
+                # every not-yet-populated hour of the current day; without
+                # this guard both ``sum`` and ``avg`` aggregations would
+                # count those placeholders as real samples. Reported by
+                # @ombuyse in PR #155.
+                if not isinstance(c, (int, float)) or c <= 0:
+                    continue
+                y = item.get("y")
                 if isinstance(y, (int, float)):
                     y_sum += y
-                if isinstance(c, (int, float)):
-                    c_sum += int(c)
+                c_sum += int(c)
             if meta["agg"] == "avg":
                 if c_sum > 0:
                     self.recordings[meta["key"]] = round(y_sum / c_sum, 2)
