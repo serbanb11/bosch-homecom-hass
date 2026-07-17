@@ -387,6 +387,48 @@
       },
       "water_total_consumption": {
         "name": "Wasserverbrauch"
+      },
+      "energy_compressor_total": {
+        "name": "Strom Kompressor gesamt"
+      },
+      "energy_eheater_total": {
+        "name": "Strom Heizstab gesamt"
+      },
+      "energy_ventilation_total": {
+        "name": "Strom Lüftung gesamt"
+      },
+      "heat_produced_total": {
+        "name": "Wärme erzeugt gesamt"
+      },
+      "heat_recovered_ventilation": {
+        "name": "Wärmerückgewinnung Lüftung"
+      },
+      "energy_compressor_ch": {
+        "name": "Strom Kompressor Heizung"
+      },
+      "energy_eheater_ch": {
+        "name": "Strom Heizstab Heizung"
+      },
+      "heat_produced_ch": {
+        "name": "Wärme erzeugt Heizung"
+      },
+      "energy_compressor_dhw": {
+        "name": "Strom Kompressor Warmwasser"
+      },
+      "energy_eheater_dhw": {
+        "name": "Strom Heizstab Warmwasser"
+      },
+      "heat_produced_dhw": {
+        "name": "Wärme erzeugt Warmwasser"
+      },
+      "energy_compressor_cooling": {
+        "name": "Strom Kompressor Kühlung"
+      },
+      "heat_produced_cooling": {
+        "name": "Wärme erzeugt Kühlung"
+      },
+      "supply_temp_avg_today": {
+        "name": "Vorlauftemperatur (Tages-Ø)"
       }
     },
     "binary_sensor": {
