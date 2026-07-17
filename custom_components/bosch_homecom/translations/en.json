@@ -167,6 +167,14 @@
           "cool": "Cool"
         }
       },
+      "hc_cooling_operation_mode": {
+        "name": "{circuit} cooling operation mode",
+        "state": {
+          "off": "Off",
+          "manual": "Manual",
+          "auto": "Auto"
+        }
+      },
       "holiday_mode": {
         "name": "Holiday mode",
         "state": {

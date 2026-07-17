@@ -6,6 +6,7 @@ from homecom_alt import BHCDeviceCommodule, BHCDeviceRac
 
 from custom_components.bosch_homecom.select import (
     BoschComCommoduleChargingStrategySelect,
+    BoschComSelectHcCoolingOperationMode,
     async_setup_entry,
 )
 
@@ -130,3 +131,70 @@ async def test_current_option_none_when_circuit_missing():
     )
 
     assert select.current_option is None
+
+
+def _make_k40_coordinator(heating_circuits):
+    """Create a mock K40 coordinator carrying heating circuits."""
+    coordinator = MagicMock()
+    coordinator.unique_id = "k40-123"
+    coordinator.device_info = {"identifiers": {("bosch_homecom", "k40-123")}}
+    coordinator.bhc = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.data.device = {"deviceId": "k40-123", "deviceType": "k40"}
+    coordinator.data.heating_circuits = heating_circuits
+    return coordinator
+
+
+async def test_setup_creates_cooling_operation_mode_select():
+    """A cooling operation mode select is created when allowedValues is present."""
+    circuit = {
+        "id": "/heatingCircuits/hc1",
+        "coolingOperationMode": {
+            "value": "off",
+            "allowedValues": ["off", "manual", "auto"],
+        },
+    }
+    coordinator = _make_k40_coordinator([circuit])
+    # Only heating circuits are relevant here — keep the other loops empty.
+    coordinator.data.dhw_circuits = []
+    coordinator.data.ventilation = []
+
+    config_entry = MagicMock()
+    config_entry.runtime_data = [coordinator]
+
+    entities = []
+    await async_setup_entry(MagicMock(), config_entry, entities.extend)
+
+    cooling = [
+        e for e in entities if isinstance(e, BoschComSelectHcCoolingOperationMode)
+    ]
+    assert len(cooling) == 1
+    select = cooling[0]
+    assert select._attr_unique_id == "k40-123-hc1-cooling"
+    assert select._attr_translation_key == "hc_cooling_operation_mode"
+    assert select._attr_options == ["off", "manual", "auto"]
+    assert select.current_option == "off"
+
+
+async def test_cooling_operation_mode_select_calls_library_and_refreshes():
+    """Selecting a cooling mode PUTs the value and requests a refresh."""
+    circuit = {
+        "id": "/heatingCircuits/hc1",
+        "coolingOperationMode": {
+            "value": "off",
+            "allowedValues": ["off", "manual", "auto"],
+        },
+    }
+    coordinator = _make_k40_coordinator([circuit])
+    select = BoschComSelectHcCoolingOperationMode(
+        coordinator=coordinator,
+        field="hc1",
+        allowedValues=["off", "manual", "auto"],
+    )
+
+    await select.async_select_option("auto")
+
+    coordinator.bhc.async_put_hc_cooling_operation_mode.assert_awaited_once_with(
+        "k40-123", "hc1", "auto"
+    )
+    coordinator.async_request_refresh.assert_awaited_once()

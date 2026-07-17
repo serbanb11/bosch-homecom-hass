@@ -167,6 +167,14 @@
           "cool": "Koelen"
         }
       },
+      "hc_cooling_operation_mode": {
+        "name": "{circuit} koelbedrijfsmodus",
+        "state": {
+          "off": "Uit",
+          "manual": "Handmatig",
+          "auto": "Automatisch"
+        }
+      },
       "holiday_mode": {
         "name": "Vakantiemodus",
         "state": {
