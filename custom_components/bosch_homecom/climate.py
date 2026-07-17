@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from typing import Any, Literal
 
 from homeassistant import config_entries
@@ -28,6 +29,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import (
+    BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
@@ -58,6 +60,8 @@ async def async_setup_entry(
 
         if device_type == "rac":
             entities.append(BoschComRacClimate(coordinator=coordinator, field="clima"))
+        elif device_type == "bacon_rac":
+            entities.append(BoschComBaconRacClimate(coordinator=coordinator))
         elif device_type in ("k40", "k30", "icom"):
             for ref in coordinator.data.heating_circuits:
                 hc_id = ref["id"].split("/")[-1]
@@ -749,3 +753,136 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         if user_mode == "manual":
             return entry.get("manualTemperatureHeating") or {}
         return entry.get("temperatureHeatingSetpoint") or {}
+
+
+# --- Bacon (Matter-commissioned) RAC over MQTT device-shadow -----------------
+
+BACON_OP_MODE_TO_HVAC: dict[str, HVACMode] = {
+    "cool": HVACMode.COOL,
+    "heat": HVACMode.HEAT,
+    "auto": HVACMode.AUTO,
+    "dry": HVACMode.DRY,
+    "fan": HVACMode.FAN_ONLY,
+}
+BACON_HVAC_TO_OP_MODE: dict[HVACMode, str] = {
+    v: k for k, v in BACON_OP_MODE_TO_HVAC.items()
+}
+BACON_FAN_MODES: list[str] = ["auto", "quiet", "low", "medium", "high", "turbo"]
+
+
+def _clean_bacon_title(title: str | None) -> str | None:
+    """Strip the ``%|$?*...`` suffix Bosch appends to the shadow customTitle."""
+    if not title:
+        return None
+    return title.split("%|")[0].strip() or None
+
+
+class BoschComBaconRacClimate(
+    CoordinatorEntity[BoschComModuleCoordinatorBaconRac], ClimateEntity
+):
+    """Climate entity for a Matter/Bacon-commissioned RAC controlled over MQTT."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_target_temperature_step = 1.0
+    _attr_min_temp = 16
+    _attr_max_temp = 30
+    _attr_fan_modes = BACON_FAN_MODES
+    _attr_swing_modes = [SWING_OFF, SWING_ON]
+    _attr_hvac_modes = [
+        HVACMode.OFF,
+        HVACMode.COOL,
+        HVACMode.HEAT,
+        HVACMode.AUTO,
+        HVACMode.DRY,
+        HVACMode.FAN_ONLY,
+    ]
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.SWING_MODE
+        | ClimateEntityFeature.TURN_ON
+        | ClimateEntityFeature.TURN_OFF
+    )
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorBaconRac) -> None:
+        """Initialize the entity."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.unique_id}-climate"
+        title = _clean_bacon_title(self._reported.get("customTitle"))
+        if title:
+            coordinator.device_info["name"] = title
+        self._attr_device_info = coordinator.device_info
+
+    @property
+    def _reported(self) -> dict:
+        data = self.coordinator.data
+        return (data.reported if data else {}) or {}
+
+    @property
+    def hvac_mode(self) -> HVACMode:
+        """Return current operation."""
+        reported = self._reported
+        if not reported.get("powerEnabled"):
+            return HVACMode.OFF
+        return BACON_OP_MODE_TO_HVAC.get(reported.get("opMode"), HVACMode.AUTO)
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Return the target temperature."""
+        return self._reported.get("tempSetpoint")
+
+    @property
+    def fan_mode(self) -> str | None:
+        """Return the fan setting."""
+        return self._reported.get("fanSpeed")
+
+    @property
+    def swing_mode(self) -> str:
+        """Return the swing setting."""
+        reported = self._reported
+        if reported.get("hSwingEnabled") or reported.get("vSwingEnabled"):
+            return SWING_ON
+        return SWING_OFF
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set new target temperature."""
+        temperature = kwargs.get(ATTR_TEMPERATURE)
+        if temperature is None:
+            return
+        await self.coordinator.bhc.async_set_temperature(int(temperature))
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set new operation mode."""
+        if hvac_mode == HVACMode.OFF:
+            await self.coordinator.bhc.async_set_power(False)
+        else:
+            await self.coordinator.bhc.async_set_power(
+                True, BACON_HVAC_TO_OP_MODE.get(hvac_mode)
+            )
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self) -> None:
+        """Turn the entity on."""
+        await self.coordinator.bhc.async_set_power(True)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self) -> None:
+        """Turn the entity off."""
+        await self.coordinator.bhc.async_set_power(False)
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        """Set new fan mode."""
+        await self.coordinator.bhc.async_set_fan(fan_mode)
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_swing_mode(self, swing_mode: str) -> None:
+        """Set new swing mode (drives both horizontal and vertical louvers)."""
+        enabled = swing_mode == SWING_ON
+        await self.coordinator.bhc.async_set_swing(
+            horizontal=enabled, vertical=enabled
+        )
+        await self.coordinator.async_request_refresh()

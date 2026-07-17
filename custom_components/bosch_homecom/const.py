@@ -25,6 +25,7 @@ MODEL = {
     "icom": "Bosch Heat Pump",
     "rrc2": "Bosch Thermostat",
     "commodule": "Bosch EV Charger",
+    "bacon_rac": "Residential Air Conditioning (Matter)",
 }
 
 ATTR_NOTIFICATIONS = "notifications"
@@ -48,6 +49,8 @@ SINGLEKEY_LOGIN_URL_BUDERUS = "https://singlekey-id.com/auth/connect/authorize?s
 CONF_DEVICES: Final = "devices"
 CONF_REFRESH: Final = "refresh"
 CONF_WB_LABEL: Final = "wb_label"
+CONF_BACON_CLIENT_ID: Final = "bacon_client_id"
+CONF_BACON_REGION: Final = "bacon_region"
 DEFAULT_WB_LABEL: Final = "Wallbox"
 
 BOSCH_SENSOR_DESCRIPTORS = {
