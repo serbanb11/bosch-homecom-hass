@@ -394,6 +394,48 @@
       },
       "water_total_consumption": {
         "name": "Water Consumption"
+      },
+      "energy_compressor_total": {
+        "name": "Compressor electricity total"
+      },
+      "energy_eheater_total": {
+        "name": "Electric heater electricity total"
+      },
+      "energy_ventilation_total": {
+        "name": "Ventilation electricity total"
+      },
+      "heat_produced_total": {
+        "name": "Heat produced total"
+      },
+      "heat_recovered_ventilation": {
+        "name": "Ventilation heat recovered"
+      },
+      "energy_compressor_ch": {
+        "name": "Compressor electricity heating"
+      },
+      "energy_eheater_ch": {
+        "name": "Electric heater electricity heating"
+      },
+      "heat_produced_ch": {
+        "name": "Heat produced heating"
+      },
+      "energy_compressor_dhw": {
+        "name": "Compressor electricity DHW"
+      },
+      "energy_eheater_dhw": {
+        "name": "Electric heater electricity DHW"
+      },
+      "heat_produced_dhw": {
+        "name": "Heat produced DHW"
+      },
+      "energy_compressor_cooling": {
+        "name": "Compressor electricity cooling"
+      },
+      "heat_produced_cooling": {
+        "name": "Heat produced cooling"
+      },
+      "supply_temp_avg_today": {
+        "name": "Supply temperature (today average)"
       }
     },
     "binary_sensor": {

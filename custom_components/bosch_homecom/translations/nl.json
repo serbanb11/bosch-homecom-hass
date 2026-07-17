@@ -393,6 +393,48 @@
       },
       "water_total_consumption": {
         "name": "Waterverbruik"
+      },
+      "energy_compressor_total": {
+        "name": "Compressor elektriciteit totaal"
+      },
+      "energy_eheater_total": {
+        "name": "Elektrische verwarmer elektriciteit totaal"
+      },
+      "energy_ventilation_total": {
+        "name": "Ventilatie elektriciteit totaal"
+      },
+      "heat_produced_total": {
+        "name": "Geproduceerde warmte totaal"
+      },
+      "heat_recovered_ventilation": {
+        "name": "Ventilatie teruggewonnen warmte"
+      },
+      "energy_compressor_ch": {
+        "name": "Compressor elektriciteit verwarming"
+      },
+      "energy_eheater_ch": {
+        "name": "Elektrische verwarmer elektriciteit verwarming"
+      },
+      "heat_produced_ch": {
+        "name": "Geproduceerde warmte verwarming"
+      },
+      "energy_compressor_dhw": {
+        "name": "Compressor elektriciteit warmwater"
+      },
+      "energy_eheater_dhw": {
+        "name": "Elektrische verwarmer elektriciteit warmwater"
+      },
+      "heat_produced_dhw": {
+        "name": "Geproduceerde warmte warmwater"
+      },
+      "energy_compressor_cooling": {
+        "name": "Compressor elektriciteit koeling"
+      },
+      "heat_produced_cooling": {
+        "name": "Geproduceerde warmte koeling"
+      },
+      "supply_temp_avg_today": {
+        "name": "Aanvoertemperatuur (gemiddelde vandaag)"
       }
     },
     "binary_sensor": {

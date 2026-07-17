@@ -247,9 +247,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Matter/Bacon-commissioned RAC devices: one shared MQTT device-shadow
     # connection, one coordinator per device.
     bacon_devices = [
-        device
-        for device in filtered_devices
-        if device["deviceType"] == "bacon_rac"
+        device for device in filtered_devices if device["deviceType"] == "bacon_rac"
     ]
     if bacon_devices:
         client_id = entry.data.get(CONF_BACON_CLIENT_ID)
@@ -290,7 +288,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
             )
             bacon_auth_provider = False
-
 
     await asyncio.gather(
         *[

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from datetime import timedelta
 import asyncio
+from datetime import timedelta
 import logging
 from typing import TypeVar
 
@@ -582,6 +582,11 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
         except AuthFailedError as err:
             self.entry.async_start_reauth(self.hass)
             raise UpdateFailed("Re-authentication required") from err
-        except (ApiError, InvalidSensorDataError, NotRespondingError, TimeoutError) as err:
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            TimeoutError,
+        ) as err:
             raise UpdateFailed(err) from err
         return self._build(state)

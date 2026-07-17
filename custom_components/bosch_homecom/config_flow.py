@@ -27,9 +27,8 @@ from homecom_alt import (
     HomeComAlt,
     async_get_bacon_devices,
 )
-import voluptuous as vol
-
 from homecom_alt.const import BACON_DEFAULT_REGION, BACON_KNOWN_REGIONS
+import voluptuous as vol
 
 from .const import (
     CONF_BACON_REGION,
@@ -66,9 +65,9 @@ AUTH_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): cv.string,
         vol.Required(CONF_BRAND_BUDERUS, default=False): cv.boolean,
-        vol.Required(
-            CONF_BACON_REGION, default=BACON_DEFAULT_REGION
-        ): vol.In(list(BACON_KNOWN_REGIONS)),
+        vol.Required(CONF_BACON_REGION, default=BACON_DEFAULT_REGION): vol.In(
+            list(BACON_KNOWN_REGIONS)
+        ),
     }
 )
 

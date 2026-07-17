@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from typing import Any, Literal
 
 from homeassistant import config_entries
@@ -882,7 +881,5 @@ class BoschComBaconRacClimate(
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Set new swing mode (drives both horizontal and vertical louvers)."""
         enabled = swing_mode == SWING_ON
-        await self.coordinator.bhc.async_set_swing(
-            horizontal=enabled, vertical=enabled
-        )
+        await self.coordinator.bhc.async_set_swing(horizontal=enabled, vertical=enabled)
         await self.coordinator.async_request_refresh()
