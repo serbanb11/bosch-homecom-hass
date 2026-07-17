@@ -20,10 +20,19 @@ from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
-from homecom_alt import ApiError, AuthFailedError, ConnectionOptions, HomeComAlt
+from homecom_alt import (
+    ApiError,
+    AuthFailedError,
+    ConnectionOptions,
+    HomeComAlt,
+    async_get_bacon_devices,
+)
 import voluptuous as vol
 
+from homecom_alt.const import BACON_DEFAULT_REGION, BACON_KNOWN_REGIONS
+
 from .const import (
+    CONF_BACON_REGION,
     CONF_BRAND_BUDERUS,
     CONF_DEVICES,
     CONF_REFRESH,
@@ -57,6 +66,9 @@ AUTH_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): cv.string,
         vol.Required(CONF_BRAND_BUDERUS, default=False): cv.boolean,
+        vol.Required(
+            CONF_BACON_REGION, default=BACON_DEFAULT_REGION
+        ): vol.In(list(BACON_KNOWN_REGIONS)),
     }
 )
 
@@ -157,6 +169,25 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
 
             if asyncio.iscoroutine(devices):
                 devices = await devices
+
+            # Also discover Matter/Bacon-commissioned devices, which are not
+            # part of the pointt gateway listing. Degrade gracefully on failure.
+            bacon_region = (self.data or {}).get(
+                CONF_BACON_REGION, BACON_DEFAULT_REGION
+            )
+            try:
+                bacon_devices = await async_get_bacon_devices(
+                    websession, bhc.token, bacon_region
+                )
+                known = {(d["deviceId"], d["deviceType"]) for d in devices}
+                for bacon_device in bacon_devices:
+                    if (
+                        bacon_device["deviceId"],
+                        bacon_device["deviceType"],
+                    ) not in known:
+                        devices.append(bacon_device)
+            except Exception:  # noqa: BLE001 - never block pointt setup
+                _LOGGER.warning("Could not fetch Bacon devices", exc_info=True)
 
             if self.data is None:
                 self.data = {}

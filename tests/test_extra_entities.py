@@ -593,7 +593,7 @@ async def test_dhw_charge_duration_set_value():
     await number.async_set_native_value(120.0)
 
     coordinator.bhc.async_set_dhw_charge_duration.assert_awaited_once_with(
-        "102128202", "dhw1", "120"
+        "102128202", "dhw1", 120
     )
     coordinator.async_request_refresh.assert_awaited_once()
 
