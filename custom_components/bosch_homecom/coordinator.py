@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+import asyncio
 import logging
 from typing import TypeVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TOKEN
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homecom_alt import (
     ApiError,
     AuthFailedError,
+    BaconMqttClient,
+    BHCDeviceBaconRac,
     BHCDeviceCommodule,
     BHCDeviceGeneric,
     BHCDeviceIcom,
@@ -21,9 +24,12 @@ from homecom_alt import (
     BHCDeviceRac,
     BHCDeviceRrc2,
     BHCDeviceWddw2,
+    HomeComAlt,
+    HomeComBaconRac,
     HomeComRac,
     InvalidSensorDataError,
     NotRespondingError,
+    decode_jwt_sub,
 )
 from tenacity import RetryError
 
@@ -318,3 +324,133 @@ class BoschComModuleCoordinatorCommodule(
             eth0_state=data.eth0_state,
             wifi_state=data.wifi_state,
         )
+
+
+class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]):
+    """Coordinator for a Matter/Bacon-commissioned RAC device (MQTT shadow).
+
+    Unlike the pointt (REST) coordinators these devices push their state over an
+    MQTT device-shadow. A single :class:`BaconMqttClient` is shared across all
+    bacon devices of the entry; live shadow updates are pushed straight into the
+    coordinator, while the periodic refresh doubles as a keep-alive/reconnect and
+    handles OAuth token rotation.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        bhc: HomeComBaconRac,
+        device: dict,
+        firmware: dict,
+        entry: ConfigEntry,
+        client: BaconMqttClient,
+        token_manager: HomeComAlt,
+        lock: asyncio.Lock,
+        auth_provider: bool,
+    ) -> None:
+        """Initialize the bacon coordinator."""
+        super().__init__(
+            hass,
+            logger=_LOGGER,
+            name=DOMAIN,
+            update_interval=DEFAULT_UPDATE_INTERVAL,
+            always_update=True,
+        )
+        self.bhc = bhc
+        self.client = client
+        self.token_manager = token_manager
+        self._lock = lock
+        self.auth_provider = auth_provider
+        self.unique_id = device["deviceId"]
+        self.device = device
+        self.entry = entry
+        self.firmware = firmware["value"]
+
+        self.device_info = DeviceInfo(
+            serial_number=self.unique_id,
+            identifiers={(DOMAIN, self.unique_id)},
+            name="Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
+            sw_version=self.firmware,
+            manufacturer=MANUFACTURER,
+        )
+
+        client.register_listener(self.unique_id, self._handle_push)
+
+    @callback
+    def _handle_push(self, state: dict) -> None:
+        """Push a live shadow update from MQTT into the coordinator."""
+        self.async_set_updated_data(self._build(state))
+
+    def _build(self, state: dict) -> BHCDeviceBaconRac:
+        # Shadow update/accepted messages can be partial deltas (or carry only
+        # the desired branch). Merge onto the last known state so a partial
+        # message never wipes fields such as tempSetpoint or customTitle.
+        prev = self.data
+        reported = {
+            **(prev.reported if prev and prev.reported else {}),
+            **(state.get("reported") or {}),
+        }
+        desired = {
+            **(prev.desired if prev and prev.desired else {}),
+            **(state.get("desired") or {}),
+        }
+        title = reported.get("customTitle")
+        if title:
+            clean = title.split("%|")[0].strip()
+            if clean:
+                self.device_info["name"] = clean
+        return BHCDeviceBaconRac(
+            device=self.device,
+            firmware=self.firmware,
+            reported=reported,
+            desired=desired,
+        )
+
+    async def _ensure_connected(self) -> None:
+        """Ensure the shared MQTT client is connected, refreshing the token.
+
+        Only the ``auth_provider`` coordinator rotates the OAuth token (a single
+        owner — refresh tokens are single-use). Others reuse the token persisted
+        on the config entry, which the token owner keeps fresh.
+        """
+        if self.client.is_connected:
+            return
+        async with self._lock:
+            if self.client.is_connected:
+                return
+            if self.auth_provider:
+                try:
+                    await self.token_manager.get_token()
+                except AuthFailedError as err:
+                    self.entry.async_start_reauth(self.hass)
+                    raise UpdateFailed("Re-authentication required") from err
+                if self.token_manager.token != self.entry.data.get(
+                    CONF_TOKEN
+                ) or self.token_manager.refresh_token != self.entry.data.get(
+                    CONF_REFRESH
+                ):
+                    new_data = dict(self.entry.data)
+                    new_data[CONF_TOKEN] = self.token_manager.token
+                    new_data[CONF_REFRESH] = self.token_manager.refresh_token
+                    self.hass.config_entries.async_update_entry(
+                        self.entry, data=new_data
+                    )
+                token = self.token_manager.token
+            else:
+                token = self.entry.data.get(CONF_TOKEN)
+            sub = decode_jwt_sub(token)
+            if not sub:
+                raise UpdateFailed("Could not derive user id from token")
+            await self.client.async_connect(token, sub)
+
+    async def _async_update_data(self) -> BHCDeviceBaconRac:
+        """Refresh via a shadow get (also reconnects if the session dropped)."""
+        try:
+            await self._ensure_connected()
+            state = await self.bhc.async_update()
+        except AuthFailedError as err:
+            self.entry.async_start_reauth(self.hass)
+            raise UpdateFailed("Re-authentication required") from err
+        except (ApiError, InvalidSensorDataError, NotRespondingError, TimeoutError) as err:
+            raise UpdateFailed(err) from err
+        return self._build(state)

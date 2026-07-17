@@ -10,8 +10,10 @@ from aiohttp.client_exceptions import ClientConnectorError, ClientError
 from homecom_alt import (
     ApiError,
     AuthFailedError,
+    BaconMqttClient,
     ConnectionOptions,
     HomeComAlt,
+    HomeComBaconRac,
     HomeComCommodule,
     HomeComGeneric,
     HomeComIcom,
@@ -20,6 +22,9 @@ from homecom_alt import (
     HomeComRrc2,
     HomeComWddw2,
     NotRespondingError,
+    async_get_bacon_devices,
+    decode_jwt_sub,
+    generate_client_id,
 )
 
 from homeassistant.config_entries import ConfigEntry
@@ -35,7 +40,11 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from homecom_alt.const import BACON_DEFAULT_REGION
+
 from .const import (
+    CONF_BACON_CLIENT_ID,
+    CONF_BACON_REGION,
     CONF_BRAND_BUDERUS,
     CONF_REFRESH,
     DOMAIN,
@@ -44,6 +53,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
 )
 from .coordinator import (
+    BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorGeneric,
     BoschComModuleCoordinatorIcom,
@@ -108,6 +118,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if asyncio.iscoroutine(devices):
         devices = await devices
 
+    # Matter/Bacon devices are not in the pointt gateway listing; re-discover
+    # them here so previously-selected ones are set up on reload.
+    bacon_region = entry.data.get(CONF_BACON_REGION) or BACON_DEFAULT_REGION
+    try:
+        devices = list(devices) + await async_get_bacon_devices(
+            websession, bhc.token, bacon_region
+        )
+    except Exception:  # noqa: BLE001 - never block pointt setup
+        _LOGGER.warning("Could not fetch Bacon devices at setup", exc_info=True)
+
     config_devices: dict | None = entry.data.get(CONF_DEVICES)
     filtered_devices = [
         device
@@ -117,6 +137,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     is_first = True
     for device in filtered_devices:
+        if device["deviceType"] == "bacon_rac":
+            # Matter/Bacon devices are set up below over MQTT, not pointt REST.
+            continue
         device_id = device["deviceId"]
         try:
             firmware = await bhc.async_get_firmware(device_id)
@@ -221,6 +244,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
             )
 
+    # Matter/Bacon-commissioned RAC devices: one shared MQTT device-shadow
+    # connection, one coordinator per device.
+    bacon_devices = [
+        device
+        for device in filtered_devices
+        if device["deviceType"] == "bacon_rac"
+    ]
+    if bacon_devices:
+        client_id = entry.data.get(CONF_BACON_CLIENT_ID)
+        if not client_id:
+            client_id = generate_client_id()
+            new_data = dict(entry.data)
+            new_data[CONF_BACON_CLIENT_ID] = client_id
+            hass.config_entries.async_update_entry(entry, data=new_data)
+
+        bacon_client = BaconMqttClient(client_id, region=bacon_region)
+        sub = decode_jwt_sub(bhc.token)
+        if not sub:
+            raise ConfigEntryAuthFailed("Could not derive user id from token")
+        try:
+            await bacon_client.async_connect(bhc.token, sub)
+        except AuthFailedError as err:
+            raise ConfigEntryAuthFailed from err
+        except (ApiError, ClientError, ClientConnectorError, TimeoutError) as err:
+            raise ConfigEntryNotReady from err
+        entry.async_on_unload(bacon_client.async_disconnect)
+
+        bacon_lock = asyncio.Lock()
+        # A single token owner (refresh tokens are single-use). If there are no
+        # pointt coordinators, the first bacon coordinator owns the refresh.
+        bacon_auth_provider = len(coordinators) == 0
+        for device in bacon_devices:
+            coordinators.append(
+                BoschComModuleCoordinatorBaconRac(
+                    hass,
+                    HomeComBaconRac(bacon_client, device["deviceId"]),
+                    device,
+                    {"value": "unknown"},
+                    entry,
+                    bacon_client,
+                    bhc,
+                    bacon_lock,
+                    bacon_auth_provider,
+                )
+            )
+            bacon_auth_provider = False
+
+
     await asyncio.gather(
         *[
             coordinator.async_config_entry_first_refresh()
@@ -232,10 +303,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Create a new Device for each coorodinator to represent each module
     for c in coordinators:
+        dev_name = c.device["deviceId"]
+        # Bacon devices carry a friendly name (customTitle) in their shadow;
+        # the coordinator stores it on device_info once the first state arrives.
+        if c.device["deviceType"] == "bacon_rac":
+            dev_name = c.device_info.get("name") or dev_name
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, c.device["deviceId"])},
-            name=c.device["deviceId"],
+            name=dev_name,
             manufacturer="Bosch",
             model=MODEL.get(c.device["deviceType"], c.device["deviceType"]),
             sw_version=c.firmware,
