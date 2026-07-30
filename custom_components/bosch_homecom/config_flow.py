@@ -313,8 +313,14 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle Bosch HomeCom options."""
+class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
+    """Handle Bosch HomeCom options.
+
+    Uses ``OptionsFlowWithReload`` so changed options trigger an automatic
+    reload (which re-applies the poll interval and brand/wb settings). This
+    replaces the deprecated ``entry.add_update_listener`` pattern (removed in
+    Home Assistant 2026.12).
+    """
 
     def __init__(self, entry: config_entries.ConfigEntry):
         super().__init__()

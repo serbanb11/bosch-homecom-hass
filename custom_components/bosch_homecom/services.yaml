@@ -100,3 +100,17 @@ get_recordings_service:
         - /recordings/heatSources/emon/total/outputProduced?interval=2026-07-06
       selector:
         object:
+
+get_shadow_service:
+  name: Get Bacon device shadow
+  description: >-
+    Return the raw MQTT device shadow (reported/desired) for a Matter/Bacon
+    (bacon_rac) air conditioner. These devices are not pointt/REST devices, so
+    get_custom_path_service cannot reach them; use this to inspect the exact
+    shadow field layout.
+  fields:
+    device_id:
+      name: device_id
+      description: The bacon_rac device id (serial) to read the shadow from
+      required: true
+      example: "86DM-673-614317-000000"

@@ -24,6 +24,11 @@ async def async_get_config_entry_diagnostics(
     stardard_functions: list[Any] = []  # (mantém a grafia para compatibilidade)
     advanced_functions: list[Any] = []
     switch_programs: list[Any] = []
+    # Matter/Bacon (bacon_rac) devices carry no standard_functions; their whole
+    # state lives in the MQTT device shadow. Dump reported/desired so bacon
+    # reports are actionable instead of showing empty function lists.
+    reported: list[Any] = []
+    desired: list[Any] = []
 
     coordinators = config_entry.runtime_data
     for coordinator in coordinators:
@@ -35,6 +40,9 @@ async def async_get_config_entry_diagnostics(
         stardard_functions.append(getattr(data, "stardard_functions", []))
         advanced_functions.append(getattr(data, "advanced_functions", []))
         switch_programs.append(getattr(data, "switch_programs", []))
+        # só existem em bacon_rac; nos outros devolvemos None
+        reported.append(getattr(data, "reported", None))
+        desired.append(getattr(data, "desired", None))
 
     data_out = [
         {
@@ -44,14 +52,18 @@ async def async_get_config_entry_diagnostics(
             "stardard_functions": d,
             "advanced_functions": e,
             "switch_programs": f,
+            "reported": g,
+            "desired": h,
         }
-        for a, b, c, d, e, f in zip(
+        for a, b, c, d, e, f, g, h in zip(
             device,
             firmware,
             notifications,
             stardard_functions,
             advanced_functions,
             switch_programs,
+            reported,
+            desired,
             strict=False,
         )
     ]

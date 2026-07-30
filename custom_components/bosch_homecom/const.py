@@ -51,6 +51,9 @@ CONF_REFRESH: Final = "refresh"
 CONF_WB_LABEL: Final = "wb_label"
 CONF_BACON_CLIENT_ID: Final = "bacon_client_id"
 CONF_BACON_REGION: Final = "bacon_region"
+# Last-known friendly names (customTitle) per bacon device id, persisted so a
+# reload with an incomplete first shadow doesn't reset the device name.
+CONF_BACON_TITLES: Final = "bacon_titles"
 DEFAULT_WB_LABEL: Final = "Wallbox"
 
 BOSCH_SENSOR_DESCRIPTORS = {

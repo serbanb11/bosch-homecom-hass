@@ -331,17 +331,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         return timedelta(seconds=seconds)
 
-    # Aplica o intervalo inicial a todos os coordinators
+    # Apply the configured interval to all coordinators. Changing it later goes
+    # through the options flow, which reloads the entry (OptionsFlowWithReload),
+    # re-running this setup — so no config-entry update listener is needed.
     for coordinator in entry.runtime_data:
         coordinator.update_interval = _get_update_interval(entry)
 
-    # Listener para futuras alterações nas opções
-    async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry):
-        new_interval = _get_update_interval(updated_entry)
-        for coordinator in updated_entry.runtime_data:
-            coordinator.update_interval = new_interval
-
-    entry.async_on_unload(entry.add_update_listener(_update_listener))
     return True
 
 
@@ -459,6 +454,36 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_recordings_service",
         get_recordings_service,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    async def get_shadow_service(call: ServiceCall) -> ServiceResponse:
+        """Return the raw MQTT device shadow for a Matter/Bacon (bacon_rac) device.
+
+        Bacon devices are not pointt/REST devices, so get_custom_path_service
+        cannot reach them. Their whole state lives in an MQTT device shadow,
+        already cached on the coordinator; this returns reported/desired so the
+        exact field layout can be inspected (see issues #160/#162).
+        """
+        device_id = str(call.data.get("device_id"))
+        coordinator = _find_coordinator_by_device_id(hass, device_id)
+        if coordinator is None:
+            _LOGGER.error("Coordinator not found for device %s", device_id)
+            return {}
+        if coordinator.device.get("deviceType") != "bacon_rac":
+            _LOGGER.error("Device %s is not a bacon_rac device", device_id)
+            return {}
+        data = coordinator.data
+        return {
+            "reported": getattr(data, "reported", None),
+            "desired": getattr(data, "desired", None),
+        }
+
+    # Register our service with Home Assistant.
+    hass.services.async_register(
+        DOMAIN,
+        "get_shadow_service",
+        get_shadow_service,
         supports_response=SupportsResponse.ONLY,
     )
 

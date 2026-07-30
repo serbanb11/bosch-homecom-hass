@@ -35,7 +35,13 @@ from homecom_alt import (
 )
 from tenacity import RetryError
 
-from .const import CONF_REFRESH, DEFAULT_UPDATE_INTERVAL, DOMAIN, MANUFACTURER
+from .const import (
+    CONF_BACON_TITLES,
+    CONF_REFRESH,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    MANUFACTURER,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -497,10 +503,15 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
         self.entry = entry
         self.firmware = firmware["value"]
 
+        # Seed the name from the last-known title persisted on the entry so a
+        # reload whose first shadow lacks customTitle keeps the friendly name
+        # instead of falling back to Boschcom_bacon_rac_<serial>.
+        persisted_title = (entry.data.get(CONF_BACON_TITLES) or {}).get(self.unique_id)
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
             identifiers={(DOMAIN, self.unique_id)},
-            name="Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
+            name=persisted_title
+            or "Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
             sw_version=self.firmware,
             manufacturer=MANUFACTURER,
         )
@@ -530,12 +541,22 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
             clean = title.split("%|")[0].strip()
             if clean:
                 self.device_info["name"] = clean
+                self._persist_title(clean)
         return BHCDeviceBaconRac(
             device=self.device,
             firmware=self.firmware,
             reported=reported,
             desired=desired,
         )
+
+    def _persist_title(self, title: str) -> None:
+        """Persist the friendly name on the entry so it survives a reload."""
+        titles = dict(self.entry.data.get(CONF_BACON_TITLES) or {})
+        if titles.get(self.unique_id) == title:
+            return
+        titles[self.unique_id] = title
+        new_data = {**self.entry.data, CONF_BACON_TITLES: titles}
+        self.hass.config_entries.async_update_entry(self.entry, data=new_data)
 
     async def _ensure_connected(self) -> None:
         """Ensure the shared MQTT client is connected, refreshing the token.

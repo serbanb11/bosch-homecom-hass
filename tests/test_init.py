@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
@@ -116,3 +117,59 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
 async def test_async_setup(hass):
     """Test the component gets setup."""
     assert await async_setup_component(hass, DOMAIN, {}) is True
+
+
+@pytest.mark.asyncio
+async def test_get_shadow_service_returns_bacon_shadow(hass):
+    """get_shadow_service returns the cached reported/desired for a bacon device."""
+    assert await async_setup_component(hass, DOMAIN, {}) is True
+
+    entry = MockConfigEntry(domain=DOMAIN, title="t", data={CONF_USERNAME: "t"})
+    entry.add_to_hass(hass)
+    entry.runtime_data = [
+        SimpleNamespace(
+            device={"deviceId": "86DM-1", "deviceType": "bacon_rac"},
+            data=SimpleNamespace(
+                reported={"powerEnabled": True, "opMode": "cool"},
+                desired={"opMode": "cool"},
+            ),
+        )
+    ]
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        "get_shadow_service",
+        {"device_id": "86DM-1"},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result == {
+        "reported": {"powerEnabled": True, "opMode": "cool"},
+        "desired": {"opMode": "cool"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_shadow_service_rejects_non_bacon(hass):
+    """get_shadow_service returns {} for a non-bacon device."""
+    assert await async_setup_component(hass, DOMAIN, {}) is True
+
+    entry = MockConfigEntry(domain=DOMAIN, title="t", data={CONF_USERNAME: "t"})
+    entry.add_to_hass(hass)
+    entry.runtime_data = [
+        SimpleNamespace(
+            device={"deviceId": "123", "deviceType": "rac"},
+            data=SimpleNamespace(reported=None, desired=None),
+        )
+    ]
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        "get_shadow_service",
+        {"device_id": "123"},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result == {}

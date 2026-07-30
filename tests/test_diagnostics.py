@@ -42,3 +42,34 @@ async def test_async_get_config_entry_diagnostics_redacts_refresh_token(hass):
     assert diagnostics["info"][CONF_CODE] == "**REDACTED**"
     assert diagnostics["info"][CONF_TOKEN] == "**REDACTED**"
     assert diagnostics["info"][CONF_REFRESH] == "**REDACTED**"
+    # Non-bacon coordinators have no shadow -> None (not a spurious empty dict).
+    assert diagnostics["data"][0]["reported"] is None
+    assert diagnostics["data"][0]["desired"] is None
+
+
+@pytest.mark.asyncio
+async def test_async_get_config_entry_diagnostics_dumps_bacon_shadow(hass):
+    """Bacon (bacon_rac) devices dump their reported/desired MQTT shadow."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test-user",
+        data={CONF_USERNAME: "test-user", CONF_TOKEN: "access_token"},
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = [
+        SimpleNamespace(
+            data=SimpleNamespace(
+                device={"deviceId": "86DM-1", "deviceType": "bacon_rac"},
+                firmware="unknown",
+                reported={"powerEnabled": True, "opMode": "cool", "tempSetpoint": 23},
+                desired={"tempSetpoint": 23},
+            )
+        )
+    ]
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    dumped = diagnostics["data"][0]
+    assert dumped["reported"]["opMode"] == "cool"
+    assert dumped["reported"]["tempSetpoint"] == 23
+    assert dumped["desired"] == {"tempSetpoint": 23}

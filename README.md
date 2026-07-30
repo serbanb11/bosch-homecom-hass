@@ -53,6 +53,8 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 > **Tip:** As an alternative to capturing the code manually via Developer Tools, you can use the community-made [SingleKey Code Catcher](https://github.com/Tozzi89/SingleKey-Code-Catcher) Firefox add-on, which tracks the login flow and lets you copy the code directly (see [#142](https://github.com/serbanb11/bosch-homecom-hass/issues/142)). Note: this is a third-party tool, not maintained by this project.
 
+> **Note — use a dedicated account:** SingleKey ID appears to allow only one active session per account. Logging into the HomeCom Easy app with the same account you used for Home Assistant can invalidate HA's token, causing a re-authentication prompt (often ~60 minutes later, when the access token expires). This is especially noticeable with Matter/Bacon (`bacon_rac`) air conditioners, whose live connection depends on the token. To run HA and the phone app side by side, create a **separate SingleKey ID account for Home Assistant** and share your devices with it in the app (see [#162](https://github.com/serbanb11/bosch-homecom-hass/issues/162)).
+
 ## What You Get
 
 | Platform | RAC | K30/K40/RRC2 | ICOM | WDDW2 | Commodule |

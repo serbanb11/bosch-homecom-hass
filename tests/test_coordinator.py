@@ -19,6 +19,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tenacity import RetryError
 
 from custom_components.bosch_homecom.const import (
+    CONF_BACON_TITLES,
     CONF_DEVICES,
     CONF_REFRESH,
     DEFAULT_UPDATE_INTERVAL,
@@ -26,6 +27,7 @@ from custom_components.bosch_homecom.const import (
     MANUFACTURER,
 )
 from custom_components.bosch_homecom.coordinator import (
+    BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorGeneric,
     BoschComModuleCoordinatorK40,
@@ -148,6 +150,53 @@ def _make_generic_data(device, firmware):
 # ===================================================================
 # Existing unit tests
 # ===================================================================
+
+
+def _make_bacon_coordinator(hass, entry, firmware):
+    """Construct a bacon coordinator with mocked transport dependencies."""
+    return BoschComModuleCoordinatorBaconRac(
+        hass,
+        Mock(),  # bhc (HomeComBaconRac)
+        {"deviceId": "86DM-1", "deviceType": "bacon_rac"},
+        firmware,
+        entry,
+        Mock(),  # BaconMqttClient (register_listener)
+        Mock(),  # token_manager
+        asyncio.Lock(),
+        False,  # auth_provider
+    )
+
+
+def test_bacon_coordinator_seeds_name_from_persisted_title(hass, entry, firmware):
+    """A reload seeds device_info name from the persisted title, not the fallback."""
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_BACON_TITLES: {"86DM-1": "Living Room AC"}}
+    )
+
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+
+    assert coordinator.device_info["name"] == "Living Room AC"
+
+
+def test_bacon_coordinator_falls_back_when_no_persisted_title(hass, entry, firmware):
+    """With no persisted title the name is the Boschcom_ fallback."""
+    entry.add_to_hass(hass)
+
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+
+    assert coordinator.device_info["name"] == "Boschcom_bacon_rac_86DM-1"
+
+
+def test_bacon_coordinator_persists_title_from_shadow(hass, entry, firmware):
+    """A customTitle in the shadow is cleaned, applied and persisted on the entry."""
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+
+    coordinator._build({"reported": {"customTitle": "Kitchen%|$?*junk"}})
+
+    assert coordinator.device_info["name"] == "Kitchen"
+    assert entry.data[CONF_BACON_TITLES]["86DM-1"] == "Kitchen"
 
 
 def test_init_coordinator(hass, entry, bhc, device, firmware):
