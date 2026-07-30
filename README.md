@@ -17,8 +17,9 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 | **RRC2** | Bosch thermostats (CT200) |
 | **WDDW2** | Hydronext 5700s water heaters |
 | **Commodule** | Wallbox 7000i EV chargers |
+| **bacon_rac** | Matter-commissioned ACs, including Midea-based units (Climate 3000i/5000i/6000i/7000i) |
 
-:exclamation: **Any Midea-based AC or air purifier are **not** supported by this integration. If you see no devices after setup then those devices are not supported and you should use matter instead.**
+:exclamation: **Midea-based ACs commissioned over Matter are supported as `bacon_rac` devices. Air purifiers are still not supported. If you see no devices after setup, those devices are not supported.**
 
 ## Installation
 
@@ -53,7 +54,7 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 > **Tip:** As an alternative to capturing the code manually via Developer Tools, you can use the community-made [SingleKey Code Catcher](https://github.com/Tozzi89/SingleKey-Code-Catcher) Firefox add-on, which tracks the login flow and lets you copy the code directly (see [#142](https://github.com/serbanb11/bosch-homecom-hass/issues/142)). Note: this is a third-party tool, not maintained by this project.
 
-> **Note — use a dedicated account:** SingleKey ID appears to allow only one active session per account. Logging into the HomeCom Easy app with the same account you used for Home Assistant can invalidate HA's token, causing a re-authentication prompt (often ~60 minutes later, when the access token expires). This is especially noticeable with Matter/Bacon (`bacon_rac`) air conditioners, whose live connection depends on the token. To run HA and the phone app side by side, create a **separate SingleKey ID account for Home Assistant** and share your devices with it in the app (see [#162](https://github.com/serbanb11/bosch-homecom-hass/issues/162)).
+> **Note (`bacon_rac` only):** Matter-commissioned ACs need a dedicated SingleKey ID account for Home Assistant. SingleKey allows only one active session per account, so logging into the HomeCom Easy app with the same account logs Home Assistant out. Create a separate account for HA and share these devices with it. Other device types are unaffected.
 
 ## What You Get
 
