@@ -1,10 +1,6 @@
-# HomeCom API Endpoints by Device Type
+# HomeCom Easy API Endpoints by Device Type — app v4.0.0
 
-Base URL: `https://pointt-api.bosch-thermotechnology.com/pointt-api/api/v1/`
-Auth: `Authorization: Bearer <access_token>`
-All resource paths prefixed with `gateways/{gatewayId}/resource` unless noted otherwise.
-
----
+Entries marked **[4.0.0]** are new in this version.
 
 ## Common Endpoints (All Device Types)
 
@@ -40,12 +36,21 @@ All resource paths prefixed with `gateways/{gatewayId}/resource` unless noted ot
 | PUT | `/gateway/tzInfo/timeZone` | Set timezone |
 | PUT | `/gateway/update/triggerRequest` | Trigger data sync |
 | PUT | `/gateway/factoryReset` | Factory reset |
+| GET | `/gateway/leds/inactivityTimeout` | **[4.0.0]** LED inactivity timeout (ConnectKey) |
+| PUT | `/gateway/leds/inactivityTimeout` | **[4.0.0]** Set LED timeout (`PutIntModel`) |
 
 ### Notifications
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/notifications` | Alerts and notifications |
+
+### System detection **[4.0.0]**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/system/type` | System type (used for ConnectKey system detection) |
+| GET | `/system/globalSeasonOptimizer/currentMode` | Global season-optimizer mode |
 
 ---
 
@@ -98,25 +103,31 @@ All resource paths prefixed with `gateways/{gatewayId}/resource` unless noted ot
 
 ### Bacon GraphQL API — Energy Consumption
 
-**Endpoint:** `https://history.euc1.bacon.bosch-tt-cw.com/graphql`
+**Endpoint:** `https://history.euc1.bacon.bosch-tt-cw.com/graphql` (Apollo 3 client)
 
 | Query Name | Interval | Variables | Description |
 |------------|----------|-----------|-------------|
 | `getRacTotalConsumptions` | DAILY/MONTHLY/YEARLY | serialNumbers, currentTimestamp, currentTimeZoneOffset, firstDayOfWeek | Today/month/year totals |
 | `getRacHourlyExtendedConsumptions` | HOURLY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek, nextToken | Hourly breakdown (paginated) |
-| `getRacDailyExtendedConsumptions` | DAILY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek | Daily breakdown |
-| `getRacMonthlyExtendedConsumptions` | MONTHLY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek | Monthly breakdown (paginated) |
+| `getRacDailyExtendedConsumptions` | DAILY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek, **nextToken [4.0.0]** | Daily breakdown (now paginated) |
+| `getRacMonthlyExtendedConsumptions` | MONTHLY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek, **nextToken [4.0.0]** | Monthly breakdown (now paginated) |
 | `getRacDailySensorValues` | DAILY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek | Room temperature history |
 | `getRacHourlySensorValues` | HOURLY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek, nextToken | Hourly temperature |
 | `getRacMonthlySensorValues` | MONTHLY | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek | Monthly temperature |
 | `getRacLimitedComparisonsQuery` | - | serialNumbers, timestamps | Period comparisons (limited) |
 | `getRacExtendedComparisonsQuery` | - | serialNumbers, start, end | Period comparisons (extended) |
+| `getAdditionalInformation` | - | - | Device additional info |
+| `getDhwConsumptions` **[4.0.0]** | `$interval` variable | serialNumbers, start, end, currentTimeZoneOffset, firstDayOfWeek, nextToken, interval | Water-heater consumption + tank temp |
 
-**GraphQL resolver:** `cumulateRacEmonRecords` (consumption) / `cumulateRacBaseRecords` (sensors)
+**GraphQL resolvers:** `cumulateRacEmonRecords` (RAC consumption) / `cumulateRacBaseRecords` (RAC sensors)
+/ `cumulateDhwEmonRecords` **[4.0.0]** / `cumulateDhwBaseRecords` **[4.0.0]**
 
-**Response fields (consumption):** `timestamp`, `totalElectricalEnergyConsumptionHeat`, `totalElectricalEnergyConsumptionCool`, `totalElectricalEnergyConsumptionDry`, `totalElectricalEnergyConsumptionFan`
+**Response fields (RAC consumption):** `timestamp`, `totalElectricalEnergyConsumptionHeat`, `totalElectricalEnergyConsumptionCool`, `totalElectricalEnergyConsumptionDry`, `totalElectricalEnergyConsumptionFan`
 
-**Response fields (sensor):** `timestamp`, `roomTemperature`
+**Response fields (RAC sensor):** `timestamp`, `roomTemperature`
+
+**Response fields (DHW) [4.0.0]:** `dhwConsumptions { items { timestamp totalEnergyConsumption } nextToken }`,
+`dhwSensors { items { timestamp currentTemp } nextToken }`
 
 ---
 
@@ -146,7 +157,7 @@ All resource paths prefixed with `gateways/{gatewayId}/resource` unless noted ot
 | GET | `/dhwCircuits/dhw1/numberOfShowersAvailable` | Shower counter |
 | GET | `/dhwCircuits/dhw1/outletTemperature` | Outlet temp |
 | GET | `/dhwCircuits/dhw1/inletTemperature` | Inlet temp |
-| GET | `/dhwCircuits/dhw1/waterTotalConsumption` | Total water consumed |
+| GET | `/dhwCircuits/waterTotalConsumption` | Total water consumed (circuit-collection level, **not** under `dhw1`) |
 | GET | `/dhwCircuits/dhw1/friwaPrimaryPumpModulation` | FRIWA pump modulation |
 | GET | `/dhwCircuits/dhw1/currentFriwaSupplyTemperature` | FRIWA supply temp |
 | GET | `/dhwCircuits/dhw1/outTemp` | Outlet temp (alt) |
@@ -362,6 +373,7 @@ All resource paths prefixed with `gateways/{gatewayId}/resource` unless noted ot
 | GET | `/heatSources/hs1/activefailure` | Active failure |
 | GET | `/heatSources/hs1/failurelist` | Failure list |
 | GET | `/heatSources/hs1/heatPumpType` | Heat pump type |
+| GET | `/heatSources/hs{N}/defrostActive` | Defrost active (missing from the 3.6.1 doc) |
 | GET | `/heatSources/hs1/type` | Source type |
 | GET | `/heatSources/hs1/numberOfStarts` | Start count |
 | GET/PUT | `/heatSources/additionalHeater/operationMode` | Aux heater mode |
@@ -545,44 +557,185 @@ All resource paths prefixed with `gateways/{gatewayId}/resource` unless noted ot
 
 `{domain}`: `ch` (central heating), `dhw` (domestic hot water), `pool`, `cooling`, `ventilation`, `total`
 
+### Pool **[4.0.0]**
+
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| GET | `/pool/enabled` | — | Pool heating on/off |
+| PUT | `/pool/enabled` | `PutStringModel` | Enable/disable pool heating |
+| GET | `/pool/currentTemp` | — | Current pool temperature |
+| GET | `/pool/setpointTemp` | — | Pool setpoint |
+| PUT | `/pool/setpointTemp` | `PutFloatModel` | Set pool setpoint |
+| GET | `/pool/additionalHeater/poolMode` | — | Auxiliary heater mode |
+| PUT | `/pool/additionalHeater/poolMode` | `PutStringModel` | Set auxiliary heater mode |
+
+Also batched via `POST bulk` by `PoolBulkResource`.
+
+### Cooling schedule **[4.0.0]**
+
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| GET | `{circuitId}/cooling/switchPrograms/{switchProgramName}` | — | Cooling switch program |
+| PUT | `{circuitId}/cooling/switchPrograms/{switchProgramName}` | `List<SwitchPoint>` | Update cooling program |
+
+Bulk-only paths: `/cooling/switchPrograms/A`, `/cooling/temperatureLevels/on` (`HCHeatCoolBulkResource`).
+
+### Hybrid **[4.0.0]**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/heatSources/hybrid/bivalentSetpoint` | Bivalent (changeover) temperature |
+
+Existing hybrid endpoints (unchanged): `/heatSources/hybrid/activeHeatSource`,
+`/heatSources/hybrid/controlStrategy`, `/heatSources/hybrid/outdoorStatus`,
+`/heatSources/hybrid/outdoorVariant`, `/heatSources/hybrid/reminderDate`,
+`/heatSources/hybrid/reminderEnable`, `/heatSources/hybrid/reminderLapsed`.
+
+---
+
+## EMON3 — Energy Monitoring generation 3 **[4.0.0]**
+
+New recordings query API served by the PointT gateway, driven by `QueryPointtService`
+(`@GET @Url` + `@QueryMap`) and modelled by `EMON3QueryResource` / `EMON3QueryResponse`.
+
+**Request:** `GET gateways/{gatewayId}/resource/recordings/…?query=all&sampleRate=…&startDate=…&endDate=…`
+
+| Query param | Values |
+|---|---|
+| `query` | `all` |
+| `sampleRate` | `PT15M` (quarterly), `PT1H` (hourly), `PT1D` (daily), `PT1W` (weekly), `P1M` (monthly) |
+| `startDate` | ISO timestamp (optional) |
+| `endDate` | ISO timestamp (optional) |
+
+### Query resources
+
+| Path | Domain |
+|--------|------|
+| `/resource/recordings/heatSources/emon/total` | Total |
+| `/resource/recordings/heatSources/emon/ch` | Central heating |
+| `/resource/recordings/heatSources/emon/dhw` | Hot water |
+| `/resource/recordings/heatSources/emon/cooling` | Cooling |
+| `/resource/recordings/heatSources/emon/pool` | Pool |
+| `/resource/recordings/heatSources/emon/ventilation` | Ventilation |
+| `/resource/recordings/heatingCircuits` | Heating-circuit room temperatures |
+| `/resource/recordings/dhwCircuits` | DHW-circuit tank temperatures |
+| `/resource/recordings/system` | System (outdoor temperature) |
+
+Resource variants are declared per system type: `EMON3QueryResource.ConnectKey.HeatPump`
+exposes `Total`, `Heating`, `HotWater`, `Cooling`, `Pool`, `Ventilation`.
+
+### Response value paths
+
+| Response key path | Value |
+|--------|------|
+| `/recordings/heatSources/emon/{domain}/compressor` | `Compressor` |
+| `/recordings/heatSources/emon/{domain}/eheater` | `EHeater` |
+| `/recordings/heatSources/emon/{domain}/outputProduced` | `OutputProduced` |
+| `/recordings/heatSources/emon/total/solar` | `Solar` |
+| `/recordings/heatSources/emon/total/ventilation` | `Ventilation` |
+| `/recordings/heatSources/emon/ventilation/heatRecovered` | `HeatRecovered` |
+| `/recordings/heatingCircuits/hc{N}/roomtemperature` | Room temperature |
+| `/recordings/dhwCircuits/dhw{N}/actualTemp` | Tank temperature |
+| `/recordings/system/sensors/temperatures/outdoor_t1` | `OutdoorTemperature` |
+
+### EMON3 bulk resources
+
+`HeatPumpEMON3BulkResource` batches these through `POST bulk`:
+
+| Path |
+|--------|
+| `/heatSources/emon/totalConsumption` |
+| `/heatSources/emon/chConsumption` |
+| `/heatSources/emon/dhwConsumption` |
+| `/heatSources/emon/coolingConsumption` |
+| `/heatSources/emon/poolConsumption` |
+| `/heatSources/hs1/numberOfStarts` |
+| `/heatSources/workingTime/totalSystem` |
+| `/recordings/heatSources/actualSupplyTemperature` |
+
 ---
 
 ## RRC2 (Remeha Remote Control) — deviceType: `rrc2`
+
+Greatly expanded in 4.0.0. Reads are batched through `POST bulk` in chunks of **40** resources
+(`RrcRemoteBulkRequestKt`); a resource is skipped when the cached `statusCode` is 404
+(`RrcResourceRule.Available`), and some are gated on system type (`RrcResourceRule.AvailableFor`).
 
 ### Zones
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/zones` | List zones |
+| GET | `/zones` | Zones root |
 | GET | `/zones/list` | Zone list |
-| GET | `/zones/{zoneId}/zoneTemperatureActual` | Actual temp |
-| GET | `/zones/{zoneId}/zoneTemperatureHeatingSetpoint` | Heating setpoint |
-| GET | `/zones/{zoneId}/icon` | Zone icon |
-| GET | `/zones/{zoneId}/name` | Zone name |
+| POST | `/zones` | **[4.0.0]** Create zone |
+| DELETE | `/zones/zn{N}` | **[4.0.0]** Delete zone |
+| GET | `/zones/zn{N}/temperatureActual` | Actual temp |
+| GET | `/zones/zn{N}/temperatureHeatingSetpoint` | Heating setpoint |
+| GET/PUT | `/zones/zn{N}/icon` | Zone icon |
+| GET/PUT | `/zones/zn{N}/name` | Zone name |
+| GET/PUT | `/zones/zn{N}/userMode` | **[4.0.0]** User mode (manual / clock) |
+| GET/PUT | `/zones/zn{N}/manualTemperatureHeating` | **[4.0.0]** Manual heating setpoint |
+| GET/PUT | `/zones/zn{N}/clockOverride/temperatureHeating` | **[4.0.0]** Clock-override temperature |
+| GET/PUT | `/zones/zn{N}/openWindowDetection/enabled` | **[4.0.0]** Open-window detection |
+| PUT | `/zones/zn{N}/clockProgram` | **[4.0.0]** Assign clock program to zone |
 
-### Heating/DHW
+### Clock programs **[4.0.0]**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/hc/{hcId}/actualTemperature` | HC actual temp |
-| GET | `/hc/{hcId}/controlKey` | Control key |
-| GET | `/dhw/{dhwId}/actualTemperature` | DHW actual temp |
-| GET | `/dhw/{dhwId}/hotWaterSystem` | Hot water system |
+| GET | `/programs/list` | Program list |
+| POST | `/programs` | Create program |
+| GET | `/programs/pg{N}` | Program |
+| PUT | `/programs/pg{N}/name` | Rename program |
+| GET | `/programs/pg{N}/week` | Weekly switch points |
+| PUT | `/programs/pg{N}/week` | Update switch points |
+| DELETE | `/programs/pg{N}/week` | Delete week program |
+
+### HmIP sub-devices **[4.0.0]**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/devices/list` | HmIP device list (thermostats, repeaters) |
+| PUT | `/devices/dev{N}/name` | Rename device |
+| PUT | `/devices/device{N}/zone` | Assign device to a zone |
+
+Pairing/unpairing the RRC gateway itself uses `POST gateways/` and `DELETE gateways/{gatewayId}`.
+
+### Heating / DHW
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/PUT | `/heatingCircuits/hc{N}/control` | Heating control strategy (control key) |
+| GET | `/dhwCircuits/dhw{N}/actualTemp` | DHW actual temp |
+| GET/PUT | `/dhwCircuits/dhw{N}/hotWaterSystem` | Hot water system |
+| GET/PUT | `/dhwCircuits/dhw{N}/operationMode` | **[4.0.0]** DHW operation mode |
+| GET | `/dhwCircuits/dhw{N}/programs/pg{N}/week` | **[4.0.0]** DHW weekly program |
+
+### Heat sources **[4.0.0]**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/heatSources/info` | Heat source info |
+| GET | `/heatSources/type` | Heat source type |
 
 ### Gateway
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/gateway/uuid` | UUID |
-| GET | `/gateway/time/current` | Current time |
-| GET | `/gateway/time/timeZone` | Timezone |
-| GET | `/gateway/wizardStepsDone` | Setup wizard status |
+| GET/PUT | `/gateway/time/current` | Current time |
+| GET/PUT | `/gateway/time/timeZone` | Timezone |
+| GET/PUT | `/gateway/wizardStepsDone` | Setup wizard status |
+| GET | `/gateway/versionFirmware` | **[4.0.0]** Firmware version |
+| GET | `/gateway/ui/icons` | **[4.0.0]** Available zone icons |
 
 ### System
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/system/location/coordinates` | Location |
+| PUT | `/system/location/coordinates` | Location |
+| GET/PUT | `/system/awayMode/enabled` | **[4.0.0]** Away mode on/off |
+| GET/PUT | `/system/awayMode/temperature` | **[4.0.0]** Away temperature |
 
 ---
 
@@ -739,3 +892,49 @@ All paths: `gateways/{gatewayId}/resource/...`
 4. GET  .../cp{N}/telemetry + conf         → check limit override needed
 5. POST .../cp0/cmd/limit                  → (if needed, limit=6)
 ```
+
+---
+
+## Bacon platform (RAC / Air Purifier / Water Heater) — cloud + MQTT
+
+Device classes (`BaconDeviceType`): `AIR_PURIFIER`, `RAC`, `DHW` **[4.0.0]**.
+Water-heater model prefixes **[4.0.0]**: `dhw_heatpump`, `dhw_midea_unknown_v1`,
+`dhw_midea_unknown_v2`, `hpwh_fs_lpp_v1`, `hpwh_fs_mpp_v1`, `hpwh_vw_v1`.
+
+### MQTT 5 (HiveMQ) — broker `broker.euc1.bacon.{env}bosch-tt-cw.com:443`
+
+| Topic | Purpose |
+|-------|---------|
+| `users/{userId}/#` | Wildcard subscription |
+| `users/{userId}/commands/{command}` | User-scoped commands |
+| `users/{userId}/devices/{serial}/commands/{command}` | Device commands |
+| `users/{userId}/devices/{serial}/topics/{subTopic}` | Device topics (metadata, sensorData) |
+| `users/{userId}/devices/{serial}/shadows/{subTopic}/{suffix}` | Device shadows |
+
+Shadow subtopics: `state`, `schedule`.
+Shadow suffixes: `get`, `get/accepted`, `get/rejected`, `update`, `update/accepted`,
+`update/rejected`, `update/documents`.
+Commands: `export` (history export), `force_schedule`, `reset_matter`.
+
+### DHW (water-heater) shadow payload **[4.0.0]**
+
+State (`BaconDhwState`): `powerEnabled`, `opMode`, `tempSetpoint`, `setTempMax`,
+`thermalDisinfectionTemp`, `manualThermalDisinfectionEnabled`, `vacationOnTimestamp`,
+`vacationOffTimestamp`, `customTitle`.
+
+Sensors (`BaconDhwSensorData`): `currentTemp`, `topElectricHeatEnabled`,
+`bottomElectricHeatEnabled`, `standardModeEnabled`, `energySavingModeEnabled`,
+`thermalDisinfectionEnabled`, `vacationModeEnabled`.
+
+Schedule switch-point config (`DhwRemoteBaconSwitchPointConfig`): `powerEnabled`.
+
+### Bacon local access point (device SoftAP)
+
+Basic auth, username **`endUser`** **[4.0.0]** (previously unauthenticated in 3.6.1).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `gateway/wifi/apList` | Scan Wi-Fi networks |
+| PUT | `gateway/wifi/configuration` | Push Wi-Fi credentials |
+
+---
