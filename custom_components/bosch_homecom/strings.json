@@ -233,12 +233,7 @@
         }
       },
       "pool_additional_heater_mode": {
-        "name": "Pool additional heater",
-        "state": {
-          "never": "Never",
-          "withHeating": "With heating",
-          "always": "Always"
-        }
+        "name": "Pool additional heater"
       }
     },
     "sensor": {

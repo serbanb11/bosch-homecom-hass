@@ -232,12 +232,7 @@
         }
       },
       "pool_additional_heater_mode": {
-        "name": "Zwembad bijverwarming",
-        "state": {
-          "never": "Nooit",
-          "withHeating": "Met verwarming",
-          "always": "Altijd"
-        }
+        "name": "Zwembad bijverwarming"
       }
     },
     "sensor": {

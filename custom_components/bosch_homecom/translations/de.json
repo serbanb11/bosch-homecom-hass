@@ -234,12 +234,7 @@
         }
       },
       "pool_additional_heater_mode": {
-        "name": "Pool Zuheizer",
-        "state": {
-          "never": "Nie",
-          "withHeating": "Mit Heizung",
-          "always": "Immer"
-        }
+        "name": "Pool Zuheizer"
       }
     },
     "sensor": {

@@ -7,9 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.bosch_homecom.number import BoschComK40PoolSetpointNumber
-from custom_components.bosch_homecom.select import (
-    BoschComK40PoolAdditionalHeaterSelect,
-)
+from custom_components.bosch_homecom.select import BoschComK40PoolAdditionalHeaterSelect
 from custom_components.bosch_homecom.sensor import BoschComSensorPoolTemp
 from custom_components.bosch_homecom.switch import BoschComK40PoolEnabledSwitch
 

@@ -349,27 +349,29 @@ class BoschComModuleCoordinatorK40(
 
     def _build_device_data(self, data: BHCDeviceK40) -> BHCDeviceK40:
         """Build K40 device data."""
-        return BHCDeviceK40(
-            device=self.device,
-            firmware=data.firmware,
-            notifications=data.notifications,
-            holiday_mode=data.holiday_mode,
-            away_mode=data.away_mode,
-            power_limitation=data.power_limitation,
-            outdoor_temp=data.outdoor_temp,
-            heat_sources=data.heat_sources,
-            dhw_circuits=data.dhw_circuits,
-            heating_circuits=data.heating_circuits,
-            ventilation=data.ventilation,
-            zones=data.zones,
-            flame_indication=data.flame_indication,
-            energy_history=data.energy_history,
-            hourly_energy_history=data.hourly_energy_history,
-            energy_gas_unit=data.energy_gas_unit,
-            indoor_humidity=data.indoor_humidity,
-            devices=data.devices,
-            pool=data.pool,
-        )
+        kwargs = {
+            "device": self.device,
+            "firmware": data.firmware,
+            "notifications": data.notifications,
+            "holiday_mode": data.holiday_mode,
+            "away_mode": data.away_mode,
+            "power_limitation": data.power_limitation,
+            "outdoor_temp": data.outdoor_temp,
+            "heat_sources": data.heat_sources,
+            "dhw_circuits": data.dhw_circuits,
+            "heating_circuits": data.heating_circuits,
+            "ventilation": data.ventilation,
+            "zones": data.zones,
+            "flame_indication": data.flame_indication,
+            "energy_history": data.energy_history,
+            "hourly_energy_history": data.hourly_energy_history,
+            "energy_gas_unit": data.energy_gas_unit,
+            "indoor_humidity": data.indoor_humidity,
+            "devices": data.devices,
+        }
+        if "pool" in BHCDeviceK40.__dataclass_fields__:
+            kwargs["pool"] = getattr(data, "pool", None)
+        return BHCDeviceK40(**kwargs)
 
 
 class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw2]):
