@@ -133,6 +133,15 @@ async def async_setup_entry(
                     field="outdoor_temp",
                 )
             )
+            # Swimming pool current temperature
+            if coordinator.data.pool:
+                entities.append(
+                    BoschComSensorPoolTemp(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        field="pool_current_temp",
+                    )
+                )
             # Indoor humidity
             if coordinator.data.indoor_humidity:
                 entities.append(
@@ -474,8 +483,11 @@ async def async_setup_entry(
                 "heat_produced_dhw",
                 "energy_compressor_cooling",
                 "heat_produced_cooling",
+                "energy_compressor_pool",
+                "energy_eheater_pool",
+                "heat_produced_pool",
             }
-            for key in (
+            recording_keys = [
                 "energy_compressor_total",
                 "energy_eheater_total",
                 "energy_ventilation_total",
@@ -490,7 +502,16 @@ async def async_setup_entry(
                 "energy_compressor_cooling",
                 "heat_produced_cooling",
                 "supply_temp_avg_today",
-            ):
+            ]
+            if getattr(coordinator.data, "pool", None):
+                pool_keys = (
+                    "energy_compressor_pool",
+                    "energy_eheater_pool",
+                    "heat_produced_pool",
+                )
+                recording_keys.extend(pool_keys)
+                defaults_on.update(pool_keys)
+            for key in recording_keys:
                 if key in energy_keys:
                     dev_class = SensorDeviceClass.ENERGY
                     state_class = SensorStateClass.TOTAL_INCREASING
@@ -1042,6 +1063,51 @@ class BoschComSensorOutdoorTemp(BoschComSensorBase):
         else:
             self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
         value = outdoor.get("value")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+
+class BoschComSensorPoolTemp(BoschComSensorBase):
+    """Swimming pool current-temperature sensor."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize pool temperature sensor."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{field}-sensor",
+            icon="mdi:pool-thermometer",
+        )
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_translation_key = "pool_current_temp"
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field + "_sensor"
+        self._attr_should_poll = False
+        self.field = field
+
+    @property
+    def state(self):
+        """Return the pool current temperature."""
+        pool = self.coordinator.data.pool
+        if not pool:
+            return None
+        current = pool.get("currentTemp")
+        if not current:
+            return None
+        value = current.get("value")
         if value is None:
             return None
         try:

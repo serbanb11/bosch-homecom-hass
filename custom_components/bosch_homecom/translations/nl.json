@@ -230,6 +230,14 @@
           "auto": "Automatisch",
           "on": "Aan"
         }
+      },
+      "pool_additional_heater_mode": {
+        "name": "Zwembad bijverwarming",
+        "state": {
+          "never": "Nooit",
+          "withHeating": "Met verwarming",
+          "always": "Altijd"
+        }
       }
     },
     "sensor": {
@@ -435,6 +443,18 @@
       },
       "supply_temp_avg_today": {
         "name": "Aanvoertemperatuur (gemiddelde vandaag)"
+      },
+      "pool_current_temp": {
+        "name": "Zwembadtemperatuur"
+      },
+      "energy_compressor_pool": {
+        "name": "Compressor elektriciteit zwembad"
+      },
+      "energy_eheater_pool": {
+        "name": "Elektrische verwarmer elektriciteit zwembad"
+      },
+      "heat_produced_pool": {
+        "name": "Geproduceerde warmte zwembad"
       }
     },
     "binary_sensor": {
@@ -457,6 +477,9 @@
       },
       "dhw_charge_duration": {
         "name": "Warm water laadduur"
+      },
+      "pool_setpoint_temp": {
+        "name": "Zwembad instelwaarde"
       }
     },
     "button": {
@@ -494,6 +517,9 @@
       },
       "dhw_holiday_mode": {
         "name": "Vakantiestand"
+      },
+      "pool_enabled": {
+        "name": "Zwembadverwarming"
       }
     },
     "water_heater": {

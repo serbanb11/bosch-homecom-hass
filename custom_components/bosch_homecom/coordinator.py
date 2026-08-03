@@ -191,6 +191,9 @@ RECORDING_PATHS: dict[str, dict] = {
     "emon/dhw/outputProduced": {"key": "heat_produced_dhw", "agg": "sum"},
     "emon/cooling/compressor": {"key": "energy_compressor_cooling", "agg": "sum"},
     "emon/cooling/outputProduced": {"key": "heat_produced_cooling", "agg": "sum"},
+    "emon/pool/compressor": {"key": "energy_compressor_pool", "agg": "sum"},
+    "emon/pool/eheater": {"key": "energy_eheater_pool", "agg": "sum"},
+    "emon/pool/outputProduced": {"key": "heat_produced_pool", "agg": "sum"},
     # Sensor time-series — direct leaves under /recordings/heatSources/*,
     # per-hour sample-sum with count -> averaging.
     "actualSupplyTemperature": {"key": "supply_temp_avg_today", "agg": "avg"},
@@ -365,6 +368,7 @@ class BoschComModuleCoordinatorK40(
             energy_gas_unit=data.energy_gas_unit,
             indoor_humidity=data.indoor_humidity,
             devices=data.devices,
+            pool=data.pool,
         )
 
 

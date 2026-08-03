@@ -53,6 +53,17 @@ async def async_setup_entry(
                             max_value=duration.get("maxValue", 12),
                         )
                     )
+            pool = coordinator.data.pool
+            if pool and (pool.get("setpointTemp") or {}).get("writeable"):
+                setpoint = pool["setpointTemp"]
+                entities.append(
+                    BoschComK40PoolSetpointNumber(
+                        coordinator=coordinator,
+                        min_value=setpoint.get("minValue", 4),
+                        max_value=setpoint.get("maxValue", 40),
+                        step=setpoint.get("stepSize", 0.5),
+                    )
+                )
         if coordinator.data.device["deviceType"] == "rrc2":
             entities.extend(_build_rrc2_numbers(coordinator))
         if coordinator.data.device["deviceType"] == "icom":
@@ -667,4 +678,63 @@ class BoschComK40DhwChargeDurationNumber(CoordinatorEntity, NumberEntity):
         data = self.coordinator.extra_data.get("dhw_charge_duration")
         if data and isinstance(data, dict):
             self._attr_native_value = data.get("value")
+        self.async_write_ha_state()
+
+
+class BoschComK40PoolSetpointNumber(CoordinatorEntity, NumberEntity):
+    """Number entity for the swimming pool target temperature."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        min_value: float,
+        max_value: float,
+        step: float,
+    ) -> None:
+        """Initialize pool setpoint number."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "pool_setpoint_temp"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-pool_setpoint_temp"
+        self._attr_suggested_object_id = "pool_setpoint_temp"
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_native_min_value = min_value
+        self._attr_native_max_value = max_value
+        self._attr_native_step = step
+
+    def _value(self) -> float | None:
+        pool = self.coordinator.data.pool
+        if not pool:
+            return None
+        setpoint = pool.get("setpointTemp")
+        if not setpoint:
+            return None
+        value = setpoint.get("value")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current pool setpoint."""
+        return self._value()
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the pool target temperature."""
+        await self.coordinator.bhc.async_put_pool_setpoint_temp(
+            self.coordinator.data.device["deviceId"], float(value)
+        )
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        self._attr_native_value = self._value()
         self.async_write_ha_state()

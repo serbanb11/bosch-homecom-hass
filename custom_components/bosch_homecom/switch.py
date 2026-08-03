@@ -47,6 +47,9 @@ async def async_setup_entry(
                     entities.append(
                         BoschComChildLockSwitch(coordinator=coordinator, field=dev_id)
                     )
+            pool = coordinator.data.pool
+            if pool and (pool.get("enabled") or {}).get("writeable"):
+                entities.append(BoschComK40PoolEnabledSwitch(coordinator=coordinator))
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "commodule":
             for cp in coordinator.data.charge_points or []:
@@ -586,3 +589,46 @@ class BoschComWddw2HolidayModeSwitch(_BoschComWddw2SwitchBase):
         await self._coordinator.bhc.async_put_holiday_mode(
             self._coordinator.unique_id, value
         )
+
+
+class BoschComK40PoolEnabledSwitch(CoordinatorEntity, SwitchEntity):
+    """Switch for the swimming pool circuit on/off state."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize pool enabled switch."""
+        super().__init__(coordinator)
+        self._coordinator = coordinator
+        self._attr_translation_key = "pool_enabled"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-pool_enabled"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True when the pool circuit is enabled."""
+        pool = self._coordinator.data.pool
+        if not pool:
+            return None
+        return _value(pool.get("enabled")) == "on"
+
+    async def _async_put(self, value: str) -> None:
+        await self._coordinator.bhc.async_put_pool_enabled(
+            self._coordinator.data.device["deviceId"], value
+        )
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable the pool circuit."""
+        await self._async_put("on")
+        await self._coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable the pool circuit."""
+        await self._async_put("off")
+        await self._coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()

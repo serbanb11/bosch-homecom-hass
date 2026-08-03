@@ -73,7 +73,7 @@ def _make_k40_data():
         "indoor_humidity": {},
         "devices": {},
     }
-    for optional in ("hourly_energy_history", "energy_gas_unit"):
+    for optional in ("hourly_energy_history", "energy_gas_unit", "pool"):
         if optional in fields:
             kwargs[optional] = {}
     return BHCDeviceK40(**kwargs)
@@ -303,7 +303,7 @@ async def test_k40_coordinator_fetches_recordings(hass, entry, device, firmware)
     # Distinguishable payloads: sum for kWh, avg (y/c) for supply temperature
     def _bulk_response(dev_id, paths):
         assert dev_id == "102128202"
-        assert len(paths) == 14  # 13 emon + 1 actualSupplyTemperature
+        assert len(paths) == 17  # 16 emon + 1 actualSupplyTemperature
         result = {}
         for p in paths:
             if "emon/total/ventilation" in p:

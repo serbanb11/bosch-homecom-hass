@@ -232,6 +232,14 @@
           "auto": "Automatik",
           "on": "An"
         }
+      },
+      "pool_additional_heater_mode": {
+        "name": "Pool Zuheizer",
+        "state": {
+          "never": "Nie",
+          "withHeating": "Mit Heizung",
+          "always": "Immer"
+        }
       }
     },
     "sensor": {
@@ -437,6 +445,18 @@
       },
       "supply_temp_avg_today": {
         "name": "Vorlauftemperatur (Tages-Ø)"
+      },
+      "pool_current_temp": {
+        "name": "Pooltemperatur"
+      },
+      "energy_compressor_pool": {
+        "name": "Strom Kompressor Pool"
+      },
+      "energy_eheater_pool": {
+        "name": "Strom Heizstab Pool"
+      },
+      "heat_produced_pool": {
+        "name": "Wärme erzeugt Pool"
       }
     },
     "binary_sensor": {
@@ -459,6 +479,9 @@
       },
       "dhw_charge_duration": {
         "name": "Warmwasser Ladedauer"
+      },
+      "pool_setpoint_temp": {
+        "name": "Pool Sollwert"
       }
     },
     "button": {
@@ -496,6 +519,9 @@
       },
       "dhw_holiday_mode": {
         "name": "Urlaubsmodus"
+      },
+      "pool_enabled": {
+        "name": "Poolheizung"
       }
     },
     "water_heater": {

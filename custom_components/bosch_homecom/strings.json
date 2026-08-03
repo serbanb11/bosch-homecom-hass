@@ -231,6 +231,14 @@
           "default": "Default",
           "solar-eco": "Solar Eco"
         }
+      },
+      "pool_additional_heater_mode": {
+        "name": "Pool additional heater",
+        "state": {
+          "never": "Never",
+          "withHeating": "With heating",
+          "always": "Always"
+        }
       }
     },
     "sensor": {
@@ -436,6 +444,18 @@
       },
       "supply_temp_avg_today": {
         "name": "Supply temperature (today average)"
+      },
+      "pool_current_temp": {
+        "name": "Pool temperature"
+      },
+      "energy_compressor_pool": {
+        "name": "Compressor electricity pool"
+      },
+      "energy_eheater_pool": {
+        "name": "Electric heater electricity pool"
+      },
+      "heat_produced_pool": {
+        "name": "Heat produced pool"
       }
     },
     "binary_sensor": {
@@ -458,6 +478,9 @@
       },
       "dhw_charge_duration": {
         "name": "DHW charge duration"
+      },
+      "pool_setpoint_temp": {
+        "name": "Pool setpoint"
       }
     },
     "button": {
@@ -495,6 +518,9 @@
       },
       "dhw_holiday_mode": {
         "name": "Holiday Mode"
+      },
+      "pool_enabled": {
+        "name": "Pool heating"
       }
     },
     "water_heater": {

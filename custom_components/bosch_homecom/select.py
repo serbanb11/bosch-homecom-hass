@@ -67,6 +67,14 @@ async def async_setup_entry(
                     BoschComSelectProgram(coordinator=coordinator, field="program")
                 )
         if coordinator.data.device["deviceType"] in ["k30", "k40", "icom"]:
+            pool = getattr(coordinator.data, "pool", None)
+            if pool and (pool.get("additionalHeaterMode") or {}).get("allowedValues"):
+                entities.append(
+                    BoschComK40PoolAdditionalHeaterSelect(
+                        coordinator=coordinator,
+                        allowedValues=pool["additionalHeaterMode"]["allowedValues"],
+                    )
+                )
             for entry in coordinator.data.dhw_circuits:
                 dhw_id = entry["id"].split("/")[-1]
                 if (
@@ -521,6 +529,54 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
                 operationMode = safe_get(entry["operationMode"], "value")
 
         self._attr_current_option = operationMode
+        self.async_write_ha_state()
+
+
+class BoschComK40PoolAdditionalHeaterSelect(CoordinatorEntity, SelectEntity):
+    """Representation of the swimming pool additional-heater mode select."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        allowedValues: list[str],
+    ) -> None:
+        """Initialize pool additional-heater select."""
+        super().__init__(coordinator)
+        self._coordinator = coordinator
+        self._attr_translation_key = "pool_additional_heater_mode"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-pool_additional_heater_mode"
+        self._attr_suggested_object_id = "pool_additional_heater_mode"
+        self._attr_options = allowedValues
+
+    def _current(self) -> str | None:
+        pool = self._coordinator.data.pool
+        if not pool:
+            return None
+        mode = pool.get("additionalHeaterMode")
+        if not mode:
+            return None
+        return mode.get("value")
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current additional-heater mode."""
+        return self._current()
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the additional-heater mode."""
+        await self._coordinator.bhc.async_put_pool_additional_heater_mode(
+            self._coordinator.data.device["deviceId"], option
+        )
+        await self._coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._attr_current_option = self._current()
         self.async_write_ha_state()
 
 

@@ -107,7 +107,7 @@ def _make_k40_data(device, firmware):
         "devices": {},
     }
     # Optional fields added in newer homecom_alt versions
-    for optional in ("hourly_energy_history", "energy_gas_unit"):
+    for optional in ("hourly_energy_history", "energy_gas_unit", "pool"):
         if optional in fields:
             kwargs[optional] = {}
     return BHCDeviceK40(**kwargs)
