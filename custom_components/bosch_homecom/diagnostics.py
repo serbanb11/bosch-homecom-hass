@@ -53,9 +53,11 @@ def _redact_raw_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         serial, _, path = key.partition("/")
         safe_key = f"{_mask_serial(serial) if serial != '-' else '-'}/{path}"
         redacted[safe_key] = {
-            "payload": async_redact_data(entry.get("payload"), TO_REDACT_RAW)
-            if isinstance(entry.get("payload"), (dict, list))
-            else entry.get("payload"),
+            "payload": (
+                async_redact_data(entry.get("payload"), TO_REDACT_RAW)
+                if isinstance(entry.get("payload"), (dict, list))
+                else entry.get("payload")
+            ),
             "received_at": entry.get("received_at"),
         }
     return redacted

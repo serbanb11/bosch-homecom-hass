@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from abc import abstractmethod
+import asyncio
 from datetime import datetime, timedelta
+import logging
 from typing import TypeVar
 
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
 from homeassistant.const import CONF_TOKEN
 from homeassistant.core import (
     CALLBACK_TYPE,
+    DOMAIN as HOMEASSISTANT_DOMAIN,
     HomeAssistant,
     callback,
-)
-from homeassistant.core import (
-    DOMAIN as HOMEASSISTANT_DOMAIN,
 )
 from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.helpers import issue_registry as ir
