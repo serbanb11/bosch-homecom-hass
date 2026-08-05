@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 import asyncio
-from datetime import timedelta
 import logging
+from abc import abstractmethod
+from datetime import datetime, timedelta
 from typing import TypeVar
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
 from homeassistant.const import CONF_TOKEN
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import (
+    CALLBACK_TYPE,
+    HomeAssistant,
+    callback,
+)
+from homeassistant.core import (
+    DOMAIN as HOMEASSISTANT_DOMAIN,
+)
+from homeassistant.data_entry_flow import UnknownFlow
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from homecom_alt import (
@@ -30,7 +40,9 @@ from homecom_alt import (
     HomeComBaconRac,
     HomeComRac,
     InvalidSensorDataError,
+    MqttNotAuthorizedError,
     NotRespondingError,
+    decode_jwt_exp,
     decode_jwt_sub,
 )
 from tenacity import RetryError
@@ -469,6 +481,17 @@ class BoschComModuleCoordinatorCommodule(
         )
 
 
+# Reconnect this far ahead of the access token's expiry. The MQTT password *is*
+# the access token, so the broker drops the session when it expires. The margin
+# must exceed homecom_alt's 5-minute check_jwt() window, otherwise the forced
+# refresh would hand back the same soon-to-expire token.
+BACON_RECONNECT_MARGIN = timedelta(minutes=10)
+
+# Never schedule a reconnect closer than this, so a short-lived or already
+# expiring token cannot spin up a tight reconnect loop.
+BACON_RECONNECT_MIN_DELAY = timedelta(minutes=1)
+
+
 class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]):
     """Coordinator for a Matter/Bacon-commissioned RAC device (MQTT shadow).
 
@@ -477,6 +500,12 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
     bacon devices of the entry; live shadow updates are pushed straight into the
     coordinator, while the periodic refresh doubles as a keep-alive/reconnect and
     handles OAuth token rotation.
+
+    Because the MQTT password is the access token, the session has the token's
+    lifetime (~60 min). A reconnect is therefore scheduled ahead of expiry
+    (BACON_RECONNECT_MARGIN) rather than waiting for the broker to refuse a stale
+    credential, and a refusal that does happen is treated as a transport failure:
+    only a failed OAuth refresh may ask the user to re-authenticate.
     """
 
     def __init__(
@@ -508,6 +537,8 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
         self.device = device
         self.entry = entry
         self.firmware = firmware["value"]
+        self._unsub_reconnect: CALLBACK_TYPE | None = None
+        entry.async_on_unload(self._cancel_scheduled_reconnect)
 
         # Seed the name from the last-known title persisted on the entry so a
         # reload whose first shadow lacks customTitle keeps the friendly name
@@ -564,48 +595,182 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
         new_data = {**self.entry.data, CONF_BACON_TITLES: titles}
         self.hass.config_entries.async_update_entry(self.entry, data=new_data)
 
-    async def _ensure_connected(self) -> None:
-        """Ensure the shared MQTT client is connected, refreshing the token.
+    def _persist_tokens(self) -> None:
+        """Persist rotated tokens on the entry for the other coordinators."""
+        if self.token_manager.token == self.entry.data.get(
+            CONF_TOKEN
+        ) and self.token_manager.refresh_token == self.entry.data.get(CONF_REFRESH):
+            return
+        new_data = dict(self.entry.data)
+        new_data[CONF_TOKEN] = self.token_manager.token
+        new_data[CONF_REFRESH] = self.token_manager.refresh_token
+        self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+        _LOGGER.debug("Device_Id: %s, persisted refreshed auth tokens", self.unique_id)
+
+    async def _async_session_token(self, *, force_refresh: bool = False) -> str | None:
+        """Return the access token to open the MQTT session with.
 
         Only the ``auth_provider`` coordinator rotates the OAuth token (a single
         owner — refresh tokens are single-use). Others reuse the token persisted
-        on the config entry, which the token owner keeps fresh.
+        on the config entry, which the token owner keeps fresh, so ``force_refresh``
+        is a no-op for them. The caller must hold ``self._lock``: a rotation and
+        the reconnect that consumes it have to be one critical section.
+
+        A dead refresh token is the *only* failure that warrants bothering the
+        user, so it is the only one that starts a re-authentication.
+        """
+        if not self.auth_provider:
+            return self.entry.data.get(CONF_TOKEN)
+        try:
+            await self.token_manager.get_token(force=force_refresh)
+        except AuthFailedError as err:
+            self.entry.async_start_reauth(self.hass)
+            raise UpdateFailed("Re-authentication required") from err
+        self._persist_tokens()
+        return self.token_manager.token
+
+    def _token_outlives_session(self, token: str | None) -> bool:
+        """Whether ``token`` expires later than the one now in use.
+
+        Reconnecting with the token the session already holds buys nothing, so a
+        non-owner (which cannot rotate) uses this to skip a pointless reconnect
+        until the token owner has published a fresher one on the entry.
+        """
+        if not token:
+            return False
+        session_expires_at = self.client.token_expires_at
+        if session_expires_at is None:
+            return True
+        token_expires_at = decode_jwt_exp(token)
+        return token_expires_at is None or token_expires_at > session_expires_at
+
+    async def _async_connect(self, token: str | None) -> None:
+        """Open a new MQTT session with ``token``. Caller must hold the lock."""
+        sub = decode_jwt_sub(token)
+        if not sub:
+            raise UpdateFailed("Could not derive user id from token")
+        await self.client.async_connect(token, sub)
+        self._schedule_reconnect()
+
+    @callback
+    def _schedule_reconnect(self) -> None:
+        """Arm the reconnect that keeps the session ahead of token expiry.
+
+        Fires BACON_RECONNECT_MARGIN before the token the session was opened
+        with expires, never sooner than BACON_RECONNECT_MIN_DELAY from now.
+        Called after every successful connect, so the timer always tracks the
+        credential currently in use.
+        """
+        self._cancel_scheduled_reconnect()
+        expires_at = self.client.token_expires_at
+        if expires_at is None:
+            return
+        when = max(
+            expires_at - BACON_RECONNECT_MARGIN,
+            dt_util.utcnow() + BACON_RECONNECT_MIN_DELAY,
+        )
+        self._unsub_reconnect = async_track_point_in_utc_time(
+            self.hass, self._handle_scheduled_reconnect, when
+        )
+
+    @callback
+    def _cancel_scheduled_reconnect(self) -> None:
+        """Cancel a pending reconnect. Also the entry's unload hook."""
+        if self._unsub_reconnect is not None:
+            self._unsub_reconnect()
+            self._unsub_reconnect = None
+
+    @callback
+    def _handle_scheduled_reconnect(self, now: datetime) -> None:
+        """Hand the due reconnect over to a task; the timer callback is sync."""
+        self._unsub_reconnect = None
+        self.entry.async_create_background_task(
+            self.hass,
+            self._async_scheduled_reconnect(),
+            name=f"{DOMAIN} bacon reconnect {self.unique_id}",
+        )
+
+    async def _async_scheduled_reconnect(self) -> None:
+        """Replace the session before the broker drops it as unauthorized."""
+        try:
+            async with self._lock:
+                expires_at = self.client.token_expires_at
+                if (
+                    expires_at is not None
+                    and dt_util.utcnow() < expires_at - BACON_RECONNECT_MARGIN
+                ):
+                    # Every bacon coordinator arms a timer but they share one
+                    # session: another has already renewed it.
+                    return
+                token = await self._async_session_token(force_refresh=True)
+                if not self._token_outlives_session(token):
+                    return
+                _LOGGER.debug(
+                    "Device_Id: %s, reconnecting bacon MQTT ahead of token expiry",
+                    self.unique_id,
+                )
+                await self._async_connect(token)
+        except (
+            ApiError,
+            AuthFailedError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            TimeoutError,
+            UpdateFailed,
+        ) as err:
+            # The periodic refresh still reconnects reactively, so a failure
+            # here only costs the head start.
+            _LOGGER.debug(
+                "Device_Id: %s, scheduled bacon reconnect failed: %s",
+                self.unique_id,
+                err,
+            )
+        finally:
+            # Re-arm in every case, including the skips above: the floor keeps a
+            # repeated failure down to one attempt per BACON_RECONNECT_MIN_DELAY.
+            self._schedule_reconnect()
+
+    async def _ensure_connected(self) -> None:
+        """Ensure the shared MQTT client is connected, refreshing the token.
+
+        A refused CONNACK means the access token that doubles as the MQTT
+        password is stale — a transport failure, not a dead OAuth session. It is
+        answered with one forced rotation and a single retry; only a rotation
+        that itself fails asks the user to re-authenticate.
         """
         if self.client.is_connected:
+            # The session is usually opened during entry setup, before this
+            # coordinator exists, so arm the pre-expiry reconnect for it here.
+            if self._unsub_reconnect is None:
+                self._schedule_reconnect()
             return
         async with self._lock:
             if self.client.is_connected:
                 return
-            if self.auth_provider:
+            try:
+                await self._async_connect(await self._async_session_token())
+            except MqttNotAuthorizedError:
+                _LOGGER.debug(
+                    "Device_Id: %s, bacon MQTT refused the token, forcing a refresh",
+                    self.unique_id,
+                )
+                token = await self._async_session_token(force_refresh=True)
                 try:
-                    await self.token_manager.get_token()
-                except AuthFailedError as err:
-                    self.entry.async_start_reauth(self.hass)
-                    raise UpdateFailed("Re-authentication required") from err
-                if self.token_manager.token != self.entry.data.get(
-                    CONF_TOKEN
-                ) or self.token_manager.refresh_token != self.entry.data.get(
-                    CONF_REFRESH
-                ):
-                    new_data = dict(self.entry.data)
-                    new_data[CONF_TOKEN] = self.token_manager.token
-                    new_data[CONF_REFRESH] = self.token_manager.refresh_token
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
-                    )
-                token = self.token_manager.token
-            else:
-                token = self.entry.data.get(CONF_TOKEN)
-            sub = decode_jwt_sub(token)
-            if not sub:
-                raise UpdateFailed("Could not derive user id from token")
-            await self.client.async_connect(token, sub)
+                    await self._async_connect(token)
+                except MqttNotAuthorizedError as retry_err:
+                    raise UpdateFailed(
+                        "Bacon MQTT rejected the refreshed access token"
+                    ) from retry_err
 
     async def _async_update_data(self) -> BHCDeviceBaconRac:
         """Refresh via a shadow get (also reconnects if the session dropped)."""
         try:
             await self._ensure_connected()
             state = await self.bhc.async_update()
+        except MqttNotAuthorizedError as err:
+            # Never a reauth: the OAuth refresh token is fine, only the MQTT
+            # password (the access token) was stale. Let HA retry the poll.
+            raise UpdateFailed(err) from err
         except AuthFailedError as err:
             self.entry.async_start_reauth(self.hass)
             raise UpdateFailed("Re-authentication required") from err
@@ -616,4 +781,40 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
             TimeoutError,
         ) as err:
             raise UpdateFailed(err) from err
-        return self._build(state)
+        data = self._build(state)
+        self._async_withdraw_reauth()
+        return data
+
+    @callback
+    def _async_withdraw_reauth(self) -> None:
+        """Drop a re-authentication request that data has since disproved.
+
+        A repair raised for what turned out to be a transport failure used to sit
+        there for as long as the user ignored it, while the integration worked
+        perfectly. Any reauth flow still in progress for this entry is aborted as
+        soon as an update succeeds. Aborting a flow does not clear the repair
+        issue it raised, so that is removed too — the same pair core does when it
+        withdraws a reauth itself.
+        """
+        for flow in self.hass.config_entries.flow.async_progress_by_handler(
+            DOMAIN,
+            match_context={
+                "source": SOURCE_REAUTH,
+                "entry_id": self.entry.entry_id,
+            },
+        ):
+            if "flow_id" not in flow:
+                continue
+            try:
+                self.hass.config_entries.flow.async_abort(flow["flow_id"])
+            except UnknownFlow:
+                continue
+            ir.async_delete_issue(
+                self.hass,
+                HOMEASSISTANT_DOMAIN,
+                f"config_entry_reauth_{self.entry.domain}_{self.entry.entry_id}",
+            )
+            _LOGGER.debug(
+                "Device_Id: %s, withdrew stale re-authentication request",
+                self.unique_id,
+            )
