@@ -5,8 +5,23 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import timedelta
+from typing import Any
 
 from aiohttp.client_exceptions import ClientConnectorError, ClientError
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_DEVICES, CONF_TOKEN, Platform
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 from homecom_alt import (
     ApiError,
     AuthFailedError,
@@ -26,31 +41,19 @@ from homecom_alt import (
     decode_jwt_sub,
     generate_client_id,
 )
-
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_DEVICES, CONF_TOKEN, Platform
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-)
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
 from homecom_alt.const import BACON_DEFAULT_REGION
 
 from .const import (
+    CAPTURE_RAW_DEFAULT_SECONDS,
+    CAPTURE_RAW_MAX_SECONDS,
     CONF_BACON_CLIENT_ID,
     CONF_BACON_REGION,
     CONF_BRAND_BUDERUS,
     CONF_REFRESH,
-    DOMAIN,
-    MODEL,
     CONF_UPDATE_SECONDS,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    MODEL,
 )
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
@@ -354,6 +357,21 @@ def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
     return None
 
 
+def _find_bacon_client(hass: HomeAssistant) -> BaconMqttClient | None:
+    """Return the shared bacon MQTT client, if any bacon device is set up.
+
+    One client per config entry serves every bacon device on it and is subscribed
+    to the whole user namespace, so any bacon coordinator's client can observe
+    every device.
+    """
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        for c in getattr(entry, "runtime_data", None) or []:
+            client = getattr(c, "client", None)
+            if isinstance(client, BaconMqttClient):
+                return client
+    return None
+
+
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Add custom action."""
 
@@ -484,6 +502,58 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_shadow_service",
         get_shadow_service,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    async def capture_raw_service(call: ServiceCall) -> ServiceResponse:
+        """Record everything a bacon device publishes over a fixed window.
+
+        A deliberate counterpart to get_shadow_service rather than an option on
+        it. The shadow is request/response, so it can be *fetched*; the ``topics``
+        channel that carries roomTemperature is push-only, with no request verb
+        anywhere in the protocol. Nothing can be asked for here, only waited for —
+        hence a duration instead of a path, and a default window long enough to
+        outlast the device's own publish interval (1800 s in the wild).
+        """
+        device_id = call.data.get("device_id")
+        seconds = min(
+            float(call.data.get("seconds", CAPTURE_RAW_DEFAULT_SECONDS)),
+            CAPTURE_RAW_MAX_SECONDS,
+        )
+        client = _find_bacon_client(hass)
+        if client is None:
+            _LOGGER.error("No bacon (MQTT) devices are set up; nothing to capture")
+            return {}
+
+        serial = str(device_id) if device_id else None
+        captured: dict[str, dict[str, Any]] = {}
+
+        @callback
+        def _record(message_serial: str | None, path: str, payload: Any) -> None:
+            if serial is not None and message_serial != serial:
+                return
+            captured[f"{message_serial or '-'}/{path}"] = {
+                "payload": payload,
+                "received_at": dt_util.utcnow().isoformat(),
+            }
+
+        client.register_raw_listener(_record)
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            client.remove_raw_listener(_record)
+
+        return {
+            "window_seconds": seconds,
+            "device_id": serial,
+            "topics_seen": sorted(captured),
+            "captured": captured,
+        }
+
+    hass.services.async_register(
+        DOMAIN,
+        "capture_raw_service",
+        capture_raw_service,
         supports_response=SupportsResponse.ONLY,
     )
 

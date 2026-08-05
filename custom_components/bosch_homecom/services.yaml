@@ -114,3 +114,31 @@ get_shadow_service:
       description: The bacon_rac device id (serial) to read the shadow from
       required: true
       example: "86DM-673-614317-000000"
+capture_raw_service:
+  name: Capture raw Bacon MQTT traffic
+  description: >-
+    Record everything Bacon devices publish over a fixed window and return it.
+    Unlike get_shadow_service this waits rather than fetches: the shadow is
+    request/response, but the "topics" channel that carries the room temperature
+    is push-only and cannot be polled. Devices publish roughly every 30 minutes,
+    so use a window of 2100 seconds if you need to be sure a sensor reading is
+    included.
+  fields:
+    device_id:
+      name: device_id
+      description: >-
+        Limit the capture to one device id (serial). Omit to capture every Bacon
+        device on the account.
+      required: false
+      example: "86DM-673-614317-000000"
+    seconds:
+      name: seconds
+      description: >-
+        How long to listen, in seconds. Capped at 2100.
+      required: false
+      default: 120
+      selector:
+        number:
+          min: 5
+          max: 2100
+          unit_of_measurement: seconds

@@ -584,6 +584,12 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
             firmware=self.firmware,
             reported=reported,
             desired=desired,
+            # From the push-only "topics" channel rather than the shadow, so each
+            # stays None until the device has published it. sensor carries
+            # roomTemperature, which the shadow does not have at all.
+            sensor=self.bhc.sensor,
+            metadata=self.bhc.metadata,
+            info=self.bhc.info,
         )
 
     def _persist_title(self, title: str) -> None:
