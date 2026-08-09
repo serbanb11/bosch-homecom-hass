@@ -18,6 +18,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfEnergy,
     UnitOfPower,
     UnitOfPressure,
@@ -32,6 +33,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import BOSCH_SENSOR_DESCRIPTORS, WDDW2_NOTIFICATION_CODES
 from .coordinator import (
+    BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
@@ -79,6 +81,22 @@ async def async_setup_entry(
                 BoschComSensorNotificationsK40(
                     coordinator=coordinator, config_entry=config_entry
                 )
+            )
+        elif device_type == "bacon_rac" and isinstance(
+            coordinator, BoschComModuleCoordinatorBaconRac
+        ):
+            # Created unconditionally: the topics/sensor and topics/info payloads
+            # they read are push-only and may not have arrived yet, so gating on
+            # presence would skip the entity for the first half hour.
+            entities.extend(
+                [
+                    BoschComBaconRoomTemperature(
+                        coordinator=coordinator, config_entry=config_entry
+                    ),
+                    BoschComBaconSignalStrength(
+                        coordinator=coordinator, config_entry=config_entry
+                    ),
+                ]
             )
         elif device_type == "wddw2":
             entities.append(
@@ -3473,3 +3491,95 @@ class BoschComK40RecordingSensor(CoordinatorEntity, SensorEntity):
         """Handle updated data."""
         self._attr_native_value = self.coordinator.recordings.get(self._key)
         self.async_write_ha_state()
+
+
+# --- Bacon (Matter-commissioned) RAC: topics/sensor and topics/info ----------
+
+
+class BoschComBaconRoomTemperature(BoschComSensorBase):
+    """Last room temperature a bacon device reported, with its own timestamp.
+
+    Deliberately **not** wired to the climate entity's ``current_temperature``.
+    The reading arrives on the push-only ``topics/sensor`` channel and has been
+    observed unchanged for days: it does not follow ``powerEnabled`` and does not
+    refresh while the unit runs, so presenting it as the current temperature would
+    show a two-day-old value as if it were live. Exposed here instead, with
+    ``measured_at`` alongside, so the value stays inspectable and its age obvious.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize the entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-room-temperature",
+            icon="mdi:home-thermometer",
+        )
+        self._attr_translation_key = "bacon_room_temperature"
+        self._attr_should_poll = False
+
+    @property
+    def _sensor(self) -> dict:
+        data = self.coordinator.data
+        return (getattr(data, "sensor", None) if data else None) or {}
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the reported room temperature."""
+        value = self._sensor.get("roomTemperature")
+        return value if isinstance(value, (int, float)) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose when the reading was taken, so its age is visible."""
+        timestamp = self._sensor.get("timestamp")
+        if not isinstance(timestamp, (int, float)):
+            return {}
+        return {
+            "measured_at": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+        }
+
+
+class BoschComBaconSignalStrength(BoschComSensorBase):
+    """Wi-Fi signal strength a bacon device reports on topics/info."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize the entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-signal-strength",
+            icon="mdi:wifi",
+        )
+        self._attr_translation_key = "bacon_signal_strength"
+        self._attr_should_poll = False
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the reported signal strength."""
+        data = self.coordinator.data
+        info = (getattr(data, "info", None) if data else None) or {}
+        network = info.get("network") or {}
+        value = network.get("signalStrength")
+        return value if isinstance(value, int) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the qualitative rating the device sends alongside."""
+        data = self.coordinator.data
+        info = (getattr(data, "info", None) if data else None) or {}
+        quality = (info.get("network") or {}).get("signalQuality")
+        return {"signal_quality": quality} if quality else {}

@@ -452,6 +452,12 @@
       },
       "heat_produced_pool": {
         "name": "Wärme erzeugt Pool"
+      },
+      "bacon_room_temperature": {
+        "name": "Raumtemperatur (letzte Meldung)"
+      },
+      "bacon_signal_strength": {
+        "name": "Signalstärke"
       }
     },
     "binary_sensor": {
@@ -460,6 +466,21 @@
       },
       "thermostat_rf_status": {
         "name": "Funkverbindung"
+      },
+      "bacon_ionizer": {
+        "name": "Ionisator"
+      },
+      "bacon_sleep": {
+        "name": "Schlafmodus"
+      },
+      "bacon_full_power": {
+        "name": "Boost"
+      },
+      "bacon_setback": {
+        "name": "Absenkung"
+      },
+      "bacon_online": {
+        "name": "Verbindung"
       }
     },
     "number": {

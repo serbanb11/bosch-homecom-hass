@@ -768,12 +768,39 @@ BACON_HVAC_TO_OP_MODE: dict[HVACMode, str] = {
 }
 BACON_FAN_MODES: list[str] = ["auto", "quiet", "low", "medium", "high", "turbo"]
 
+# A topics/meta payload is {"shadows": {"state": …, "schedule": …},
+# "topics": {"sensor": …}, "features": {"history": [...]}} — confirmed against the
+# HomeCom Easy 4.0.0 serializers, where BaconDeviceMetadata declares exactly
+# shadows/topics/features and ShadowsMetadata exactly state/schedule. The state
+# block is the per-field capability map this entity reads.
+_BACON_META_STATE_PATH: tuple[str, ...] = ("shadows", "state")
+
 
 def _clean_bacon_title(title: str | None) -> str | None:
     """Strip the ``%|$?*...`` suffix Bosch appends to the shadow customTitle."""
     if not title:
         return None
     return title.split("%|")[0].strip() or None
+
+
+def _bacon_meta_state(metadata: dict | None) -> dict:
+    """Return the state-field block of a topics/meta payload, or {} if absent.
+
+    Each entry looks like ``{"type": ..., "ro": bool}`` plus ``enum`` for strings
+    and ``min``/``max``/``step`` for numbers, e.g.::
+
+        "tempSetpoint": {"type": "int", "unit": "degC", "min": 16, "max": 30,
+                         "step": 1, "ro": false}
+
+    Returning ``{}`` is normal — the payload is push-only and may not have arrived
+    — and every caller falls back to a hardcoded default in that case.
+    """
+    node: Any = metadata
+    for key in _BACON_META_STATE_PATH:
+        node = node.get(key) if isinstance(node, dict) else None
+        if node is None:
+            return {}
+    return node if isinstance(node, dict) else {}
 
 
 class BoschComBaconRacClimate(
@@ -784,11 +811,8 @@ class BoschComBaconRacClimate(
     _attr_has_entity_name = True
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_target_temperature_step = 1.0
-    _attr_min_temp = 16
-    _attr_max_temp = 30
-    _attr_fan_modes = BACON_FAN_MODES
     _attr_swing_modes = [SWING_OFF, SWING_ON]
+    _attr_swing_horizontal_modes = [SWING_OFF, SWING_ON]
     _attr_hvac_modes = [
         HVACMode.OFF,
         HVACMode.COOL,
@@ -797,13 +821,6 @@ class BoschComBaconRacClimate(
         HVACMode.DRY,
         HVACMode.FAN_ONLY,
     ]
-    _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.FAN_MODE
-        | ClimateEntityFeature.SWING_MODE
-        | ClimateEntityFeature.TURN_ON
-        | ClimateEntityFeature.TURN_OFF
-    )
 
     def __init__(self, coordinator: BoschComModuleCoordinatorBaconRac) -> None:
         """Initialize the entity."""
@@ -818,6 +835,71 @@ class BoschComBaconRacClimate(
     def _reported(self) -> dict:
         data = self.coordinator.data
         return (data.reported if data else {}) or {}
+
+    @property
+    def _meta(self) -> dict:
+        """State-field metadata from topics/meta, or {} if not received yet.
+
+        Not static: the device republishes it with different fields and different
+        ``ro`` flags as its mode changes — ``tempSetpoint`` disappears entirely in
+        fan mode, ``fanSpeed`` is absent while off — so it is read per update
+        rather than cached at setup.
+        """
+        data = self.coordinator.data
+        return _bacon_meta_state(getattr(data, "metadata", None) if data else None)
+
+    @property
+    def supported_features(self) -> ClimateEntityFeature:
+        """Return the features the device currently accepts.
+
+        Deliberately dynamic. Advertising a setpoint in fan mode, a fan speed
+        while off, or a swing axis the device lacks would offer controls it
+        rejects. When no metadata has arrived yet the full set is assumed, so
+        behaviour is unchanged from before the first topics/meta publish.
+        """
+        features = ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
+        meta = self._meta
+        if not meta or "tempSetpoint" in meta:
+            features |= ClimateEntityFeature.TARGET_TEMPERATURE
+        if not meta or "fanSpeed" in meta:
+            features |= ClimateEntityFeature.FAN_MODE
+        if not meta or "vSwingEnabled" in meta:
+            features |= ClimateEntityFeature.SWING_MODE
+        if not meta or "hSwingEnabled" in meta:
+            features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
+        return features
+
+    @property
+    def fan_modes(self) -> list[str]:
+        """Return the fan speeds this device declares, else the known defaults."""
+        enum = self._meta.get("fanSpeed", {}).get("enum")
+        if isinstance(enum, list) and enum:
+            return [str(value) for value in enum]
+        return BACON_FAN_MODES
+
+    def _setpoint_bound(self, key: str, default: float) -> float:
+        """Return a numeric tempSetpoint bound from meta, else ``default``.
+
+        Uses an explicit numeric check rather than ``or`` so a legitimately
+        declared ``0`` is not mistaken for "absent" and replaced by the default.
+        """
+        value = self._meta.get("tempSetpoint", {}).get(key)
+        return value if isinstance(value, (int, float)) else default
+
+    @property
+    def min_temp(self) -> float:
+        """Return the setpoint floor the device declares, else 16 °C."""
+        return self._setpoint_bound("min", 16)
+
+    @property
+    def max_temp(self) -> float:
+        """Return the setpoint ceiling the device declares, else 30 °C."""
+        return self._setpoint_bound("max", 30)
+
+    @property
+    def target_temperature_step(self) -> float:
+        """Return the setpoint step the device declares, else 1 °C."""
+        return self._setpoint_bound("step", 1.0)
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -839,11 +921,18 @@ class BoschComBaconRacClimate(
 
     @property
     def swing_mode(self) -> str:
-        """Return the swing setting."""
-        reported = self._reported
-        if reported.get("hSwingEnabled") or reported.get("vSwingEnabled"):
-            return SWING_ON
-        return SWING_OFF
+        """Return the vertical swing setting.
+
+        hSwingEnabled and vSwingEnabled are independent louvers — both writable
+        per topics/meta — so they map to HA's two separate swing axes rather than
+        being collapsed into one control.
+        """
+        return SWING_ON if self._reported.get("vSwingEnabled") else SWING_OFF
+
+    @property
+    def swing_horizontal_mode(self) -> str:
+        """Return the horizontal swing setting."""
+        return SWING_ON if self._reported.get("hSwingEnabled") else SWING_OFF
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
@@ -879,7 +968,13 @@ class BoschComBaconRacClimate(
         await self.coordinator.async_request_refresh()
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
-        """Set new swing mode (drives both horizontal and vertical louvers)."""
-        enabled = swing_mode == SWING_ON
-        await self.coordinator.bhc.async_set_swing(horizontal=enabled, vertical=enabled)
+        """Set the vertical swing louver."""
+        await self.coordinator.bhc.async_set_swing(vertical=swing_mode == SWING_ON)
+        await self.coordinator.async_request_refresh()
+
+    async def async_set_swing_horizontal_mode(self, swing_horizontal_mode: str) -> None:
+        """Set the horizontal swing louver."""
+        await self.coordinator.bhc.async_set_swing(
+            horizontal=swing_horizontal_mode == SWING_ON
+        )
         await self.coordinator.async_request_refresh()
