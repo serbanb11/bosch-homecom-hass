@@ -620,6 +620,8 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
+        currentTemperatureLevel = None
+
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
                 currentTemperatureLevel = safe_get(
@@ -636,6 +638,8 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
             """Return unknown if null."""
             value = data.get(key)
             return value if value is not None else default
+
+        currentTemperatureLevel = None
 
         for entry in self.coordinator.data.dhw_circuits:
             if entry.get("id") == "/dhwCircuits/" + self.field:
@@ -754,6 +758,8 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
+        currentSuWiMode = None
+
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 currentSuWiMode = safe_get(entry["currentSuWiMode"], "value")
@@ -768,6 +774,8 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
             """Return unknown if null."""
             value = data.get(key)
             return value if value is not None else default
+
+        currentSuWiMode = None
 
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
@@ -817,6 +825,8 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
+        heatCoolMode = None
+
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 heatCoolMode = safe_get(entry["heatCoolMode"], "value")
@@ -831,6 +841,8 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
             """Return unknown if null."""
             value = data.get(key)
             return value if value is not None else default
+
+        heatCoolMode = None
 
         for entry in self.coordinator.data.heating_circuits:
             if entry.get("id") == "/heatingCircuits/" + self.field:
