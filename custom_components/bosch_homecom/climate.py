@@ -368,16 +368,17 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
-        if isinstance(self.coordinator, BoschComModuleCoordinatorIcom):
-            # icom: use temporaryRoomSetpoint to match the Bosch app behaviour
-            await self.coordinator.async_set_temporary_room_setpoint(
-                self.field, temperature
-            )
-        elif self._is_cooling():
-            # In cooling mode the manualRoomSetpoint endpoint returns 404;
+        if self._is_cooling():
+            # Cooling mode takes priority for all device types — in cooling the
+            # manualRoomSetpoint and temporaryRoomSetpoint endpoints return 404;
             # the writable setpoint is coolingRoomTempSetpoint instead.
             await self.coordinator.bhc.async_set_hc_cooling_room_temp_setpoint(
                 self.coordinator.unique_id, self.field, temperature
+            )
+        elif isinstance(self.coordinator, BoschComModuleCoordinatorIcom):
+            # icom (non-cooling): use temporaryRoomSetpoint to match the Bosch app behaviour
+            await self.coordinator.async_set_temporary_room_setpoint(
+                self.field, temperature
             )
         else:
             await self.coordinator.bhc.async_set_hc_manual_room_setpoint(
