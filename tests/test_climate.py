@@ -2,9 +2,10 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from homecom_alt import BHCDeviceK40
+from homecom_alt import BHCDeviceIcom, BHCDeviceK40
 
 from custom_components.bosch_homecom.climate import BoschComK40Climate
+from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorIcom
 
 
 def _make_k40_coordinator(suwi=None, heatcool=None):
@@ -40,6 +41,41 @@ def _make_k40_coordinator(suwi=None, heatcool=None):
         hourly_energy_history=None,
         indoor_humidity=None,
         devices=None,
+    )
+    return coordinator
+
+
+def _make_icom_coordinator(suwi=None):
+    """Create a mock icom coordinator with a single hc1 circuit.
+
+    Built on the real class (not MagicMock) so the isinstance check in
+    async_set_temperature and the real async_set_temporary_room_setpoint
+    delegation are exercised. Icom data has no heatCoolMode field.
+    """
+    hc1 = {
+        "id": "/heatingCircuits/hc1",
+        "operationMode": {"value": "auto"},
+        "currentSuWiMode": {"value": suwi},
+        "currentRoomSetpoint": {"value": 21, "unitOfMeasure": "C"},
+    }
+    coordinator = object.__new__(BoschComModuleCoordinatorIcom)
+    coordinator.unique_id = "icom123"
+    coordinator.device_info = {"identifiers": {("bosch_homecom", "icom123")}}
+    coordinator.bhc = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.device = {"deviceId": "icom123", "deviceType": "icom"}
+    coordinator.data = BHCDeviceIcom(
+        device="icom123",
+        firmware=[],
+        notifications=[],
+        holiday_mode=None,
+        heat_sources=None,
+        dhw_circuits=None,
+        heating_circuits=[hc1],
+        solar_circuits=None,
+        ventilation=None,
+        system_info=None,
+        system_bus=None,
     )
     return coordinator
 
@@ -91,6 +127,40 @@ async def test_set_temperature_cooling_season_while_idle():
     coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_awaited_once_with(
         "k40123", "hc1", 22
     )
+    coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
+
+
+async def test_set_temperature_icom_cooling_uses_cooling_setpoint():
+    """Icom in cooling mode writes coolingRoomTempSetpoint, not temporary.
+
+    Regression test for the branch order fixed in #173: the icom-specific
+    temporaryRoomSetpoint path must not shadow the cooling path (404s).
+    """
+    coordinator = _make_icom_coordinator(suwi="cooling")
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_temperature(temperature=24)
+
+    coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_awaited_once_with(
+        "icom123", "hc1", 24
+    )
+    coordinator.bhc.async_set_hc_temporary_room_setpoint.assert_not_awaited()
+    coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
+    assert climate._attr_target_temperature == 24
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_set_temperature_icom_heating_uses_temporary_setpoint():
+    """Icom in heating mode still uses the temporaryRoomSetpoint path."""
+    coordinator = _make_icom_coordinator(suwi="forced")
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_temperature(temperature=21)
+
+    coordinator.bhc.async_set_hc_temporary_room_setpoint.assert_awaited_once_with(
+        "icom123", "hc1", 21
+    )
+    coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_not_awaited()
     coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
 
 
