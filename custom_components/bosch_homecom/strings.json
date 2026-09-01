@@ -455,8 +455,8 @@
       "bacon_room_temperature": {
         "name": "Room temperature (last reported)"
       },
-      "bacon_signal_strength": {
-        "name": "Signal strength"
+      "bacon_signal_quality": {
+        "name": "Signal quality"
       }
     },
     "binary_sensor": {
@@ -465,18 +465,6 @@
       },
       "thermostat_rf_status": {
         "name": "RF Connection"
-      },
-      "bacon_ionizer": {
-        "name": "Ionizer"
-      },
-      "bacon_sleep": {
-        "name": "Sleep mode"
-      },
-      "bacon_full_power": {
-        "name": "Boost"
-      },
-      "bacon_setback": {
-        "name": "Setback"
       },
       "bacon_online": {
         "name": "Connectivity"
@@ -537,6 +525,27 @@
       },
       "pool_enabled": {
         "name": "Pool heating"
+      },
+      "bacon_full_power": {
+        "name": "Boost"
+      },
+      "bacon_ionizer": {
+        "name": "Ionizer"
+      },
+      "bacon_sleep": {
+        "name": "Sleep mode"
+      },
+      "bacon_frost": {
+        "name": "8 °C heating"
+      },
+      "bacon_eco": {
+        "name": "Eco"
+      },
+      "bacon_breeze_away": {
+        "name": "Wind avoid me"
+      },
+      "bacon_save_plus": {
+        "name": "Save+"
       }
     },
     "water_heater": {

@@ -620,10 +620,12 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.dhw_circuits:
+        currentTemperatureLevel = None
+
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
                 currentTemperatureLevel = safe_get(
-                    entry["currentTemperatureLevel"], "value"
+                    entry.get("currentTemperatureLevel") or {}, "value"
                 )
 
         return currentTemperatureLevel
@@ -637,10 +639,12 @@ class BoschComSelectDhwCurrentTemp(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.dhw_circuits:
+        currentTemperatureLevel = None
+
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
                 currentTemperatureLevel = safe_get(
-                    entry["currentTemperatureLevel"], "value"
+                    entry.get("currentTemperatureLevel") or {}, "value"
                 )
 
         self._attr_current_option = currentTemperatureLevel
@@ -754,9 +758,11 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.heating_circuits:
+        currentSuWiMode = None
+
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                currentSuWiMode = safe_get(entry["currentSuWiMode"], "value")
+                currentSuWiMode = safe_get(entry.get("currentSuWiMode") or {}, "value")
 
         return currentSuWiMode
 
@@ -769,9 +775,11 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.heating_circuits:
+        currentSuWiMode = None
+
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                currentSuWiMode = safe_get(entry["currentSuWiMode"], "value")
+                currentSuWiMode = safe_get(entry.get("currentSuWiMode") or {}, "value")
 
         self._attr_current_option = currentSuWiMode
         self.async_write_ha_state()
@@ -817,9 +825,11 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.heating_circuits:
+        heatCoolMode = None
+
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                heatCoolMode = safe_get(entry["heatCoolMode"], "value")
+                heatCoolMode = safe_get(entry.get("heatCoolMode") or {}, "value")
 
         return heatCoolMode
 
@@ -832,9 +842,11 @@ class BoschComSelectHcHeatcoolMode(CoordinatorEntity, SelectEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.heating_circuits:
+        heatCoolMode = None
+
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                heatCoolMode = safe_get(entry["heatCoolMode"], "value")
+                heatCoolMode = safe_get(entry.get("heatCoolMode") or {}, "value")
 
         self._attr_current_option = heatCoolMode
         self.async_write_ha_state()

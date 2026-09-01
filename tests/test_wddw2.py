@@ -3,9 +3,14 @@
 from unittest.mock import AsyncMock, Mock
 
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
+from homeassistant.helpers import entity_registry as er
 from homecom_alt import BHCDeviceWddw2
 
-from custom_components.bosch_homecom.sensor import BoschComSensorNotificationsWddw2
+from custom_components.bosch_homecom.const import BOSCH_SENSOR_DESCRIPTORS, DOMAIN
+from custom_components.bosch_homecom.sensor import (
+    BoschComSensorNotificationsWddw2,
+    async_setup_entry as sensor_async_setup_entry,
+)
 from custom_components.bosch_homecom.switch import (
     BoschComWddw2HolidayModeSwitch,
     BoschComWddw2SafetyTempSwitch,
@@ -270,3 +275,51 @@ def test_notifications_history_attribute():
         "active": False,
         "severity": "warning",
     }
+
+
+# ---------------------------------------------------------------------------
+# Issue #175: descriptor sensors are strictly per-circuit
+# ---------------------------------------------------------------------------
+
+
+def _dhw1_circuit():
+    return {"id": "/dhwCircuits/dhw1", "actualTemp": {"value": 48}}
+
+
+async def test_descriptor_sensors_use_per_circuit_unique_ids(hass):
+    """Healthy circuits yield only dhw1-suffixed ids, never the old fallback.
+
+    The exact "<device>-dhw1-<key>" format is pinned because it keys users'
+    entity history — changing it orphans their entities (issue #175).
+    """
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    config_entry = Mock()
+    config_entry.runtime_data = [coord]
+
+    entities = []
+    await sensor_async_setup_entry(hass, config_entry, entities.extend)
+
+    unique_ids = {e._attr_unique_id for e in entities if e._attr_unique_id}
+    for desc in BOSCH_SENSOR_DESCRIPTORS["wddw2"]:
+        assert f"102051881-dhw1-{desc['key']}" in unique_ids
+        assert f"102051881-dhw-{desc['key']}" not in unique_ids
+
+
+async def test_setup_removes_stale_fallback_registry_entries(hass):
+    """Registry orphans from the removed "-dhw-" fallback are cleaned up."""
+    registry = er.async_get(hass)
+    stale = registry.async_get_or_create(
+        "sensor", DOMAIN, "102051881-dhw-operation_mode"
+    )
+    legit = registry.async_get_or_create(
+        "sensor", DOMAIN, "102051881-dhw1-operation_mode"
+    )
+
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    config_entry = Mock()
+    config_entry.runtime_data = [coord]
+
+    await sensor_async_setup_entry(hass, config_entry, lambda entities: None)
+
+    assert registry.async_get(stale.entity_id) is None
+    assert registry.async_get(legit.entity_id) is not None

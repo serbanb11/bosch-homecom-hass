@@ -27,6 +27,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .bacon import bacon_meta_state
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorIcom,
@@ -101,16 +102,45 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
     _attr_preset_modes = [PRESET_NONE, PRESET_BOOST, PRESET_ECO]
     _attr_swing_horizontal_modes = [SWING_OFF, SWING_ON]
     _attr_swing_modes = [SWING_OFF, SWING_ON]
-    _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
-        | ClimateEntityFeature.FAN_MODE
-        | ClimateEntityFeature.PRESET_MODE
-        | ClimateEntityFeature.SWING_MODE
-        | ClimateEntityFeature.SWING_HORIZONTAL_MODE
-        | ClimateEntityFeature.TURN_OFF
-        | ClimateEntityFeature.TURN_ON
-    )
+    # Defaults so the entity always renders even when the unit does not report a
+    # given field. Without these, advertising a feature whose value was never
+    # assigned raises AttributeError on the first state write (see #167).
+    _attr_fan_mode: str | None = None
+    _attr_swing_mode: str | None = None
+    _attr_swing_horizontal_mode: str | None = None
+
+    @property
+    def supported_features(self) -> ClimateEntityFeature:
+        """Advertise only the airflow axes the unit actually reports.
+
+        Fan speed and the two swing louvers are optional per model; advertising a
+        control the unit never reports would both offer a dead control and, for
+        swing, crash the entity when its value is read (see #167).
+        """
+        present = self._present_function_ids()
+        features = (
+            ClimateEntityFeature.TARGET_TEMPERATURE
+            | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+            | ClimateEntityFeature.PRESET_MODE
+            | ClimateEntityFeature.TURN_OFF
+            | ClimateEntityFeature.TURN_ON
+        )
+        if "fanSpeed" in present:
+            features |= ClimateEntityFeature.FAN_MODE
+        if "airFlowVertical" in present:
+            features |= ClimateEntityFeature.SWING_MODE
+        if "airFlowHorizontal" in present:
+            features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
+        return features
+
+    def _present_function_ids(self) -> set[str]:
+        """Normalized ids present in the RAC standard-functions payload."""
+        data = self.coordinator.data
+        return {
+            ref["id"].split("/", 2)[-1]
+            for ref in (getattr(data, "stardard_functions", None) or [])
+            if isinstance(ref, dict) and "id" in ref
+        }
 
     def __init__(
         self,
@@ -769,39 +799,12 @@ BACON_HVAC_TO_OP_MODE: dict[HVACMode, str] = {
 }
 BACON_FAN_MODES: list[str] = ["auto", "quiet", "low", "medium", "high", "turbo"]
 
-# A topics/meta payload is {"shadows": {"state": …, "schedule": …},
-# "topics": {"sensor": …}, "features": {"history": [...]}} — confirmed against the
-# HomeCom Easy 4.0.0 serializers, where BaconDeviceMetadata declares exactly
-# shadows/topics/features and ShadowsMetadata exactly state/schedule. The state
-# block is the per-field capability map this entity reads.
-_BACON_META_STATE_PATH: tuple[str, ...] = ("shadows", "state")
-
 
 def _clean_bacon_title(title: str | None) -> str | None:
     """Strip the ``%|$?*...`` suffix Bosch appends to the shadow customTitle."""
     if not title:
         return None
     return title.split("%|")[0].strip() or None
-
-
-def _bacon_meta_state(metadata: dict | None) -> dict:
-    """Return the state-field block of a topics/meta payload, or {} if absent.
-
-    Each entry looks like ``{"type": ..., "ro": bool}`` plus ``enum`` for strings
-    and ``min``/``max``/``step`` for numbers, e.g.::
-
-        "tempSetpoint": {"type": "int", "unit": "degC", "min": 16, "max": 30,
-                         "step": 1, "ro": false}
-
-    Returning ``{}`` is normal — the payload is push-only and may not have arrived
-    — and every caller falls back to a hardcoded default in that case.
-    """
-    node: Any = metadata
-    for key in _BACON_META_STATE_PATH:
-        node = node.get(key) if isinstance(node, dict) else None
-        if node is None:
-            return {}
-    return node if isinstance(node, dict) else {}
 
 
 class BoschComBaconRacClimate(
@@ -847,7 +850,7 @@ class BoschComBaconRacClimate(
         rather than cached at setup.
         """
         data = self.coordinator.data
-        return _bacon_meta_state(getattr(data, "metadata", None) if data else None)
+        return bacon_meta_state(getattr(data, "metadata", None) if data else None)
 
     @property
     def supported_features(self) -> ClimateEntityFeature:
@@ -901,6 +904,19 @@ class BoschComBaconRacClimate(
     def target_temperature_step(self) -> float:
         """Return the setpoint step the device declares, else 1 °C."""
         return self._setpoint_bound("step", 1.0)
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Return the room temperature from the push-only topics/sensor channel.
+
+        Reported regardless of age: on current firmware it updates live, and the
+        stale-reading behaviour seen on some units is a Bosch firmware issue being
+        fixed rather than something to hide here (see #162/#164).
+        """
+        data = self.coordinator.data
+        sensor = (getattr(data, "sensor", None) if data else None) or {}
+        value = sensor.get("roomTemperature")
+        return value if isinstance(value, (int, float)) else None
 
     @property
     def hvac_mode(self) -> HVACMode:

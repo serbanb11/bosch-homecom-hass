@@ -42,9 +42,11 @@ async def test_async_get_config_entry_diagnostics_redacts_refresh_token(hass):
     assert diagnostics["info"][CONF_CODE] == "**REDACTED**"
     assert diagnostics["info"][CONF_TOKEN] == "**REDACTED**"
     assert diagnostics["info"][CONF_REFRESH] == "**REDACTED**"
-    # Non-bacon coordinators have no shadow -> None (not a spurious empty dict).
-    assert diagnostics["data"][0]["reported"] is None
-    assert diagnostics["data"][0]["desired"] is None
+    # Non-bacon coordinators dump the pointt fields, not the shadow ones.
+    entry_out = diagnostics["data"][0]
+    assert "reported" not in entry_out
+    assert "firmwares" in entry_out
+    assert "stardard_functions" in entry_out
 
 
 @pytest.mark.asyncio
@@ -73,3 +75,6 @@ async def test_async_get_config_entry_diagnostics_dumps_bacon_shadow(hass):
     assert dumped["reported"]["opMode"] == "cool"
     assert dumped["reported"]["tempSetpoint"] == 23
     assert dumped["desired"] == {"tempSetpoint": 23}
+    # The empty pointt function lists are omitted for bacon devices.
+    assert "firmwares" not in dumped
+    assert "stardard_functions" not in dumped

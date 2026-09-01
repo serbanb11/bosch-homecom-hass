@@ -6,21 +6,24 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.climate import ClimateEntityFeature
+from homeassistant.exceptions import HomeAssistantError
 import pytest
 
-from custom_components.bosch_homecom.binary_sensor import (
-    BoschComBaconFeatureSensor,
-    BoschComBaconOnlineSensor,
+from custom_components.bosch_homecom.bacon import (
+    bacon_feature_fields,
+    bacon_meta_state,
+    humanize_feature,
 )
+from custom_components.bosch_homecom.binary_sensor import BoschComBaconOnlineSensor
 from custom_components.bosch_homecom.climate import (
     BoschComBaconRacClimate,
-    _bacon_meta_state,
     _clean_bacon_title,
 )
 from custom_components.bosch_homecom.sensor import (
     BoschComBaconRoomTemperature,
-    BoschComBaconSignalStrength,
+    BoschComBaconSignalQuality,
 )
+from custom_components.bosch_homecom.switch import BoschComBaconFeatureSwitch
 
 # A topics/sensor payload's last item, as flattened by homecom_alt's get_sensor.
 SAMPLE_SENSOR = {"timestamp": 1785960137, "roomTemperature": 23.5}
@@ -47,7 +50,7 @@ SAMPLE_META = {
 }
 SAMPLE_INFO = {
     "online": True,
-    "network": {"signalStrength": -55, "signalQuality": "good"},
+    "network": {"signalQuality": "good"},
 }
 SAMPLE_REPORTED = {
     "powerEnabled": True,
@@ -83,6 +86,7 @@ def _coordinator(
     coordinator.data = data
     coordinator.bhc = MagicMock()
     coordinator.bhc.async_set_swing = AsyncMock()
+    coordinator.bhc.async_set_feature = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
     return coordinator
 
@@ -100,11 +104,11 @@ def test_clean_bacon_title_strips_suffix():
 
 def test_bacon_meta_state_navigates_and_defaults():
     """_bacon_meta_state returns shadows.state, or {} when missing/malformed."""
-    assert _bacon_meta_state(SAMPLE_META) == SAMPLE_META["shadows"]["state"]
-    assert _bacon_meta_state(None) == {}
-    assert _bacon_meta_state({}) == {}
-    assert _bacon_meta_state({"shadows": {}}) == {}
-    assert _bacon_meta_state({"shadows": {"state": "notadict"}}) == {}
+    assert bacon_meta_state(SAMPLE_META) == SAMPLE_META["shadows"]["state"]
+    assert bacon_meta_state(None) == {}
+    assert bacon_meta_state({}) == {}
+    assert bacon_meta_state({"shadows": {}}) == {}
+    assert bacon_meta_state({"shadows": {"state": "notadict"}}) == {}
 
 
 # --- climate ------------------------------------------------------------------
@@ -210,61 +214,119 @@ async def test_climate_set_swing_horizontal_only_touches_horizontal():
     coordinator.async_request_refresh.assert_awaited_once()
 
 
-# --- binary_sensor ------------------------------------------------------------
+# --- switch (comfort features) ------------------------------------------------
 
 
-def test_feature_sensor_is_on_from_reported():
-    """A comfort-feature sensor reflects its reported boolean."""
-    coordinator = _coordinator(reported={"ionizerEnabled": True})
-    sensor = BoschComBaconFeatureSensor(
-        coordinator=coordinator, field="ionizerEnabled", translation_key="bacon_ionizer"
+def test_feature_fields_enumerated_excluding_controls():
+    """Only comfort *Enabled fields are enumerated; climate controls are excluded."""
+    reported = {
+        "powerEnabled": True,
+        "vSwingEnabled": True,
+        "hSwingEnabled": False,
+        "ionizerEnabled": False,
+        "setbackEnabled": False,
+        "breezeAwayEnabled": True,
+        "opMode": "cool",
+    }
+    assert bacon_feature_fields(reported) == [
+        "ionizerEnabled",
+        "setbackEnabled",
+        "breezeAwayEnabled",
+    ]
+
+
+def test_humanize_unknown_feature():
+    """An unknown fooBarEnabled field becomes a readable fallback name."""
+    assert humanize_feature("breezeAwayEnabled") == "Breeze Away"
+    assert humanize_feature("savePlusEnabled") == "Save Plus"
+
+
+def test_feature_switch_known_field_uses_app_name_key():
+    """setbackEnabled maps to the frost-protection key, not setback/eco."""
+    switch = BoschComBaconFeatureSwitch(
+        coordinator=_coordinator(reported={"setbackEnabled": False}),
+        field="setbackEnabled",
     )
-    assert sensor.is_on is True
-    assert sensor.unique_id == "86DM-1-bacon_ionizer"
+    assert switch._attr_translation_key == "bacon_frost"
+    assert switch.unique_id == "86DM-1-bacon_frost"
+    assert switch.is_on is False
 
 
-def test_feature_sensor_none_when_absent_or_not_bool():
+def test_feature_switch_unknown_field_humanized():
+    """An unmapped field falls back to a humanized name and the raw field id."""
+    switch = BoschComBaconFeatureSwitch(
+        coordinator=_coordinator(reported={"quietModeEnabled": True}),
+        field="quietModeEnabled",
+    )
+    assert switch._attr_name == "Quiet Mode"
+    assert switch.unique_id == "86DM-1-quietModeEnabled"
+    assert switch.is_on is True
+
+
+def test_feature_switch_none_when_absent_or_not_bool():
     """Missing or non-boolean values yield None (unknown), never a guess."""
     assert (
-        BoschComBaconFeatureSensor(
-            coordinator=_coordinator(reported={}),
-            field="ionizerEnabled",
-            translation_key="bacon_ionizer",
+        BoschComBaconFeatureSwitch(
+            coordinator=_coordinator(reported={}), field="ionizerEnabled"
         ).is_on
         is None
     )
     assert (
-        BoschComBaconFeatureSensor(
+        BoschComBaconFeatureSwitch(
             coordinator=_coordinator(reported={"ionizerEnabled": "yes"}),
             field="ionizerEnabled",
-            translation_key="bacon_ionizer",
         ).is_on
         is None
     )
 
 
-def test_feature_sensor_writable_now_attribute():
+def test_feature_switch_writable_now_attribute():
     """writable_now mirrors the meta ro flag, and is absent when meta is silent."""
-    writable = BoschComBaconFeatureSensor(
-        coordinator=_coordinator(metadata=SAMPLE_META),
-        field="ionizerEnabled",
-        translation_key="bacon_ionizer",
+    writable = BoschComBaconFeatureSwitch(
+        coordinator=_coordinator(metadata=SAMPLE_META), field="ionizerEnabled"
     )
     assert writable.extra_state_attributes == {"writable_now": True}
 
-    locked = BoschComBaconFeatureSensor(
-        coordinator=_coordinator(metadata=SAMPLE_META),
-        field="sleepEnabled",
-        translation_key="bacon_sleep",
+    locked = BoschComBaconFeatureSwitch(
+        coordinator=_coordinator(metadata=SAMPLE_META), field="sleepEnabled"
     )
     assert locked.extra_state_attributes == {"writable_now": False}
 
-    no_meta = BoschComBaconFeatureSensor(
-        coordinator=_coordinator(metadata=None),
-        field="ionizerEnabled",
-        translation_key="bacon_ionizer",
+    no_meta = BoschComBaconFeatureSwitch(
+        coordinator=_coordinator(metadata=None), field="ionizerEnabled"
     )
     assert no_meta.extra_state_attributes == {}
+
+
+async def test_feature_switch_turn_on_publishes_when_writable():
+    """Toggling a writable feature publishes the field and refreshes."""
+    # ionizerEnabled is off in the shadow but writable per SAMPLE_META.
+    coordinator = _coordinator(reported={"ionizerEnabled": False}, metadata=SAMPLE_META)
+    switch = BoschComBaconFeatureSwitch(coordinator=coordinator, field="ionizerEnabled")
+    assert switch.is_on is False
+
+    await switch.async_turn_on()
+    coordinator.bhc.async_set_feature.assert_awaited_once_with("ionizerEnabled", True)
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_feature_switch_turn_on_publishes_without_meta():
+    """With no meta yet, the write is attempted (device decides)."""
+    coordinator = _coordinator(metadata=None)
+    switch = BoschComBaconFeatureSwitch(coordinator=coordinator, field="ionizerEnabled")
+
+    await switch.async_turn_off()
+    coordinator.bhc.async_set_feature.assert_awaited_once_with("ionizerEnabled", False)
+
+
+async def test_feature_switch_toggle_raises_when_read_only():
+    """A field the device currently locks raises instead of silently failing."""
+    coordinator = _coordinator(metadata=SAMPLE_META)  # sleepEnabled ro=True
+    switch = BoschComBaconFeatureSwitch(coordinator=coordinator, field="sleepEnabled")
+
+    with pytest.raises(HomeAssistantError):
+        await switch.async_turn_on()
+    coordinator.bhc.async_set_feature.assert_not_awaited()
 
 
 def test_online_sensor_from_info():
@@ -279,6 +341,21 @@ def test_online_sensor_none_before_info():
     sensor = BoschComBaconOnlineSensor(coordinator=_coordinator(info=None))
     assert sensor.is_on is None
     assert sensor.extra_state_attributes == {}
+
+
+# --- climate current temperature ----------------------------------------------
+
+
+def test_climate_current_temperature_from_sensor_channel():
+    """current_temperature reads roomTemperature regardless of its age."""
+    climate = BoschComBaconRacClimate(coordinator=_coordinator(sensor=SAMPLE_SENSOR))
+    assert climate.current_temperature == 23.5
+
+
+def test_climate_current_temperature_none_before_reading():
+    """No topics/sensor yet -> current_temperature is None."""
+    climate = BoschComBaconRacClimate(coordinator=_coordinator(sensor=None))
+    assert climate.current_temperature is None
 
 
 # --- sensor -------------------------------------------------------------------
@@ -304,21 +381,29 @@ def test_room_temperature_none_before_reading():
     assert sensor.extra_state_attributes == {}
 
 
-def test_signal_strength_value_and_quality():
-    """Signal strength reports the dBm value and the qualitative rating."""
-    sensor = BoschComBaconSignalStrength(
+def test_signal_quality_from_info():
+    """Signal quality reports the reported word (not a dBm number)."""
+    sensor = BoschComBaconSignalQuality(
         coordinator=_coordinator(info=SAMPLE_INFO), config_entry=None
     )
-    assert sensor.native_value == -55
-    assert sensor.extra_state_attributes == {"signal_quality": "good"}
+    assert sensor.native_value == "good"
 
 
-def test_signal_strength_none_before_info():
-    """Before topics/info arrives there is no value."""
-    sensor = BoschComBaconSignalStrength(
-        coordinator=_coordinator(info=None), config_entry=None
+def test_signal_quality_none_for_unknown_or_missing():
+    """An unrecognised or missing quality value yields None, not a bad enum state."""
+    assert (
+        BoschComBaconSignalQuality(
+            coordinator=_coordinator(info={"network": {"signalQuality": "amazing"}}),
+            config_entry=None,
+        ).native_value
+        is None
     )
-    assert sensor.native_value is None
+    assert (
+        BoschComBaconSignalQuality(
+            coordinator=_coordinator(info=None), config_entry=None
+        ).native_value
+        is None
+    )
 
 
 @pytest.mark.parametrize("data_none", [True, False])

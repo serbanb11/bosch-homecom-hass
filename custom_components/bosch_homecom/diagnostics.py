@@ -81,71 +81,38 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, config_entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    device: list[Any] = []
-    firmware: list[Any] = []
-    notifications: list[Any] = []
-    stardard_functions: list[Any] = []  # (mantém a grafia para compatibilidade)
-    advanced_functions: list[Any] = []
-    switch_programs: list[Any] = []
-    # Matter/Bacon (bacon_rac) devices carry no standard_functions; their whole
-    # state lives in the MQTT device shadow. Dump reported/desired so bacon
-    # reports are actionable instead of showing empty function lists.
-    reported: list[Any] = []
-    desired: list[Any] = []
-    # Also bacon-only, and not in the shadow: the push-only "topics" channel.
-    # sensor is where roomTemperature lives, meta carries the device's real
-    # capabilities, info its firmware and health.
-    sensor: list[Any] = []
-    metadata: list[Any] = []
-    info: list[Any] = []
+    data_out: list[dict[str, Any]] = []
+    for coordinator in config_entry.runtime_data:
+        data = coordinator.data
+        device = getattr(data, "device", {}) or {}
+        if device.get("deviceType") == "bacon_rac":
+            # Matter/Bacon devices have no pointt function lists; their whole state
+            # lives in the MQTT shadow (reported/desired) and the push-only topics
+            # channel (sensor/metadata/info). Skip the empty pointt fields.
+            data_out.append(
+                {
+                    "devices": device,
+                    "reported": getattr(data, "reported", None),
+                    "desired": getattr(data, "desired", None),
+                    "sensor": getattr(data, "sensor", None),
+                    "metadata": getattr(data, "metadata", None),
+                    "info": getattr(data, "info", None),
+                }
+            )
+        else:
+            data_out.append(
+                {
+                    "devices": device,
+                    "firmwares": getattr(data, "firmware", {}),
+                    "notifications": getattr(data, "notifications", []),
+                    # (mantém a grafia para compatibilidade)
+                    "stardard_functions": getattr(data, "stardard_functions", []),
+                    "advanced_functions": getattr(data, "advanced_functions", []),
+                    "switch_programs": getattr(data, "switch_programs", []),
+                }
+            )
 
     coordinators = config_entry.runtime_data
-    for coordinator in coordinators:
-        data = coordinator.data
-        device.append(getattr(data, "device", {}))
-        firmware.append(getattr(data, "firmware", {}))
-        notifications.append(getattr(data, "notifications", []))
-        # estes só existem em RAC; nos outros devolvemos lista vazia
-        stardard_functions.append(getattr(data, "stardard_functions", []))
-        advanced_functions.append(getattr(data, "advanced_functions", []))
-        switch_programs.append(getattr(data, "switch_programs", []))
-        # só existem em bacon_rac; nos outros devolvemos None
-        reported.append(getattr(data, "reported", None))
-        desired.append(getattr(data, "desired", None))
-        sensor.append(getattr(data, "sensor", None))
-        metadata.append(getattr(data, "metadata", None))
-        info.append(getattr(data, "info", None))
-
-    data_out = [
-        {
-            "devices": a,
-            "firmwares": b,
-            "notifications": c,
-            "stardard_functions": d,
-            "advanced_functions": e,
-            "switch_programs": f,
-            "reported": g,
-            "desired": h,
-            "sensor": i,
-            "metadata": j,
-            "info": k,
-        }
-        for a, b, c, d, e, f, g, h, i, j, k in zip(
-            device,
-            firmware,
-            notifications,
-            stardard_functions,
-            advanced_functions,
-            switch_programs,
-            reported,
-            desired,
-            sensor,
-            metadata,
-            info,
-            strict=False,
-        )
-    ]
-
     return {
         "info": async_redact_data(config_entry.data, TO_REDACT),
         "data": data_out,

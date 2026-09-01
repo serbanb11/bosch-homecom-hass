@@ -18,7 +18,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     PERCENTAGE,
-    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfEnergy,
     UnitOfPower,
     UnitOfPressure,
@@ -27,11 +26,12 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import BOSCH_SENSOR_DESCRIPTORS, WDDW2_NOTIFICATION_CODES
+from .const import BOSCH_SENSOR_DESCRIPTORS, DOMAIN, WDDW2_NOTIFICATION_CODES
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
@@ -57,10 +57,8 @@ async def async_setup_entry(
     coordinators = config_entry.runtime_data
     entities: list[SensorEntity] = []
 
-    def _resolve_path(path: list[str], dhw_id: str | None) -> list[str]:
+    def _resolve_path(path: list[str], dhw_id: str) -> list[str]:
         """Return a path with {dhw_id} placeholders replaced, if any."""
-        if dhw_id is None:
-            return path
         resolved = []
         for p in path:
             resolved.append(p.format(dhw_id=dhw_id) if "{" in p else p)
@@ -93,7 +91,7 @@ async def async_setup_entry(
                     BoschComBaconRoomTemperature(
                         coordinator=coordinator, config_entry=config_entry
                     ),
-                    BoschComBaconSignalStrength(
+                    BoschComBaconSignalQuality(
                         coordinator=coordinator, config_entry=config_entry
                     ),
                 ]
@@ -260,24 +258,37 @@ async def async_setup_entry(
             # NEW: generic sensors from descriptors (BOSCH_SENSOR_DESCRIPTORS["wddw2"])
             wddw2_desc = BOSCH_SENSOR_DESCRIPTORS.get("wddw2", [])
             if wddw2_desc:
-                # If descriptors are per-circuit, try to expand per each dhwX
+                # Per-circuit only. The former "or [None]" fallback minted an
+                # alternate "-dhw-" unique-id namespace whenever a transient
+                # cloud failure left dhw_circuits empty at setup, duplicating
+                # every descriptor sensor (issue #175). The wddw2 coordinator
+                # now fails the refresh instead of publishing empty circuits.
                 dhw_ids = [
                     ref["id"].split("/")[-1]
                     for ref in coordinator.data.dhw_circuits
                     if re.fullmatch(r"dhw\d", ref["id"].split("/")[-1])
-                ] or [
-                    None
-                ]  # fallback to single set if not per circuit
+                ]
+
+                # Remove registry orphans minted by the removed fallback so
+                # affected installs don't keep permanently-unavailable
+                # duplicates. Real circuits never produce a bare "dhw" id
+                # (the regex requires a digit), so this only matches them.
+                if dhw_ids:
+                    entity_registry = er.async_get(hass)
+                    for desc in wddw2_desc:
+                        stale_entity_id = entity_registry.async_get_entity_id(
+                            "sensor",
+                            DOMAIN,
+                            f"{coordinator.unique_id}-dhw-{desc['key']}",
+                        )
+                        if stale_entity_id:
+                            entity_registry.async_remove(stale_entity_id)
 
                 for desc in wddw2_desc:
                     for dhw_id in dhw_ids:
                         path = desc.get("path", [])
                         resolved_path = _resolve_path(path, dhw_id)
-                        unique_suffix = (
-                            f"{(dhw_id or 'dhw')}-{desc['key']}"
-                            if dhw_id
-                            else f"dhw-{desc['key']}"
-                        )
+                        unique_suffix = f"{dhw_id}-{desc['key']}"
                         try:
                             entities.append(
                                 BoschComGenericSensor(
@@ -3546,13 +3557,17 @@ class BoschComBaconRoomTemperature(BoschComSensorBase):
         }
 
 
-class BoschComBaconSignalStrength(BoschComSensorBase):
-    """Wi-Fi signal strength a bacon device reports on topics/info."""
+class BoschComBaconSignalQuality(BoschComSensorBase):
+    """Wi-Fi signal quality a bacon device reports on topics/info.
+
+    The device sends a qualitative word (``excellent``/``good``/…), not a numeric
+    dBm value, so this is a plain text sensor rather than a ``signal_strength``
+    measurement (see #162).
+    """
 
     _attr_has_entity_name = True
-    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
-    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["excellent", "good", "fair", "poor"]
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
 
@@ -3561,25 +3576,16 @@ class BoschComBaconSignalStrength(BoschComSensorBase):
         super().__init__(
             coordinator=coordinator,
             config_entry=config_entry,
-            unique_id=f"{coordinator.unique_id}-signal-strength",
+            unique_id=f"{coordinator.unique_id}-signal-quality",
             icon="mdi:wifi",
         )
-        self._attr_translation_key = "bacon_signal_strength"
+        self._attr_translation_key = "bacon_signal_quality"
         self._attr_should_poll = False
 
     @property
-    def native_value(self) -> int | None:
-        """Return the reported signal strength."""
-        data = self.coordinator.data
-        info = (getattr(data, "info", None) if data else None) or {}
-        network = info.get("network") or {}
-        value = network.get("signalStrength")
-        return value if isinstance(value, int) else None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the qualitative rating the device sends alongside."""
+    def native_value(self) -> str | None:
+        """Return the reported signal quality word, if one of the known values."""
         data = self.coordinator.data
         info = (getattr(data, "info", None) if data else None) or {}
         quality = (info.get("network") or {}).get("signalQuality")
-        return {"signal_quality": quality} if quality else {}
+        return quality if quality in self._attr_options else None

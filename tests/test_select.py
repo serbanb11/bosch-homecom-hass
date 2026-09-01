@@ -3,10 +3,14 @@
 from unittest.mock import AsyncMock, MagicMock
 
 from homecom_alt import BHCDeviceCommodule, BHCDeviceRac
+import pytest
 
 from custom_components.bosch_homecom.select import (
     BoschComCommoduleChargingStrategySelect,
+    BoschComSelectDhwCurrentTemp,
     BoschComSelectHcCoolingOperationMode,
+    BoschComSelectHcHeatcoolMode,
+    BoschComSelectHcSuwiMode,
     async_setup_entry,
 )
 
@@ -198,3 +202,77 @@ async def test_cooling_operation_mode_select_calls_library_and_refreshes():
         "k40-123", "hc1", "auto"
     )
     coordinator.async_request_refresh.assert_awaited_once()
+
+
+# Classes that read their state variable after a matching loop — regression
+# cases for the UnboundLocalError reported in #172 and the unguarded nested
+# field access (same family as #176).
+_LOOP_STATE_CASES = [
+    (BoschComSelectDhwCurrentTemp, "dhw_circuits", "dhw1", "currentTemperatureLevel"),
+    (BoschComSelectHcSuwiMode, "heating_circuits", "hc1", "currentSuWiMode"),
+    (BoschComSelectHcHeatcoolMode, "heating_circuits", "hc1", "heatCoolMode"),
+]
+
+_CIRCUIT_PREFIX = {
+    "dhw_circuits": "/dhwCircuits/",
+    "heating_circuits": "/heatingCircuits/",
+}
+
+
+def _make_loop_state_select(cls, attr, field, circuits):
+    """Build one of the loop-state selects on a coordinator carrying circuits."""
+    coordinator = _make_k40_coordinator([])
+    setattr(coordinator.data, attr, circuits)
+    select = cls(coordinator=coordinator, field=field, allowedValues=["high", "eco"])
+    select.async_write_ha_state = MagicMock()
+    return select
+
+
+@pytest.mark.parametrize(("cls", "attr", "field", "key"), _LOOP_STATE_CASES)
+async def test_select_no_matching_circuit_is_none(cls, attr, field, key):
+    """No matching circuit yields None instead of UnboundLocalError (#172)."""
+    select = _make_loop_state_select(cls, attr, field, [])
+
+    assert select.current_option is None
+
+    select._handle_coordinator_update()
+    assert select._attr_current_option is None
+    select.async_write_ha_state.assert_called_once()
+
+
+@pytest.mark.parametrize(("cls", "attr", "field", "key"), _LOOP_STATE_CASES)
+async def test_select_circuits_list_none_is_none(cls, attr, field, key):
+    """A transiently missing circuits list yields None instead of raising."""
+    select = _make_loop_state_select(cls, attr, field, None)
+
+    assert select.current_option is None
+
+    select._handle_coordinator_update()
+    assert select._attr_current_option is None
+
+
+@pytest.mark.parametrize(("cls", "attr", "field", "key"), _LOOP_STATE_CASES)
+@pytest.mark.parametrize("payload", [{}, None])
+async def test_select_missing_or_null_field_is_unknown(cls, attr, field, key, payload):
+    """A matching circuit without the field yields 'unknown' instead of raising."""
+    circuit = {"id": _CIRCUIT_PREFIX[attr] + field}
+    if payload is not None:
+        circuit[key] = payload
+    select = _make_loop_state_select(cls, attr, field, [circuit])
+
+    assert select.current_option == "unknown"
+
+    select._handle_coordinator_update()
+    assert select._attr_current_option == "unknown"
+
+
+@pytest.mark.parametrize(("cls", "attr", "field", "key"), _LOOP_STATE_CASES)
+async def test_select_matching_circuit_returns_value(cls, attr, field, key):
+    """A matching circuit with a value keeps returning that value."""
+    circuit = {"id": _CIRCUIT_PREFIX[attr] + field, key: {"value": "high"}}
+    select = _make_loop_state_select(cls, attr, field, [circuit])
+
+    assert select.current_option == "high"
+
+    select._handle_coordinator_update()
+    assert select._attr_current_option == "high"

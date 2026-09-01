@@ -5,10 +5,18 @@ from typing import Any
 from homeassistant import config_entries, core
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .bacon import (
+    BACON_FEATURE_KEYS,
+    bacon_feature_fields,
+    bacon_meta_state,
+    humanize_feature,
+)
 from .coordinator import (
+    BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorK40,
     BoschComModuleCoordinatorRac,
@@ -80,6 +88,15 @@ async def async_setup_entry(
                     )
             if _value(coordinator.data.holiday_mode) is not None:
                 entities.append(BoschComWddw2HolidayModeSwitch(coordinator=coordinator))
+    for coordinator in coordinators:
+        if coordinator.data.device["deviceType"] == "bacon_rac":
+            # Comfort-feature fields vary per device/firmware (see #162), so
+            # enumerate whatever *Enabled flags the shadow actually reports.
+            reported = getattr(coordinator.data, "reported", None) or {}
+            entities.extend(
+                BoschComBaconFeatureSwitch(coordinator=coordinator, field=field)
+                for field in bacon_feature_fields(reported)
+            )
     async_add_entities(entities)
 
 
@@ -627,6 +644,90 @@ class BoschComK40PoolEnabledSwitch(CoordinatorEntity, SwitchEntity):
         """Disable the pool circuit."""
         await self._async_put("off")
         await self._coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
+# --- Bacon (Matter-commissioned) RAC ------------------------------------------
+
+
+class BoschComBaconFeatureSwitch(CoordinatorEntity, SwitchEntity):
+    """A togglable comfort feature of a bacon RAC (e.g. Ionizer, Boost).
+
+    Which features a unit accepts is mode-dependent: topics/meta marks each field
+    ``ro`` (read-only) or not for the current mode (see #162). The switch stays
+    available so its state is always visible; toggling it while the device has it
+    locked raises a clear error instead of silently doing nothing.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorBaconRac,
+        field: str,
+    ) -> None:
+        """Initialize the switch entity."""
+        super().__init__(coordinator)
+        self._field = field
+        key = BACON_FEATURE_KEYS.get(field)
+        if key is not None:
+            self._attr_translation_key = key
+            suffix = key
+        else:
+            # Unknown feature on some firmware — show a humanized name so it is
+            # not silently dropped.
+            self._attr_name = humanize_feature(field)
+            suffix = field
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{suffix}"
+
+    @property
+    def _reported(self) -> dict:
+        data = self.coordinator.data
+        return (getattr(data, "reported", None) if data else None) or {}
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return whether the feature is active, or None if not reported."""
+        value = self._reported.get(self._field)
+        return bool(value) if isinstance(value, bool) else None
+
+    @property
+    def _writable_now(self) -> bool | None:
+        """Whether the device currently accepts writes, or None if unknown."""
+        data = self.coordinator.data
+        state = bacon_meta_state(getattr(data, "metadata", None) if data else None)
+        field_meta = state.get(self._field)
+        if isinstance(field_meta, dict) and "ro" in field_meta:
+            return not field_meta["ro"]
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, bool]:
+        """Expose the live writability so the mode-dependent locking is visible."""
+        writable = self._writable_now
+        return {} if writable is None else {"writable_now": writable}
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the feature on."""
+        await self._async_set(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn the feature off."""
+        await self._async_set(False)
+
+    async def _async_set(self, enabled: bool) -> None:
+        # Only a confirmed read-only flag blocks the write; when meta has not
+        # arrived (None) we let the device decide.
+        if self._writable_now is False:
+            raise HomeAssistantError(f"{self._field} is read-only in the current mode")
+        await self.coordinator.bhc.async_set_feature(self._field, enabled)
+        await self.coordinator.async_request_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:

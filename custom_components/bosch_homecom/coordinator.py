@@ -389,6 +389,18 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
 
     def _build_device_data(self, data: BHCDeviceWddw2) -> BHCDeviceWddw2:
         """Build WDDW2 device data."""
+        # A wddw2 is a standalone water heater, so an update without DHW
+        # circuits can only be a transient cloud failure that the library
+        # swallowed as empty data (issue #175). Fail the refresh instead:
+        # at setup this becomes ConfigEntryNotReady (HA retries with a fresh
+        # API client), at runtime the last good data is kept. Do NOT copy
+        # this guard to K40: heating-only k40 systems legitimately have no
+        # DHW circuits (issue #174).
+        if not data.dhw_circuits:
+            raise UpdateFailed(
+                f"Device {self.unique_id}: wddw2 update returned no DHW circuits, "
+                "treating as transient cloud failure"
+            )
         return BHCDeviceWddw2(
             device=self.device,
             firmware=data.firmware,

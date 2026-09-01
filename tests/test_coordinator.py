@@ -1238,3 +1238,49 @@ async def test_bacon_update_withdraw_noop_without_reauth(hass, entry, firmware):
 
     abort.assert_not_called()
     delete_issue.assert_not_called()
+
+
+# ===================================================================
+# Issue #175: a wddw2 update without DHW circuits is a swallowed
+# transient cloud failure, never valid data — it must fail the
+# refresh instead of propagating an empty entity surface.
+# ===================================================================
+
+
+@pytest.mark.asyncio
+async def test_wddw2_update_empty_dhw_circuits_raises(
+    hass, entry, bhc, device, firmware
+):
+    """An update whose dhw_circuits is empty raises UpdateFailed (#175)."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorWddw2(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    bhc.async_update = AsyncMock(return_value=_make_wddw2_data(device, firmware))
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_wddw2_update_with_circuits_passes_through(
+    hass, entry, bhc, device, firmware
+):
+    """A healthy update with DHW circuits passes through unchanged."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorWddw2(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    circuits = [{"id": "/dhwCircuits/dhw1"}]
+    bhc.async_update = AsyncMock(
+        return_value=BHCDeviceWddw2(
+            device=device,
+            firmware=firmware,
+            notifications=[],
+            dhw_circuits=circuits,
+        )
+    )
+
+    result = await coordinator._async_update_data()
+
+    assert result.dhw_circuits == circuits
