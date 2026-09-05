@@ -458,6 +458,21 @@
       },
       "bacon_signal_quality": {
         "name": "Signalqualität"
+      },
+      "solar_collector_temperature": {
+        "name": "{circuit} Kollektortemperatur"
+      },
+      "solar_yield": {
+        "name": "{circuit} Solarertrag"
+      },
+      "solar_tank_temperature": {
+        "name": "{circuit} Speichertemperatur"
+      },
+      "solar_tank_bottom_temperature": {
+        "name": "{circuit} Speichertemperatur unten"
+      },
+      "solar_max_cylinder_temperature": {
+        "name": "{circuit} max. Speichertemperatur"
       }
     },
     "binary_sensor": {
