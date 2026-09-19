@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any, Final, Optional
 
 from homeassistant import config_entries, core
 from homeassistant.components.binary_sensor import BinarySensorEntity
@@ -130,6 +130,19 @@ async def async_setup_entry(
                     BoschComSensorHc(
                         coordinator=coordinator, config_entry=config_entry, field=hc_id
                     )
+                )
+            # Solar thermal circuits (only present with a collector installed)
+            for ref in getattr(coordinator.data, "solar_circuits", None) or []:
+                solar_id = ref["id"].split("/")[-1]
+                entities.extend(
+                    BoschComSensorSolarCircuit(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        circuit_id=solar_id,
+                        key=key,
+                    )
+                    for key in SOLAR_CIRCUIT_SENSORS
+                    if key in ref
                 )
             # Heat source
             entities.append(
@@ -1143,6 +1156,96 @@ class BoschComSensorPoolTemp(BoschComSensorBase):
             return float(value)
         except (TypeError, ValueError):
             return None
+
+
+SOLAR_CIRCUIT_SENSORS: Final[dict[str, dict[str, Any]]] = {
+    "collectorTemperature": {
+        "translation_key": "solar_collector_temperature",
+        "icon": "mdi:solar-panel",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "solarYield": {
+        "translation_key": "solar_yield",
+        "icon": "mdi:solar-power-variant",
+        "device_class": SensorDeviceClass.ENERGY,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+    },
+    "dhwTankTemperature": {
+        "translation_key": "solar_tank_temperature",
+        "icon": "mdi:water-thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "dhwTankBottomTemperature": {
+        "translation_key": "solar_tank_bottom_temperature",
+        "icon": "mdi:water-thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "maxCylinderTemperature": {
+        "translation_key": "solar_max_cylinder_temperature",
+        "icon": "mdi:thermometer-alert",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+}
+
+
+class BoschComSensorSolarCircuit(BoschComSensorBase):
+    """A single value of a solar thermal circuit."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        circuit_id: str,
+        key: str,
+    ) -> None:
+        """Initialize a solar circuit sensor."""
+        spec = SOLAR_CIRCUIT_SENSORS[key]
+        field = f"{circuit_id}_{key}"
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{field}-sensor",
+            icon=spec["icon"],
+        )
+        self._attr_device_class = spec["device_class"]
+        self._attr_state_class = spec["state_class"]
+        self._attr_native_unit_of_measurement = spec["unit"]
+        self._attr_translation_key = spec["translation_key"]
+        self._attr_translation_placeholders = {"circuit": circuit_id}
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}"
+        self._attr_suggested_object_id = field + "_sensor"
+        self._attr_should_poll = False
+        self.circuit_id = circuit_id
+        self.key = key
+
+    @property
+    def state(self):
+        """Return the value of this solar circuit reading."""
+        for entry in getattr(self.coordinator.data, "solar_circuits", None) or []:
+            if entry.get("id") != "/solarCircuits/" + self.circuit_id:
+                continue
+            reading = entry.get(self.key) or {}
+            if reading.get("unitOfMeasure") == "F":
+                self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+            value = reading.get("value")
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+        return None
 
 
 class BoschComSensorHs(BoschComSensorBase):

@@ -381,6 +381,10 @@ class BoschComModuleCoordinatorK40(
         }
         if "pool" in BHCDeviceK40.__dataclass_fields__:
             kwargs["pool"] = getattr(data, "pool", None)
+        # Solar thermal circuits: added in homecom_alt after the pinned minimum,
+        # so probe the dataclass the same way as pool to stay compatible.
+        if "solar_circuits" in BHCDeviceK40.__dataclass_fields__:
+            kwargs["solar_circuits"] = getattr(data, "solar_circuits", None)
         return BHCDeviceK40(**kwargs)
 
 
