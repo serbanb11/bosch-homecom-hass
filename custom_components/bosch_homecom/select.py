@@ -114,15 +114,14 @@ async def async_setup_entry(
                             allowedValues=entry["operationMode"]["allowedValues"],
                         )
                     )
-                if (
-                    entry.get("currentSuWiMode")
-                    and "allowedValues" in entry["currentSuWiMode"]
-                ):
+                suwi_source = _suwi_source(entry)
+                if suwi_source is not None:
                     entities.append(
                         BoschComSelectHcSuwiMode(
                             coordinator=coordinator,
                             field=hc_id,
-                            allowedValues=entry["currentSuWiMode"]["allowedValues"],
+                            allowedValues=entry[suwi_source]["allowedValues"],
+                            source=suwi_source,
                         )
                     )
                 if (
@@ -718,6 +717,26 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
         self.async_write_ha_state()
 
 
+def _suwi_source(entry: dict) -> str | None:
+    """Pick the heating-circuit resource the summer/winter select reads and writes.
+
+    ``suWiSwitchMode`` is the setting; ``currentSuWiMode`` only reports the mode
+    the controller is in and is read-only on the gateways seen so far, so writes
+    to it were refused and the option reverted on the next poll (#170). It is
+    kept as a fallback for a gateway that does not expose the setting, unless it
+    is explicitly flagged read-only.
+    """
+    for key in ("suWiSwitchMode", "currentSuWiMode"):
+        node = entry.get(key)
+        if (
+            isinstance(node, dict)
+            and node.get("allowedValues")
+            and node.get("writeable", 1)
+        ):
+            return key
+    return None
+
+
 class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
     """Representation of hc summer winter mode select."""
 
@@ -728,6 +747,7 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         coordinator: BoschComModuleCoordinatorK40,
         field: str,
         allowedValues: list[str],
+        source: str = "currentSuWiMode",
     ) -> None:
         """Initialize select entity."""
         super().__init__(coordinator)
@@ -740,48 +760,33 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         self._attr_should_poll = False
         self._attr_options = allowedValues
         self.field = field
+        self._source = source
 
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
-        await self._coordinator.bhc.async_put_hc_suwi_mode(
-            self._coordinator.data.device["deviceId"], self.field, option
+        bhc = self._coordinator.bhc
+        put = (
+            bhc.async_put_hc_suwi_switch_mode
+            if self._source == "suWiSwitchMode"
+            else bhc.async_put_hc_suwi_mode
         )
+        await put(self._coordinator.data.device["deviceId"], self.field, option)
 
         await self._coordinator.async_request_refresh()
 
     @property
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
-
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
-        currentSuWiMode = None
-
         for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                currentSuWiMode = safe_get(entry.get("currentSuWiMode") or {}, "value")
-
-        return currentSuWiMode
+                value = (entry.get(self._source) or {}).get("value")
+                return value if value is not None else "unknown"
+        return None
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-
-        def safe_get(data, key, default="unknown"):
-            """Return unknown if null."""
-            value = data.get(key)
-            return value if value is not None else default
-
-        currentSuWiMode = None
-
-        for entry in self.coordinator.data.heating_circuits or []:
-            if entry.get("id") == "/heatingCircuits/" + self.field:
-                currentSuWiMode = safe_get(entry.get("currentSuWiMode") or {}, "value")
-
-        self._attr_current_option = currentSuWiMode
+        self._attr_current_option = self.current_option
         self.async_write_ha_state()
 
 

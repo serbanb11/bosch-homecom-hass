@@ -276,3 +276,93 @@ async def test_select_matching_circuit_returns_value(cls, attr, field, key):
 
     select._handle_coordinator_update()
     assert select._attr_current_option == "high"
+
+
+# --- hc summer/winter select: which resource it reads and writes (#170) --------
+
+_SUWI_SETTING = {
+    "value": "automatic",
+    "allowedValues": ["automatic", "forced", "off"],
+    "writeable": 1,
+}
+_SUWI_STATUS = {
+    "value": "cooling",
+    "allowedValues": ["forced", "off", "cooling"],
+    "writeable": 0,
+}
+
+
+async def _setup_suwi_selects(circuit):
+    coordinator = _make_k40_coordinator([circuit])
+    coordinator.data.dhw_circuits = []
+    coordinator.data.ventilation = []
+    config_entry = MagicMock()
+    config_entry.runtime_data = [coordinator]
+    entities = []
+    await async_setup_entry(MagicMock(), config_entry, entities.extend)
+    return coordinator, [e for e in entities if isinstance(e, BoschComSelectHcSuwiMode)]
+
+
+async def test_suwi_select_uses_the_writable_setting():
+    """suWiSwitchMode is the setting; currentSuWiMode only reports the mode."""
+    coordinator, selects = await _setup_suwi_selects(
+        {
+            "id": "/heatingCircuits/hc1",
+            "suWiSwitchMode": _SUWI_SETTING,
+            "currentSuWiMode": _SUWI_STATUS,
+        }
+    )
+
+    assert len(selects) == 1
+    select = selects[0]
+    # Same entity as before, so existing registry entries carry over.
+    assert select._attr_unique_id == "k40-123-hc1-suwi"
+    assert select._attr_options == ["automatic", "forced", "off"]
+    assert select.current_option == "automatic"
+
+    await select.async_select_option("forced")
+
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_awaited_once_with(
+        "k40-123", "hc1", "forced"
+    )
+    coordinator.bhc.async_put_hc_suwi_mode.assert_not_awaited()
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_suwi_select_not_created_for_read_only_status_alone():
+    """A read-only currentSuWiMode with no setting offers no dead control."""
+    _, selects = await _setup_suwi_selects(
+        {"id": "/heatingCircuits/hc1", "currentSuWiMode": _SUWI_STATUS}
+    )
+
+    assert selects == []
+
+
+async def test_suwi_select_falls_back_when_setting_is_missing():
+    """A gateway without the setting keeps the old select unless flagged ro."""
+    status = {k: v for k, v in _SUWI_STATUS.items() if k != "writeable"}
+    coordinator, selects = await _setup_suwi_selects(
+        {"id": "/heatingCircuits/hc1", "currentSuWiMode": status}
+    )
+
+    assert len(selects) == 1
+    assert selects[0].current_option == "cooling"
+
+    await selects[0].async_select_option("off")
+
+    coordinator.bhc.async_put_hc_suwi_mode.assert_awaited_once_with(
+        "k40-123", "hc1", "off"
+    )
+
+
+async def test_suwi_select_skips_a_read_only_setting():
+    """A setting flagged read-only is not offered either."""
+    _, selects = await _setup_suwi_selects(
+        {
+            "id": "/heatingCircuits/hc1",
+            "suWiSwitchMode": {**_SUWI_SETTING, "writeable": 0},
+            "currentSuWiMode": _SUWI_STATUS,
+        }
+    )
+
+    assert selects == []
