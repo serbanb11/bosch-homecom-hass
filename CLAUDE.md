@@ -107,7 +107,7 @@ pip install pytest pytest-cov pytest-homeassistant-custom-component coverage ruf
 
 ### Dependencies
 
-- Runtime: `homecom_alt>=1.5.3`
+- Runtime: `homecom_alt>=1.7.3`
 - Test: `pytest`, `pytest-cov`, `pytest-homeassistant-custom-component`, `coverage`, `ruff`, `black`, `isort`
 
 ### Running Tests
