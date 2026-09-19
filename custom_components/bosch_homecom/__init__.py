@@ -292,12 +292,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             bacon_auth_provider = False
 
-    await asyncio.gather(
+    # One unreachable device must not take the reachable ones down with it
+    # (#180): set up whatever answered, and keep polling the rest so the entry
+    # reloads itself once they are back.
+    results = await asyncio.gather(
         *[
             coordinator.async_config_entry_first_refresh()
             for coordinator in coordinators
-        ]
+        ],
+        return_exceptions=True,
     )
+    pending = []
+    for coordinator, result in zip(list(coordinators), results):
+        if not isinstance(result, BaseException):
+            continue
+        if not isinstance(result, ConfigEntryNotReady):
+            raise result
+        coordinators.remove(coordinator)
+        pending.append((coordinator, result))
+    if pending and not coordinators:
+        raise pending[0][1]
+    for coordinator, result in pending:
+        _LOGGER.warning(
+            "Device %s is not responding and was skipped; it is set up "
+            "automatically once it answers again: %s",
+            coordinator.unique_id,
+            result,
+        )
+        _async_reload_when_back(hass, entry, coordinator)
 
     device_registry = dr.async_get(hass)
 
@@ -337,10 +359,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Apply the configured interval to all coordinators. Changing it later goes
     # through the options flow, which reloads the entry (OptionsFlowWithReload),
     # re-running this setup — so no config-entry update listener is needed.
-    for coordinator in entry.runtime_data:
+    for coordinator in [*entry.runtime_data, *(c for c, _ in pending)]:
         coordinator.update_interval = _get_update_interval(entry)
 
     return True
+
+
+@callback
+def _async_reload_when_back(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator
+) -> None:
+    """Keep polling a device that failed its first refresh; reload once it answers.
+
+    The platforms read ``coordinator.data`` at setup, so a device without data
+    cannot be given entities yet. Subscribing keeps its coordinator polling —
+    which also keeps the token refresh alive when it is the ``auth_provider`` —
+    and the first successful poll reloads the entry to set the device up.
+    """
+
+    @callback
+    def _on_update() -> None:
+        if coordinator.last_update_success:
+            hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    entry.async_on_unload(coordinator.async_add_listener(_on_update))
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

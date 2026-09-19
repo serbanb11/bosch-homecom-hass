@@ -1,16 +1,22 @@
 """Test component setup."""
 
+from datetime import timedelta
 import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
-from homecom_alt import BHCDeviceRac
+from homeassistant.util import dt as dt_util
+from homecom_alt import BHCDeviceRac, NotRespondingError
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.bosch_homecom import PLATFORMS
 from custom_components.bosch_homecom.const import (
@@ -112,6 +118,111 @@ async def test_entry_setup_unload(hass, entry, devices, sensor_data):
 
     await hass.async_block_till_done()
     assert unload.call_count == len(PLATFORMS)
+
+
+def _two_rac_entry():
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="test-user",
+        unique_id="test-user",
+        data={
+            CONF_DEVICES: {"123_rac": True, "456_rac": True},
+            CONF_REFRESH: "mock_refresh",
+            CONF_TOKEN: "mock_token",
+            CONF_USERNAME: "test-user",
+            CONF_CODE: "valid_code",
+        },
+    )
+
+
+def _rac_data(sensor_data, device_id):
+    return BHCDeviceRac(
+        device={"deviceId": device_id, "deviceType": "rac"},
+        firmware=sensor_data["firmwares"],
+        notifications=sensor_data["notifications"],
+        stardard_functions=sensor_data["stardard_functions"],
+        advanced_functions=sensor_data["advanced_functions"],
+        switch_programs=sensor_data["switch_programs"],
+    )
+
+
+def _mock_bhc(mock_create):
+    mock_bhc = AsyncMock()
+    mock_bhc.refresh_token = "mock_refresh"
+    mock_bhc.token = "mock_token"
+    mock_bhc.async_get_devices.return_value = [
+        {"deviceId": "123", "deviceType": "rac"},
+        {"deviceId": "456", "deviceType": "rac"},
+    ]
+    mock_bhc.async_get_firmware.return_value = {"value": "1.0.0"}
+    mock_create.return_value = mock_bhc
+
+
+async def test_setup_survives_one_unreachable_device(hass, sensor_data):
+    """An offline unit is skipped, then set up by a reload once it answers (#180)."""
+    entry = _two_rac_entry()
+    entry.add_to_hass(hass)
+    offline = {"456"}
+
+    async def update(device_id):
+        if device_id in offline:
+            raise NotRespondingError(f"RAC {device_id}: standardFunctions returned 406")
+        return _rac_data(sensor_data, device_id)
+
+    with patch(
+        "custom_components.bosch_homecom.HomeComRac.async_update",
+        new=AsyncMock(side_effect=update),
+    ), patch(
+        "custom_components.bosch_homecom.HomeComRac.get_token",
+        new_callable=AsyncMock,
+    ), patch(
+        "custom_components.bosch_homecom.HomeComAlt.create", new_callable=AsyncMock
+    ) as mock_create:
+        _mock_bhc(mock_create)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert entry.state is ConfigEntryState.LOADED
+        assert [c.unique_id for c in entry.runtime_data] == ["123"]
+        assert hass.states.get("climate.boschcom_rac_123") is not None
+        assert hass.states.get("climate.boschcom_rac_456") is None
+
+        # The skipped device keeps polling; its first good answer reloads the
+        # entry, which sets it up alongside the other one.
+        offline.clear()
+        with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+            async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=61))
+            await hass.async_block_till_done()
+        reload.assert_called_once_with(entry.entry_id)
+
+        await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert sorted(c.unique_id for c in entry.runtime_data) == ["123", "456"]
+        assert hass.states.get("climate.boschcom_rac_456") is not None
+
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_setup_retries_when_every_device_is_unreachable(hass):
+    """With nothing reachable the entry retries as a whole."""
+    entry = _two_rac_entry()
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.bosch_homecom.HomeComRac.async_update",
+        new=AsyncMock(side_effect=NotRespondingError("offline")),
+    ), patch(
+        "custom_components.bosch_homecom.HomeComRac.get_token",
+        new_callable=AsyncMock,
+    ), patch(
+        "custom_components.bosch_homecom.HomeComAlt.create", new_callable=AsyncMock
+    ) as mock_create:
+        _mock_bhc(mock_create)
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
 
 
 async def test_async_setup(hass):

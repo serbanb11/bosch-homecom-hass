@@ -63,6 +63,15 @@ def test_rac_without_horizontal_airflow_does_not_crash():
     assert ClimateEntityFeature.SWING_MODE in climate.supported_features
 
 
+def test_rac_without_operation_mode_does_not_crash():
+    """A payload with no operationMode/acControl leaves hvac_mode None (#180)."""
+    climate = BoschComRacClimate(coordinator=_make_rac_coordinator([]), field="clima")
+
+    assert climate.hvac_mode is None
+    # state is what the failing state write read.
+    assert climate.state is None
+
+
 def test_rac_with_both_airflows_advertises_both_axes():
     """A fully-featured unit keeps both swing axes and their values."""
     climate = BoschComRacClimate(

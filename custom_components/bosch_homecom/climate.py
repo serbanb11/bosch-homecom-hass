@@ -108,6 +108,9 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
     _attr_fan_mode: str | None = None
     _attr_swing_mode: str | None = None
     _attr_swing_horizontal_mode: str | None = None
+    # Only set from an operationMode/acControl entry; a payload without either
+    # crashed the entity on its first state write (#180).
+    _attr_hvac_mode: HVACMode | None = None
 
     @property
     def supported_features(self) -> ClimateEntityFeature:
