@@ -142,7 +142,10 @@ async def async_setup_entry(
                         key=key,
                     )
                     for key in SOLAR_CIRCUIT_SENSORS
-                    if key in ref
+                    # homecom_alt always sets every key and leaves None for a
+                    # reading the device does not serve, so test the node
+                    # itself rather than key presence.
+                    if isinstance(ref.get(key), dict)
                 )
             # Heat source
             entities.append(
@@ -1229,23 +1232,34 @@ class BoschComSensorSolarCircuit(BoschComSensorBase):
         self.circuit_id = circuit_id
         self.key = key
 
-    @property
-    def state(self):
-        """Return the value of this solar circuit reading."""
+    def _reading(self) -> dict[str, Any]:
+        """Return this sensor's reading node, or an empty dict when missing."""
         for entry in getattr(self.coordinator.data, "solar_circuits", None) or []:
-            if entry.get("id") != "/solarCircuits/" + self.circuit_id:
-                continue
-            reading = entry.get(self.key) or {}
-            if reading.get("unitOfMeasure") == "F":
-                self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
-            value = reading.get("value")
-            if value is None:
-                return None
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                return None
-        return None
+            if entry.get("id") == "/solarCircuits/" + self.circuit_id:
+                reading = entry.get(self.key)
+                return reading if isinstance(reading, dict) else {}
+        return {}
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Follow unitOfMeasure for temperature readings on Fahrenheit systems."""
+        if (
+            self._attr_device_class == SensorDeviceClass.TEMPERATURE
+            and self._reading().get("unitOfMeasure") == "F"
+        ):
+            return UnitOfTemperature.FAHRENHEIT
+        return self._attr_native_unit_of_measurement
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the value of this solar circuit reading."""
+        value = self._reading().get("value")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
 
 class BoschComSensorHs(BoschComSensorBase):
