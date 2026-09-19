@@ -40,7 +40,7 @@ async def async_setup_entry(
 
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "wddw2":
-            for ref in coordinator.data.dhw_circuits:
+            for ref in coordinator.data.dhw_circuits or []:
                 dhw_id = ref["id"].split("/")[-1]
                 if re.fullmatch(r"dhw\d", dhw_id):
                     _migrate_unique_id(entity_registry, coordinator.unique_id, dhw_id)
@@ -125,7 +125,7 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
     async def async_set_operation_mode(self, operation_mode: str) -> None:
         """Set new target operation mode."""
-        for ref in self.coordinator.data.dhw_circuits:
+        for ref in self.coordinator.data.dhw_circuits or []:
             dhw_id = ref["id"].split("/")[-1]
             await self.coordinator.bhc.async_put_dhw_operation_mode(
                 self.coordinator.unique_id, dhw_id, self._operation_map[operation_mode]
@@ -137,17 +137,23 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     ) -> None:
         """Populate heating circuits."""
 
-        for ref in domestic_hot_water_circuits:
+        # Heating-only systems (e.g. Compress 6800i without a DHW tank) report
+        # the circuit reference with null fields, and the platform must survive
+        # that instead of dying at setup (#174).
+        for ref in domestic_hot_water_circuits or []:
             for key in ref:
+                val = ref[key]
+                if not isinstance(val, dict) or val.get("value") is None:
+                    continue
                 match key:
                     case "operationMode":
-                        self._attr_current_operation = self._ioperation_map[
-                            ref[key]["value"]
-                        ]
+                        self._attr_current_operation = self._ioperation_map.get(
+                            val["value"]
+                        )
                     case "actualTemp":
-                        self._attr_current_temperature = ref[key]["value"]
+                        self._attr_current_temperature = val["value"]
                         self._attr_temperature_unit = _parse_temp_unit(
-                            ref[key].get("unitOfMeasure")
+                            val.get("unitOfMeasure")
                         )
 
     def set_attr(self) -> None:
@@ -251,7 +257,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         self, domestic_hot_water_circuits: list[dict]
     ) -> None:
         """Populate attributes and supported features from the dhw circuit."""
-        for ref in domestic_hot_water_circuits:
+        for ref in domestic_hot_water_circuits or []:
             dhw_id = ref["id"].split("/")[-1]
             if dhw_id != self.field:
                 continue

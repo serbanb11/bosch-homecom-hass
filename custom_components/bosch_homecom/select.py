@@ -75,7 +75,7 @@ async def async_setup_entry(
                         allowedValues=pool["additionalHeaterMode"]["allowedValues"],
                     )
                 )
-            for entry in coordinator.data.dhw_circuits:
+            for entry in coordinator.data.dhw_circuits or []:
                 dhw_id = entry["id"].split("/")[-1]
                 if (
                     entry.get("operationMode")
@@ -101,7 +101,7 @@ async def async_setup_entry(
                             ],
                         )
                     )
-            for entry in coordinator.data.heating_circuits:
+            for entry in coordinator.data.heating_circuits or []:
                 hc_id = entry["id"].split("/")[-1]
                 if (
                     entry.get("operationMode")
@@ -168,7 +168,7 @@ async def async_setup_entry(
                             allowedValues=entry["control"]["allowedValues"],
                         )
                     )
-            for entry in coordinator.data.ventilation:
+            for entry in coordinator.data.ventilation or []:
                 zone_id = entry["id"].split("/")[-1]
                 if (
                     entry.get("summerBypassEnable")
@@ -507,7 +507,7 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
 
         operationMode = None
 
-        for entry in self.coordinator.data.dhw_circuits:
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
                 operationMode = safe_get(entry["operationMode"], "value")
 
@@ -524,7 +524,7 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
 
         operationMode = None
 
-        for entry in self.coordinator.data.dhw_circuits:
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
                 operationMode = safe_get(entry["operationMode"], "value")
 
@@ -693,7 +693,7 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
 
         operationMode = None
 
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 operationMode = safe_get(entry["operationMode"], "value")
 
@@ -710,7 +710,7 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
 
         operationMode = None
 
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 operationMode = safe_get(entry["operationMode"], "value")
 
@@ -894,7 +894,7 @@ class BoschComSelectHcCoolingOperationMode(CoordinatorEntity, SelectEntity):
 
         coolingOperationMode = None
 
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 coolingOperationMode = safe_get(entry["coolingOperationMode"], "value")
 
@@ -911,7 +911,7 @@ class BoschComSelectHcCoolingOperationMode(CoordinatorEntity, SelectEntity):
 
         coolingOperationMode = None
 
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 coolingOperationMode = safe_get(entry["coolingOperationMode"], "value")
 
@@ -952,14 +952,19 @@ class BoschComSelectHolidayMode(CoordinatorEntity, SelectEntity):
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
 
-        values = self.coordinator.data.holiday_mode.get("values") or []
+        # A bulk response that misses the endpoint leaves holiday_mode None;
+        # an unguarded .get() here froze the entity permanently (#176). The
+        # isinstance check also covers the library's list|None annotation.
+        holiday_mode = self.coordinator.data.holiday_mode
+        if not isinstance(holiday_mode, dict):
+            return None
+        values = holiday_mode.get("values") or []
         return values[0] if values else None
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        values = self.coordinator.data.holiday_mode.get("values") or []
-        self._attr_current_option = values[0] if values else None
+        self._attr_current_option = self.current_option
         self.async_write_ha_state()
 
 
@@ -1040,7 +1045,7 @@ class BoschComSelectHcNightSwitchMode(CoordinatorEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 return (entry.get("nightSwitchMode") or {}).get("value")
         return None
@@ -1048,7 +1053,7 @@ class BoschComSelectHcNightSwitchMode(CoordinatorEntity, SelectEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 self._attr_current_option = (entry.get("nightSwitchMode") or {}).get(
                     "value"
@@ -1090,7 +1095,7 @@ class BoschComSelectHcControl(CoordinatorEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 return (entry.get("control") or {}).get("value")
         return None
@@ -1098,7 +1103,7 @@ class BoschComSelectHcControl(CoordinatorEntity, SelectEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 self._attr_current_option = (entry.get("control") or {}).get("value")
         self.async_write_ha_state()
@@ -1138,7 +1143,7 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Get the current status of the select entity from device_status."""
-        for entry in self.coordinator.data.ventilation:
+        for entry in self.coordinator.data.ventilation or []:
             if entry.get("id") == "/ventilation/" + self.field:
                 return (entry.get("summerBypassEnable") or {}).get("value")
         return None
@@ -1146,7 +1151,7 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        for entry in self.coordinator.data.ventilation:
+        for entry in self.coordinator.data.ventilation or []:
             if entry.get("id") == "/ventilation/" + self.field:
                 self._attr_current_option = (entry.get("summerBypassEnable") or {}).get(
                     "value"

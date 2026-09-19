@@ -578,14 +578,18 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
         # Shadow update/accepted messages can be partial deltas (or carry only
         # the desired branch). Merge onto the last known state so a partial
         # message never wipes fields such as tempSetpoint or customTitle.
+        # An explicit null is the shadow's delete-attribute marker — some
+        # firmware nulls the mode-locked feature fields while the unit is off,
+        # which flipped every feature switch to unknown a few minutes after
+        # setup (#164). Keep the last known value instead.
         prev = self.data
         reported = {
             **(prev.reported if prev and prev.reported else {}),
-            **(state.get("reported") or {}),
+            **{k: v for k, v in (state.get("reported") or {}).items() if v is not None},
         }
         desired = {
             **(prev.desired if prev and prev.desired else {}),
-            **(state.get("desired") or {}),
+            **{k: v for k, v in (state.get("desired") or {}).items() if v is not None},
         }
         title = reported.get("customTitle")
         if title:

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.climate import ClimateEntityFeature
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 import pytest
 
 from custom_components.bosch_homecom.bacon import (
@@ -19,11 +20,15 @@ from custom_components.bosch_homecom.climate import (
     BoschComBaconRacClimate,
     _clean_bacon_title,
 )
+from custom_components.bosch_homecom.const import DOMAIN
 from custom_components.bosch_homecom.sensor import (
     BoschComBaconRoomTemperature,
     BoschComBaconSignalQuality,
 )
-from custom_components.bosch_homecom.switch import BoschComBaconFeatureSwitch
+from custom_components.bosch_homecom.switch import (
+    BoschComBaconFeatureSwitch,
+    async_setup_entry as switch_async_setup_entry,
+)
 
 # A topics/sensor payload's last item, as flattened by homecom_alt's get_sensor.
 SAMPLE_SENSOR = {"timestamp": 1785960137, "roomTemperature": 23.5}
@@ -418,3 +423,63 @@ def test_entities_survive_missing_data(data_none):
         ).native_value
         is None
     )
+
+
+# --- switch platform setup (issue #164: load while the unit is off) -----------
+
+
+async def _run_switch_setup(hass, coordinator):
+    config_entry = MagicMock()
+    config_entry.runtime_data = [coordinator]
+    entities = []
+    await switch_async_setup_entry(hass, config_entry, entities.extend)
+    return {e._field for e in entities if isinstance(e, BoschComBaconFeatureSwitch)}
+
+
+async def test_switch_setup_creates_feature_switches_from_reported(hass):
+    """Fields present in reported become switches; climate controls don't."""
+    coordinator = _coordinator(
+        reported={"powerEnabled": True, "ionizerEnabled": True, "sleepEnabled": False}
+    )
+
+    fields = await _run_switch_setup(hass, coordinator)
+
+    assert fields == {"ionizerEnabled", "sleepEnabled"}
+
+
+async def test_switch_setup_restores_registered_switches_when_reported_lacks_them(
+    hass,
+):
+    """A load while the unit is off re-creates previously seen switches (#164).
+
+    v1 firmware deletes the mode-locked *Enabled fields from the shadow while
+    the unit is off; without the registry fallback a load in that window
+    created no switches, leaving the previous session's entities unavailable
+    for the whole session.
+    """
+    registry = er.async_get(hass)
+    registry.async_get_or_create("switch", DOMAIN, "86DM-1-bacon_ionizer")
+    # Off-state shadow: feature fields absent, climate controls still there.
+    coordinator = _coordinator(
+        reported={"powerEnabled": False, "opMode": "auto", "tempSetpoint": 21}
+    )
+
+    fields = await _run_switch_setup(hass, coordinator)
+
+    # Ionizer is restored from the registry; features never seen (e.g. eco)
+    # are not invented.
+    assert fields == {"ionizerEnabled"}
+
+
+async def test_switch_setup_unions_reported_and_registry(hass):
+    """Reported fields and registry-known switches merge without duplicates."""
+    registry = er.async_get(hass)
+    registry.async_get_or_create("switch", DOMAIN, "86DM-1-bacon_ionizer")
+    registry.async_get_or_create("switch", DOMAIN, "86DM-1-bacon_sleep")
+    coordinator = _coordinator(
+        reported={"powerEnabled": True, "sleepEnabled": True, "ecoEnabled": False}
+    )
+
+    fields = await _run_switch_setup(hass, coordinator)
+
+    assert fields == {"ionizerEnabled", "sleepEnabled", "ecoEnabled"}

@@ -6,6 +6,7 @@ from homeassistant import config_entries, core
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -15,6 +16,7 @@ from .bacon import (
     bacon_meta_state,
     humanize_feature,
 )
+from .const import DOMAIN
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
@@ -88,14 +90,27 @@ async def async_setup_entry(
                     )
             if _value(coordinator.data.holiday_mode) is not None:
                 entities.append(BoschComWddw2HolidayModeSwitch(coordinator=coordinator))
+    entity_registry = er.async_get(hass)
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "bacon_rac":
             # Comfort-feature fields vary per device/firmware (see #162), so
             # enumerate whatever *Enabled flags the shadow actually reports.
             reported = getattr(coordinator.data, "reported", None) or {}
+            fields = set(bacon_feature_fields(reported))
+            # A v1-firmware unit deletes the mode-locked *Enabled fields from
+            # its shadow while off, so a load-while-off would create no
+            # switches and leave the previous session's entities permanently
+            # unavailable (#164). Re-create any feature switch this device has
+            # ever registered; is_on stays unknown until the field reappears
+            # in reported.
+            for field, key in BACON_FEATURE_KEYS.items():
+                if entity_registry.async_get_entity_id(
+                    "switch", DOMAIN, f"{coordinator.unique_id}-{key}"
+                ):
+                    fields.add(field)
             entities.extend(
                 BoschComBaconFeatureSwitch(coordinator=coordinator, field=field)
-                for field in bacon_feature_fields(reported)
+                for field in sorted(fields)
             )
     async_add_entities(entities)
 

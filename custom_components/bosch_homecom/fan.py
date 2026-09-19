@@ -30,7 +30,7 @@ async def async_setup_entry(
         device_type = coordinator.data.device.get("deviceType")
         if device_type in ("k40", "k30", "icom"):
             # DHW circuits
-            for ref in coordinator.data.ventilation:
+            for ref in coordinator.data.ventilation or []:
                 zone_id = ref["id"].split("/")[-1]
                 entities.append(BoschComDhwFan(coordinator=coordinator, field=zone_id))
 
@@ -141,7 +141,7 @@ class BoschComDhwFan(CoordinatorEntity, FanEntity):
             value = data.get(key)
             return value if value is not None else default
 
-        for entry in self.coordinator.data.ventilation:
+        for entry in self.coordinator.data.ventilation or []:
             if entry.get("id") == "/ventilation/" + self.field:
                 op_mode = entry.get("operationMode")
                 self._operationMode = safe_get(op_mode, "value")

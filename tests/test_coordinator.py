@@ -236,6 +236,35 @@ def test_bacon_coordinator_persists_title_from_shadow(hass, entry, firmware):
     assert entry.data[CONF_BACON_TITLES]["86DM-1"] == "Kitchen"
 
 
+def test_bacon_build_null_delta_keeps_last_known_state(hass, entry, firmware):
+    """A shadow delta nulling fields must not erase known state (#164).
+
+    The device shadow uses null as its delete-attribute marker; some firmware
+    nulls the mode-locked feature fields while the unit is off, which flipped
+    every feature switch to unknown a few minutes after setup. A null keeps
+    the last known value; a real value still overwrites it.
+    """
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    coordinator.data = coordinator._build(
+        {
+            "reported": {"ionizerEnabled": True, "powerEnabled": True},
+            "desired": {"tempSetpoint": 21},
+        }
+    )
+
+    data = coordinator._build(
+        {
+            "reported": {"ionizerEnabled": None, "powerEnabled": False},
+            "desired": {"tempSetpoint": None},
+        }
+    )
+
+    assert data.reported["ionizerEnabled"] is True
+    assert data.reported["powerEnabled"] is False
+    assert data.desired["tempSetpoint"] == 21
+
+
 def test_init_coordinator(hass, entry, bhc, device, firmware):
     """Test the initialization of the coordinator."""
     entry.add_to_hass(hass)

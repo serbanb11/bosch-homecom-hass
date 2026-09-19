@@ -41,7 +41,7 @@ async def async_setup_entry(
                     BoschComCommoduleLimitNumber(coordinator=coordinator, cp_id=cp_id)
                 )
         if coordinator.data.device["deviceType"] in ("k30", "k40"):
-            for entry in coordinator.data.ventilation:
+            for entry in coordinator.data.ventilation or []:
                 zone_id = entry["id"].split("/")[-1]
                 duration = entry.get("summerBypassDuration") or {}
                 if "value" in duration:

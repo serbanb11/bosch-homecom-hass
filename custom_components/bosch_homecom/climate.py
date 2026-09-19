@@ -63,7 +63,7 @@ async def async_setup_entry(
         elif device_type == "bacon_rac":
             entities.append(BoschComBaconRacClimate(coordinator=coordinator))
         elif device_type in ("k40", "k30", "icom"):
-            for ref in coordinator.data.heating_circuits:
+            for ref in coordinator.data.heating_circuits or []:
                 hc_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComK40Climate(coordinator=coordinator, field=hc_id)

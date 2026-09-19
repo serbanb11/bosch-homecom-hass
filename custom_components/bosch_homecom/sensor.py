@@ -106,7 +106,7 @@ async def async_setup_entry(
         # ---- K40/K30/ICOM (shared subset: dhw, ventilation, heating, hs) ----
         if device_type in ("k40", "k30", "icom"):
             # DHW circuits
-            for ref in coordinator.data.dhw_circuits:
+            for ref in coordinator.data.dhw_circuits or []:
                 dhw_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComSensorDhw(
@@ -114,7 +114,7 @@ async def async_setup_entry(
                     )
                 )
             # Ventilation
-            for ref in coordinator.data.ventilation:
+            for ref in coordinator.data.ventilation or []:
                 zone_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComSensorVentilation(
@@ -124,7 +124,7 @@ async def async_setup_entry(
                     )
                 )
             # Heating circuits
-            for ref in coordinator.data.heating_circuits:
+            for ref in coordinator.data.heating_circuits or []:
                 hc_id = ref["id"].split("/")[-1]
                 entities.append(
                     BoschComSensorHc(
@@ -254,7 +254,7 @@ async def async_setup_entry(
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
         elif device_type == "wddw2":
             # Existing per-circuit DHW sensor
-            for ref in coordinator.data.dhw_circuits:
+            for ref in coordinator.data.dhw_circuits or []:
                 dhw_id = ref["id"].split("/")[-1]
                 if re.fullmatch(r"dhw\d", dhw_id):
                     entities.append(
@@ -662,7 +662,7 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
         """Return Notifications."""
         return "\n".join(
             f"{item['dcd']}-{item['ccd']}"
-            for item in self.coordinator.data.notifications
+            for item in self.coordinator.data.notifications or []
             if "dcd" in item and "ccd" in item
         )
 
@@ -768,7 +768,7 @@ class BoschComSensorDhw(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorDhw operationMode."""
-        for entry in self.coordinator.data.dhw_circuits:
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
                 actual_temp = entry.get("actualTemp") or {}
                 unit_str = actual_temp.get("unitOfMeasure")
@@ -789,7 +789,7 @@ class BoschComSensorDhw(BoschComSensorBase):
     def extra_state_attributes(self):
         """Return attributes."""
 
-        for entry in self.coordinator.data.dhw_circuits:
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
                 operationMode_value = (entry.get("operationMode") or {}).get(
                     "value", "unknown"
@@ -863,7 +863,7 @@ class BoschComSensorHc(BoschComSensorBase):
     def state(self):
         """Return BoschComSensorHc operationMode."""
 
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 return (entry.get("operationMode") or {}).get("value")
 
@@ -873,7 +873,7 @@ class BoschComSensorHc(BoschComSensorBase):
     def extra_state_attributes(self):
         """Return attributes."""
 
-        for entry in self.coordinator.data.heating_circuits:
+        for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
                 currentSuWiMode_value = (entry.get("currentSuWiMode") or {}).get(
                     "value", "unknown"
@@ -982,7 +982,7 @@ class BoschComSensorVentilation(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorVentilation fan level."""
-        for entry in self.coordinator.data.ventilation:
+        for entry in self.coordinator.data.ventilation or []:
             if entry.get("id") == "/ventilation/" + self.field:
                 return (entry.get("exhaustFanLevel") or {}).get("value")
         return None
@@ -991,7 +991,7 @@ class BoschComSensorVentilation(BoschComSensorBase):
     def extra_state_attributes(self):
         """Return attributes."""
 
-        for entry in self.coordinator.data.ventilation:
+        for entry in self.coordinator.data.ventilation or []:
             if entry.get("id") == "/ventilation/" + self.field:
                 maxIndoorAirQuality_value = (
                     entry.get("maxIndoorAirQuality") or {}
@@ -1298,7 +1298,9 @@ class BoschComSensorHs(BoschComSensorBase):
     @property
     def state(self):
         """Return BoschComSensorHS type."""
-        hs = self.coordinator.data.heat_sources
+        # heat_sources is None when the bulk response misses the endpoint; an
+        # unguarded access here froze the entity permanently (#176).
+        hs = self.coordinator.data.heat_sources or {}
         pump_type = (hs.get("pumpType") or {}).get("value")
         if pump_type is not None:
             return pump_type
@@ -1308,15 +1310,14 @@ class BoschComSensorHs(BoschComSensorBase):
     @property
     def extra_state_attributes(self):
         """Return attributes."""
-        consumption = (self.coordinator.data.heat_sources.get("consumption") or {}).get(
-            "values", "unknown"
-        )
+        hs = self.coordinator.data.heat_sources or {}
+        consumption = (hs.get("consumption") or {}).get("values", "unknown")
 
         # The pointt-api occasionally returns 500 for
         # heatSources/.../numberOfStarts; the upstream lib may then pass a
         # non-list or a list of non-dict items. Treat anything unexpected as
         # missing so the entity does not crash during state update.
-        starts_node = self.coordinator.data.heat_sources.get("starts")
+        starts_node = hs.get("starts")
         if not isinstance(starts_node, dict):
             starts_node = {}
         numberOfStarts = starts_node.get("values")
@@ -1327,70 +1328,35 @@ class BoschComSensorHs(BoschComSensorBase):
         }
 
         returnTemperature = str(
-            (self.coordinator.data.heat_sources.get("returnTemperature") or {}).get(
-                "value", "unknown"
-            )
-        ) + (self.coordinator.data.heat_sources.get("returnTemperature") or {}).get(
-            "unitOfMeasure", "unknown"
-        )
+            (hs.get("returnTemperature") or {}).get("value", "unknown")
+        ) + (hs.get("returnTemperature") or {}).get("unitOfMeasure", "unknown")
 
         actualSupplyTemperature = str(
-            (
-                self.coordinator.data.heat_sources.get("actualSupplyTemperature") or {}
-            ).get("value", "unknown")
-        ) + (
-            self.coordinator.data.heat_sources.get("actualSupplyTemperature") or {}
-        ).get(
-            "unitOfMeasure", "unknown"
-        )
+            (hs.get("actualSupplyTemperature") or {}).get("value", "unknown")
+        ) + (hs.get("actualSupplyTemperature") or {}).get("unitOfMeasure", "unknown")
 
         actualModulation = str(
-            (self.coordinator.data.heat_sources.get("actualModulation") or {}).get(
-                "value", "unknown"
-            )
-        ) + (self.coordinator.data.heat_sources.get("actualModulation") or {}).get(
-            "unitOfMeasure", "unknown"
-        )
+            (hs.get("actualModulation") or {}).get("value", "unknown")
+        ) + (hs.get("actualModulation") or {}).get("unitOfMeasure", "unknown")
 
         collectorInflowTemp = str(
-            (self.coordinator.data.heat_sources.get("collectorInflowTemp") or {}).get(
-                "value", "unknown"
-            )
-        ) + (self.coordinator.data.heat_sources.get("collectorInflowTemp") or {}).get(
-            "unitOfMeasure", "unknown"
-        )
+            (hs.get("collectorInflowTemp") or {}).get("value", "unknown")
+        ) + (hs.get("collectorInflowTemp") or {}).get("unitOfMeasure", "unknown")
 
         collectorOutflowTemp = str(
-            (self.coordinator.data.heat_sources.get("collectorOutflowTemp") or {}).get(
-                "value", "unknown"
-            )
-        ) + (self.coordinator.data.heat_sources.get("collectorOutflowTemp") or {}).get(
-            "unitOfMeasure", "unknown"
-        )
+            (hs.get("collectorOutflowTemp") or {}).get("value", "unknown")
+        ) + (hs.get("collectorOutflowTemp") or {}).get("unitOfMeasure", "unknown")
 
-        actualHeatDemand = (
-            self.coordinator.data.heat_sources.get("actualHeatDemand") or {}
-        ).get("values", ["unknown"])
+        actualHeatDemand = (hs.get("actualHeatDemand") or {}).get("values", ["unknown"])
 
         totalWorkingTime = str(
-            (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
-                "value", "unknown"
-            )
-        ) + (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
-            "unitOfMeasure", "unknown"
-        )
+            (hs.get("totalWorkingTime") or {}).get("value", "unknown")
+        ) + (hs.get("totalWorkingTime") or {}).get("unitOfMeasure", "unknown")
 
-        systemPressure = (
-            self.coordinator.data.heat_sources.get("systemPressure") or {}
-        ).get("value", ["unknown"])
+        systemPressure = (hs.get("systemPressure") or {}).get("value", ["unknown"])
 
         totalWorkingTimeReadable = self.seconds_to_readable(
-            int(
-                (self.coordinator.data.heat_sources.get("totalWorkingTime") or {}).get(
-                    "value", 0
-                )
-                or 0
-            )
+            int((hs.get("totalWorkingTime") or {}).get("value", 0) or 0)
         )
 
         result = {
@@ -1410,9 +1376,7 @@ class BoschComSensorHs(BoschComSensorBase):
             "systemPressure": systemPressure,
         }
 
-        consumption = (self.coordinator.data.heat_sources.get("consumption") or {}).get(
-            "values"
-        ) or []
+        consumption = (hs.get("consumption") or {}).get("values") or []
         # The API can return missing/unknown values; ensure we always work with a list
         if not isinstance(consumption, list):
             consumption = []
@@ -1480,7 +1444,7 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
     @property
     def native_value(self):
         """Return numeric setpoint for the current DHW operationMode."""
-        for entry in self.coordinator.data.dhw_circuits:
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == f"/dhwCircuits/{self.field}":
                 mode = (entry.get("operationMode") or {}).get("value")
                 node = (entry.get("tempLevel") or {}).get(mode) or {}
@@ -1499,7 +1463,7 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
     @property
     def extra_state_attributes(self):
         """Keep the other temperatures as attributes, como já tinhas."""
-        for entry in self.coordinator.data.dhw_circuits:
+        for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == f"/dhwCircuits/{self.field}":
                 mode = (entry.get("operationMode") or {}).get("value", "unknown")
                 result = {"operationMode": mode}
