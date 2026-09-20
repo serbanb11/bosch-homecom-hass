@@ -25,6 +25,10 @@ from homecom_alt import (
     AuthFailedError,
     ConnectionOptions,
     HomeComAlt,
+    HomeComK40Local,
+    NotRespondingError,
+    ProximityRequiredError,
+    TokenStoreFullError,
     async_get_bacon_devices,
 )
 from homecom_alt.const import BACON_DEFAULT_REGION, BACON_KNOWN_REGIONS
@@ -34,6 +38,13 @@ from .const import (
     CONF_BACON_REGION,
     CONF_BRAND_BUDERUS,
     CONF_DEVICES,
+    CONF_LOCAL,
+    CONF_LOCAL_GATEWAY,
+    CONF_LOCAL_HOST,
+    CONF_LOCAL_LOGIN,
+    CONF_LOCAL_PASSWORD,
+    CONF_LOCAL_REMOVE,
+    CONF_LOCAL_TOKEN,
     CONF_REFRESH,
     CONF_UPDATE_SECONDS,
     CONF_WB_LABEL,
@@ -325,8 +336,146 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
     def __init__(self, entry: config_entries.ConfigEntry):
         super().__init__()
         self._entry = entry
+        self._local_gateway: str | None = None
+
+    def _k40_gateways(self) -> dict[str, str]:
+        """Return {device_id: label} for the configured K40-family gateways.
+
+        Only k40/k30 gateways are offered: the Local API is a K 40 RF feature and
+        the other device types have no equivalent.
+        """
+        selected = self._entry.data.get(CONF_DEVICES) or {}
+        gateways: dict[str, str] = {}
+        for key, enabled in selected.items():
+            if not enabled or not isinstance(key, str) or "_" not in key:
+                continue
+            device_id, _, device_type = key.rpartition("_")
+            if device_type in ("k40", "k30"):
+                gateways[device_id] = f"{device_id} ({device_type})"
+        return gateways
 
     async def async_step_init(self, user_input=None) -> FlowResult:
+        """Offer the general settings or the optional local-API setup."""
+        return self.async_show_menu(step_id="init", menu_options=["general", "local"])
+
+    async def async_step_local(self, user_input=None) -> FlowResult:
+        """Choose which gateway to configure local access for.
+
+        Skipped automatically when there is exactly one candidate, which is the
+        common case.
+        """
+        gateways = self._k40_gateways()
+        if not gateways:
+            return self.async_abort(reason="no_k40_gateway")
+
+        if len(gateways) == 1:
+            self._local_gateway = next(iter(gateways))
+            return await self.async_step_local_credentials()
+
+        if user_input is not None:
+            self._local_gateway = user_input[CONF_LOCAL_GATEWAY]
+            return await self.async_step_local_credentials()
+
+        return self.async_show_form(
+            step_id="local",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_LOCAL_GATEWAY): vol.In(gateways)}
+            ),
+        )
+
+    async def async_step_local_credentials(self, user_input=None) -> FlowResult:
+        """Collect the gateway address and label credentials, then get a token.
+
+        The gateway only issues a token while it can prove physical proximity, so
+        the user has to press its WLAN and Wireless buttons within five minutes
+        before submitting. That instruction lives in the step description.
+        """
+        errors: dict[str, str] = {}
+        existing = (self._entry.data.get(CONF_LOCAL) or {}).get(self._local_gateway, {})
+
+        if user_input is not None:
+            if user_input.get(CONF_LOCAL_REMOVE):
+                return self._save_local(None)
+
+            host = user_input[CONF_LOCAL_HOST].strip()
+            client = HomeComK40Local(
+                async_get_clientsession(self.hass),
+                host,
+                device_id=self._local_gateway,
+            )
+            try:
+                await client.async_create_token(
+                    user_input[CONF_LOCAL_LOGIN],
+                    user_input[CONF_LOCAL_PASSWORD],
+                    "home-assistant",
+                )
+            except ProximityRequiredError:
+                # Not a credential problem: the button press is missing or the
+                # five-minute window expired.
+                errors["base"] = "local_proximity_required"
+            except TokenStoreFullError:
+                errors["base"] = "local_token_store_full"
+            except AuthFailedError:
+                errors["base"] = "local_invalid_auth"
+            except (NotRespondingError, ClientConnectorError, TimeoutError):
+                errors["base"] = "local_cannot_connect"
+            except ApiError:
+                # Wrong Login/Pass comes back as 400 invalid_grant.
+                errors["base"] = "local_invalid_auth"
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Unexpected error creating a local access token")
+                errors["base"] = "unknown"
+            else:
+                return self._save_local(
+                    {CONF_LOCAL_HOST: host, CONF_LOCAL_TOKEN: client.token}
+                )
+
+            return self.async_show_form(
+                step_id="local_credentials",
+                data_schema=self._local_schema(user_input.get(CONF_LOCAL_HOST, "")),
+                description_placeholders={"gateway": self._local_gateway or ""},
+                errors=errors,
+            )
+
+        return self.async_show_form(
+            step_id="local_credentials",
+            data_schema=self._local_schema(existing.get(CONF_LOCAL_HOST, "")),
+            description_placeholders={"gateway": self._local_gateway or ""},
+            errors=errors,
+        )
+
+    def _local_schema(self, host_default: str) -> vol.Schema:
+        """Return the local-credentials form schema."""
+        return vol.Schema(
+            {
+                vol.Required(CONF_LOCAL_HOST, default=host_default): cv.string,
+                vol.Optional(CONF_LOCAL_LOGIN, default=""): cv.string,
+                vol.Optional(CONF_LOCAL_PASSWORD, default=""): cv.string,
+                vol.Optional(CONF_LOCAL_REMOVE, default=False): cv.boolean,
+            }
+        )
+
+    def _save_local(self, config: dict[str, str] | None) -> FlowResult:
+        """Persist (or clear) the local config for the selected gateway.
+
+        Stored in ``entry.data`` rather than options because the token is a
+        credential; the update triggers a reload so the coordinator picks it up.
+        """
+        local = dict(self._entry.data.get(CONF_LOCAL) or {})
+        if config is None:
+            local.pop(self._local_gateway, None)
+        else:
+            local[self._local_gateway] = config
+
+        new_data = dict(self._entry.data)
+        new_data[CONF_LOCAL] = local
+        self.hass.config_entries.async_update_entry(self._entry, data=new_data)
+        # Returning an empty options entry reloads the entry via
+        # OptionsFlowWithReload without disturbing the existing options.
+        return self.async_create_entry(title="", data=dict(self._entry.options))
+
+    async def async_step_general(self, user_input=None) -> FlowResult:
+        """Handle the poll interval, brand and wallbox-label settings."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
@@ -350,4 +499,4 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
             }
         )
 
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="general", data_schema=schema)

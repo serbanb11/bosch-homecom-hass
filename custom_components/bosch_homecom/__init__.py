@@ -33,6 +33,7 @@ from homecom_alt import (
     HomeComGeneric,
     HomeComIcom,
     HomeComK40,
+    HomeComK40Local,
     HomeComRac,
     HomeComRrc2,
     HomeComWddw2,
@@ -49,6 +50,9 @@ from .const import (
     CONF_BACON_CLIENT_ID,
     CONF_BACON_REGION,
     CONF_BRAND_BUDERUS,
+    CONF_LOCAL,
+    CONF_LOCAL_HOST,
+    CONF_LOCAL_TOKEN,
     CONF_REFRESH,
     CONF_UPDATE_SECONDS,
     DEFAULT_UPDATE_INTERVAL,
@@ -169,6 +173,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
             )
         elif device["deviceType"] in ("k40", "k30"):
+            # Optional read-only LAN access, configured per gateway in the
+            # options flow. Absent -> cloud-only, exactly as before.
+            local_conf = (entry.data.get(CONF_LOCAL) or {}).get(device_id) or {}
+            local_client = None
+            if local_conf.get(CONF_LOCAL_HOST) and local_conf.get(CONF_LOCAL_TOKEN):
+                local_client = HomeComK40Local(
+                    websession,
+                    local_conf[CONF_LOCAL_HOST],
+                    local_conf[CONF_LOCAL_TOKEN],
+                    device_id=device_id,
+                )
+                _LOGGER.debug(
+                    "Device_Id: %s, local API enabled at %s",
+                    device_id,
+                    local_conf[CONF_LOCAL_HOST],
+                )
             coordinators.append(
                 BoschComModuleCoordinatorK40(
                     hass,
@@ -179,6 +199,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     firmware,
                     entry,
                     auth_provider,
+                    local_client,
                 )
             )
         elif device["deviceType"] == "icom":

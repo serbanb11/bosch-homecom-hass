@@ -53,13 +53,47 @@
     "step": {
       "init": {
         "title": "Options",
+        "description": "Adjust runtime options, or set up local network access.",
+        "menu_options": {
+          "general": "General settings",
+          "local": "Local network access (K 40 RF)"
+        }
+      },
+      "general": {
+        "title": "General settings",
         "description": "Adjust runtime options for Bosch HomeCom.",
         "data": {
           "update_seconds": "Update interval (seconds)",
           "brand_buderus": "Buderus brand",
           "wb_label": "Wallbox label"
         }
+      },
+      "local": {
+        "title": "Local network access",
+        "description": "Choose the gateway to read over the local network.",
+        "data": {
+          "local_gateway": "Gateway"
+        }
+      },
+      "local_credentials": {
+        "title": "Local network access",
+        "description": "Read gateway {gateway} over your local network instead of only through the Bosch cloud. This is read-only: all control keeps going through the cloud.\n\nRequires gateway firmware 15.00.01 or newer.\n\n**Before you submit:** press the WLAN and Wireless buttons on the gateway at the same time for about one second. The LEDs blink blue briefly and the gateway then accepts a token request for five minutes.\n\nEnter the Login and Pass values printed on the gateway label. Any hyphens in Pass are removed for you. The token is stored and reused, so you only do this once.\n\nTo turn local access off again, tick the removal box.",
+        "data": {
+          "local_host": "Gateway hostname or IP address",
+          "local_login": "Login (from the gateway label)",
+          "local_password": "Pass (from the gateway label)",
+          "local_remove": "Remove local access for this gateway"
+        }
       }
+    },
+    "error": {
+      "local_cannot_connect": "Cannot reach the gateway. Check the address, and note that the gateway only serves the read port once a token exists — if this is the first token, that is expected until this step succeeds.",
+      "local_invalid_auth": "The gateway rejected the Login or Pass. Check them against the label; Pass must be entered without hyphens (this is done for you).",
+      "local_proximity_required": "The gateway needs proof you are next to it. Press the WLAN and Wireless buttons together for one second, then submit again within five minutes.",
+      "local_token_store_full": "The gateway cannot store another token. Revoke an unused token on the gateway and try again."
+    },
+    "abort": {
+      "no_k40_gateway": "No K40 or K30 gateway is configured for this account."
     }
   },
   "entity": {
@@ -471,6 +505,54 @@
       },
       "solar_max_cylinder_temperature": {
         "name": "{circuit} max cylinder temperature"
+      },
+      "local_compressor_power": {
+        "name": "Compressor power"
+      },
+      "local_eheater_power": {
+        "name": "Electric heater power"
+      },
+      "local_hot_gas_temp": {
+        "name": "Hot gas temperature"
+      },
+      "local_suction_gas_temp": {
+        "name": "Suction gas temperature"
+      },
+      "local_compressor_temp": {
+        "name": "Compressor temperature"
+      },
+      "local_high_pressure_temp": {
+        "name": "High pressure temperature"
+      },
+      "local_low_pressure_temp": {
+        "name": "Low pressure temperature"
+      },
+      "local_condenser_supply_temp": {
+        "name": "Condenser supply temperature"
+      },
+      "local_compressor_speed": {
+        "name": "Compressor speed"
+      },
+      "local_odu_fan_speed": {
+        "name": "Outdoor unit fan speed"
+      },
+      "local_pump_volume_flow": {
+        "name": "Pump volume flow"
+      },
+      "local_starts_ch": {
+        "name": "Heating starts"
+      },
+      "local_starts_dhw": {
+        "name": "Hot water starts"
+      },
+      "local_runtime_ch": {
+        "name": "Heating runtime"
+      },
+      "local_runtime_dhw": {
+        "name": "Hot water runtime"
+      },
+      "local_data_source": {
+        "name": "Data source"
       }
     },
     "binary_sensor": {

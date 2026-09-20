@@ -36,6 +36,8 @@ from homecom_alt import (
     BHCDeviceWddw2,
     HomeComAlt,
     HomeComBaconRac,
+    HomeComK40Local,
+    HomeComK40LocalFirst,
     HomeComRac,
     InvalidSensorDataError,
     MqttNotAuthorizedError,
@@ -51,6 +53,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     MANUFACTURER,
+    MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -355,7 +358,123 @@ class _K40ExtraEndpointsMixin:
 class BoschComModuleCoordinatorK40(
     _K40ExtraEndpointsMixin, BoschComModuleCoordinatorBase[BHCDeviceK40]
 ):
-    """A coordinator to manage the fetching of BoschCom data."""
+    """A coordinator to manage the fetching of BoschCom data.
+
+    Optionally reads the appliance over the K 40 RF Local API in parallel with
+    the cloud. Local access is read-only and does not cover everything the cloud
+    does (no operationMode, no per-level DHW setpoints, no zones), so it
+    *supplements* rather than replaces the cloud data:
+
+    * ``self.data`` keeps coming from the cloud, so every existing entity behaves
+      exactly as before.
+    * ``self.local_data`` carries the local payload and powers the local-only
+      entities, which therefore stay live through a cloud outage.
+    * When the cloud fails **and** the local transport proves the appliance is
+      reachable, the previous cloud data is held for up to
+      ``MAX_CLOUD_FAILURES_WITH_LOCAL`` refreshes instead of failing. Without a
+      local transport the behaviour is unchanged: the refresh fails immediately.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        bhc: HomeComRac,
+        device: list,
+        firmware: dict,
+        entry: ConfigEntry,
+        auth_provider: bool,
+        local_client: HomeComK40Local | None = None,
+    ) -> None:
+        """Initialize, optionally with a local transport."""
+        super().__init__(hass, bhc, device, firmware, entry, auth_provider)
+        self.local_client = local_client
+        self.local_first = (
+            HomeComK40LocalFirst(local_client, bhc) if local_client else None
+        )
+        self.local_data = None
+        self.local_source: str | None = None
+        self.local_healthy = False
+        self._cloud_failures = 0
+
+    async def _async_update_data(self) -> BHCDeviceK40:
+        """Update from the cloud, and from the local gateway when configured."""
+        if self.local_first is None:
+            return await super()._async_update_data()
+
+        await self._async_refresh_tokens()
+
+        try:
+            update = await self.local_first.async_update(self.unique_id)
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            RetryError,
+            NotRespondingError,
+        ) as error:
+            # Both transports failed.
+            self._cloud_failures += 1
+            raise UpdateFailed(error) from error
+        # A cloud AuthFailedError from the update itself is deliberately NOT
+        # caught, matching the base coordinator: on a multi-device setup a
+        # non-auth-provider can see a transient 401 while the shared token is
+        # being rotated, and that must not trigger a reauth flow. Only a failed
+        # token *refresh* does, which _async_refresh_tokens handles above.
+
+        self.local_data = update.local
+        self.local_source = update.source
+        self.local_healthy = update.local_healthy
+
+        if update.cloud is not None:
+            self._cloud_failures = 0
+            data = self._build_device_data(update.cloud)
+        else:
+            # Cloud failed while the gateway answered locally, so the appliance
+            # is demonstrably fine and this is a cloud-side problem. Hold the
+            # last known cloud data briefly rather than dropping every entity to
+            # unavailable.
+            self._cloud_failures += 1
+            if (
+                self.data is None
+                or self._cloud_failures > MAX_CLOUD_FAILURES_WITH_LOCAL
+            ):
+                raise UpdateFailed(update.cloud_error or "Cloud update failed")
+            _LOGGER.info(
+                "Device_Id: %s, cloud update failed (%s/%s) but the gateway "
+                "answered locally; keeping the last cloud values",
+                self.unique_id,
+                self._cloud_failures,
+                MAX_CLOUD_FAILURES_WITH_LOCAL,
+            )
+            data = self.data
+
+        # These are the _K40ExtraEndpointsMixin steps. This method bypasses the
+        # mixin's _async_update_data to drive the local transport, so they have
+        # to be invoked here or the additionalHeater / silentMode /
+        # dhwChargeDuration entities and the recordings would silently stop
+        # updating whenever local access is enabled. Both cache on failure.
+        await self._fetch_extra_endpoints()
+        await self._fetch_recordings()
+        return data
+
+    async def _async_refresh_tokens(self) -> None:
+        """Refresh and persist cloud tokens, as the base coordinator does."""
+        if not self.auth_provider:
+            return
+        try:
+            await self.bhc.get_token()
+        except AuthFailedError:
+            self.entry.async_start_reauth(self.hass)
+            raise UpdateFailed("Re-authentication required") from None
+        if self.bhc.token != self.entry.data.get(
+            CONF_TOKEN
+        ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
+            new_data = dict(self.entry.data)
+            new_data[CONF_TOKEN] = self.bhc.token
+            new_data[CONF_REFRESH] = self.bhc.refresh_token
+            self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+            _LOGGER.debug(
+                "Device_Id: %s, persisted refreshed auth tokens", self.unique_id
+            )
 
     def _build_device_data(self, data: BHCDeviceK40) -> BHCDeviceK40:
         """Build K40 device data."""

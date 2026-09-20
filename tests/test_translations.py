@@ -17,6 +17,7 @@ COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / "bosch_h
 # Source file -> entity platform it registers under.
 FILE_PLATFORM = {
     "sensor.py": "sensor",
+    "local_sensor.py": "sensor",
     "binary_sensor.py": "binary_sensor",
     "select.py": "select",
     "climate.py": "climate",

@@ -127,3 +127,24 @@ WDDW2_NOTIFICATION_CODES: dict[str, str] = {
     "E07": "Air bubbles detected",
     "E13": "Water flow measurement failure",
 }
+
+
+# --- K 40 RF Local API (optional, read-only LAN access) ---------------------
+# Opt-in per gateway. Stored in entry.data under CONF_LOCAL as
+# {device_id: {CONF_LOCAL_HOST: str, CONF_LOCAL_TOKEN: str}} so a multi-gateway
+# setup can enable it for some gateways and not others. The token is a
+# credential and never expires, hence entry.data rather than entry.options.
+CONF_LOCAL: Final = "local"
+CONF_LOCAL_HOST: Final = "local_host"
+CONF_LOCAL_TOKEN: Final = "local_token"  # noqa: S105 - config key, not a secret
+CONF_LOCAL_LOGIN: Final = "local_login"
+CONF_LOCAL_PASSWORD: Final = "local_password"  # noqa: S105 - config key
+CONF_LOCAL_GATEWAY: Final = "local_gateway"
+CONF_LOCAL_REMOVE: Final = "local_remove"
+
+# How many consecutive cloud failures to ride out while the local transport is
+# proving the appliance is reachable. At the default 60 s interval this holds the
+# cloud-backed entities at their last value for ~5 minutes instead of dropping
+# them to unavailable, then gives up so staleness stays bounded. Local-only
+# entities are unaffected — they keep updating from the LAN throughout.
+MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5

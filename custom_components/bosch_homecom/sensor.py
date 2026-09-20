@@ -41,6 +41,7 @@ from .coordinator import (
     BoschComModuleCoordinatorRrc2,
     BoschComModuleCoordinatorWddw2,
 )
+from .local_sensor import LOCAL_SENSORS, BoschComLocalSensor, BoschComLocalSourceSensor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +67,24 @@ async def async_setup_entry(
 
     for coordinator in coordinators:
         device_type = coordinator.data.device.get("deviceType")
+
+        # ---- Local API sensors (only when local access is configured) ----
+        # Read coordinator.local_data, so they survive a cloud outage. Absent
+        # local config -> local_first is None -> no entities created at all.
+        if getattr(coordinator, "local_first", None) is not None:
+            entities.extend(
+                BoschComLocalSensor(
+                    coordinator=coordinator,
+                    config_entry=config_entry,
+                    description=description,
+                )
+                for description in LOCAL_SENSORS
+            )
+            entities.append(
+                BoschComLocalSourceSensor(
+                    coordinator=coordinator, config_entry=config_entry
+                )
+            )
 
         # ---- Notifications per device type (existing) ----
         if device_type == "rac":
