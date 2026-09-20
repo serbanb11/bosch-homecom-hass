@@ -53,13 +53,47 @@
     "step": {
       "init": {
         "title": "Opties",
-        "description": "Pas de instellingen voor Bosch HomeCom aan.",
+        "description": "Pas runtime-opties aan of stel lokale netwerktoegang in.",
+        "menu_options": {
+          "general": "Algemene instellingen",
+          "local": "Lokale netwerktoegang (K 40 RF)"
+        }
+      },
+      "general": {
+        "title": "Algemene instellingen",
+        "description": "Pas runtime-opties voor Bosch HomeCom aan.",
         "data": {
           "update_seconds": "Update-interval (seconden)",
-          "brand_buderus": "Buderus merk",
-          "wb_label": "Wallbox label"
+          "brand_buderus": "Merk Buderus",
+          "wb_label": "Wallbox-label"
+        }
+      },
+      "local": {
+        "title": "Lokale netwerktoegang",
+        "description": "Kies de gateway die lokaal gelezen moet worden.",
+        "data": {
+          "local_gateway": "Gateway"
+        }
+      },
+      "local_credentials": {
+        "title": "Lokale netwerktoegang",
+        "description": "Lees gateway {gateway} via je lokale netwerk in plaats van alleen via de Bosch-cloud. Dit is alleen-lezen: besturing blijft volledig via de cloud lopen.\n\nVereist gateway-firmware 15.00.01 of nieuwer.\n\n**Voordat je verzendt:** houd de WLAN- en Wireless-knoppen op de gateway ongeveer een seconde samen ingedrukt. De leds knipperen kort blauw, waarna de gateway vijf minuten lang een tokenverzoek accepteert.\n\nVoer de Login- en Pass-waarden van het gatewaylabel in. Streepjes in Pass worden automatisch verwijderd. Het token wordt opgeslagen en hergebruikt, dus dit is eenmalig.\n\nVink het verwijdervak aan om lokale toegang uit te schakelen.",
+        "data": {
+          "local_host": "Hostnaam of IP-adres van de gateway",
+          "local_login": "Login (van het gatewaylabel)",
+          "local_password": "Pass (van het gatewaylabel)",
+          "local_remove": "Lokale toegang voor deze gateway verwijderen"
         }
       }
+    },
+    "error": {
+      "local_cannot_connect": "Gateway niet bereikbaar. Controleer het adres. Let op: de gateway opent de leespoort pas zodra er een token bestaat — bij het eerste token is dit dus normaal totdat deze stap lukt.",
+      "local_invalid_auth": "De gateway heeft Login of Pass geweigerd. Vergelijk ze met het label; Pass wordt zonder streepjes verzonden (automatisch).",
+      "local_proximity_required": "De gateway wil bewijs dat je ernaast staat. Houd de WLAN- en Wireless-knoppen een seconde samen ingedrukt en verzend binnen vijf minuten opnieuw.",
+      "local_token_store_full": "De gateway kan geen extra token opslaan. Trek een ongebruikt token in en probeer het opnieuw."
+    },
+    "abort": {
+      "no_k40_gateway": "Voor dit account is geen K40- of K30-gateway geconfigureerd."
     }
   },
   "entity": {
@@ -471,6 +505,54 @@
       },
       "solar_max_cylinder_temperature": {
         "name": "{circuit} max. boilertemperatuur"
+      },
+      "local_compressor_power": {
+        "name": "Compressorvermogen"
+      },
+      "local_eheater_power": {
+        "name": "Vermogen elektrisch element"
+      },
+      "local_hot_gas_temp": {
+        "name": "Heetgastemperatuur"
+      },
+      "local_suction_gas_temp": {
+        "name": "Zuiggastemperatuur"
+      },
+      "local_compressor_temp": {
+        "name": "Compressortemperatuur"
+      },
+      "local_high_pressure_temp": {
+        "name": "Hogedruktemperatuur"
+      },
+      "local_low_pressure_temp": {
+        "name": "Lagedruktemperatuur"
+      },
+      "local_condenser_supply_temp": {
+        "name": "Condensor-aanvoertemperatuur"
+      },
+      "local_compressor_speed": {
+        "name": "Compressortoerental"
+      },
+      "local_odu_fan_speed": {
+        "name": "Ventilatortoerental buitenunit"
+      },
+      "local_pump_volume_flow": {
+        "name": "Pomp-volumestroom"
+      },
+      "local_starts_ch": {
+        "name": "Starts verwarming"
+      },
+      "local_starts_dhw": {
+        "name": "Starts warm water"
+      },
+      "local_runtime_ch": {
+        "name": "Looptijd verwarming"
+      },
+      "local_runtime_dhw": {
+        "name": "Looptijd warm water"
+      },
+      "local_data_source": {
+        "name": "Gegevensbron"
       }
     },
     "binary_sensor": {

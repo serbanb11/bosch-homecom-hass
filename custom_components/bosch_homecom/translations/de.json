@@ -53,13 +53,47 @@
     "step": {
       "init": {
         "title": "Optionen",
+        "description": "Laufzeitoptionen anpassen oder lokalen Netzwerkzugriff einrichten.",
+        "menu_options": {
+          "general": "Allgemeine Einstellungen",
+          "local": "Lokaler Netzwerkzugriff (K 40 RF)"
+        }
+      },
+      "general": {
+        "title": "Allgemeine Einstellungen",
         "description": "Laufzeitoptionen für Bosch HomeCom anpassen.",
         "data": {
           "update_seconds": "Aktualisierungsintervall (Sekunden)",
-          "brand_buderus": "Buderus Marke",
-          "wb_label": "Wallbox Bezeichnung"
+          "brand_buderus": "Marke Buderus",
+          "wb_label": "Wallbox-Bezeichnung"
+        }
+      },
+      "local": {
+        "title": "Lokaler Netzwerkzugriff",
+        "description": "Gateway auswählen, das lokal gelesen werden soll.",
+        "data": {
+          "local_gateway": "Gateway"
+        }
+      },
+      "local_credentials": {
+        "title": "Lokaler Netzwerkzugriff",
+        "description": "Gateway {gateway} über das lokale Netzwerk lesen statt nur über die Bosch-Cloud. Nur lesend: Die Steuerung läuft weiterhin vollständig über die Cloud.\n\nErfordert Gateway-Firmware 15.00.01 oder neuer.\n\n**Vor dem Absenden:** die Tasten WLAN und Wireless am Gateway gleichzeitig etwa eine Sekunde drücken. Die LEDs blinken kurz blau, danach akzeptiert das Gateway fünf Minuten lang eine Token-Anfrage.\n\nLogin und Pass vom Aufkleber des Gateways eingeben. Bindestriche in Pass werden automatisch entfernt. Das Token wird gespeichert und wiederverwendet, der Vorgang ist also nur einmal nötig.\n\nZum Abschalten des lokalen Zugriffs das Entfernen-Feld ankreuzen.",
+        "data": {
+          "local_host": "Hostname oder IP-Adresse des Gateways",
+          "local_login": "Login (vom Gateway-Aufkleber)",
+          "local_password": "Pass (vom Gateway-Aufkleber)",
+          "local_remove": "Lokalen Zugriff für dieses Gateway entfernen"
         }
       }
+    },
+    "error": {
+      "local_cannot_connect": "Gateway nicht erreichbar. Adresse prüfen. Hinweis: Das Gateway gibt den Leseport erst frei, wenn ein Token existiert — beim ersten Token ist das also normal, bis dieser Schritt erfolgreich ist.",
+      "local_invalid_auth": "Das Gateway hat Login oder Pass abgelehnt. Bitte mit dem Aufkleber vergleichen; Pass wird ohne Bindestriche gesendet (automatisch).",
+      "local_proximity_required": "Das Gateway verlangt einen Nachweis, dass du davor stehst. Die Tasten WLAN und Wireless eine Sekunde gleichzeitig drücken und innerhalb von fünf Minuten erneut absenden.",
+      "local_token_store_full": "Das Gateway kann kein weiteres Token speichern. Ein nicht benötigtes Token widerrufen und erneut versuchen."
+    },
+    "abort": {
+      "no_k40_gateway": "Für dieses Konto ist kein K40- oder K30-Gateway konfiguriert."
     }
   },
   "entity": {
@@ -473,6 +507,54 @@
       },
       "solar_max_cylinder_temperature": {
         "name": "{circuit} max. Speichertemperatur"
+      },
+      "local_compressor_power": {
+        "name": "Kompressorleistung"
+      },
+      "local_eheater_power": {
+        "name": "Leistung Elektroheizstab"
+      },
+      "local_hot_gas_temp": {
+        "name": "Heißgastemperatur"
+      },
+      "local_suction_gas_temp": {
+        "name": "Sauggastemperatur"
+      },
+      "local_compressor_temp": {
+        "name": "Kompressortemperatur"
+      },
+      "local_high_pressure_temp": {
+        "name": "Hochdrucktemperatur"
+      },
+      "local_low_pressure_temp": {
+        "name": "Niederdrucktemperatur"
+      },
+      "local_condenser_supply_temp": {
+        "name": "Kondensator-Vorlauftemperatur"
+      },
+      "local_compressor_speed": {
+        "name": "Kompressordrehzahl"
+      },
+      "local_odu_fan_speed": {
+        "name": "Lüfterdrehzahl Außeneinheit"
+      },
+      "local_pump_volume_flow": {
+        "name": "Pumpen-Volumenstrom"
+      },
+      "local_starts_ch": {
+        "name": "Starts Heizung"
+      },
+      "local_starts_dhw": {
+        "name": "Starts Warmwasser"
+      },
+      "local_runtime_ch": {
+        "name": "Laufzeit Heizung"
+      },
+      "local_runtime_dhw": {
+        "name": "Laufzeit Warmwasser"
+      },
+      "local_data_source": {
+        "name": "Datenquelle"
       }
     },
     "binary_sensor": {
