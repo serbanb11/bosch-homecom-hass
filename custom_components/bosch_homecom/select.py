@@ -508,7 +508,7 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
 
         for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                operationMode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry.get("operationMode") or {}, "value")
 
         return operationMode
 
@@ -525,7 +525,7 @@ class BoschComSelectDhwOperationMode(CoordinatorEntity, SelectEntity):
 
         for entry in self.coordinator.data.dhw_circuits or []:
             if entry.get("id") == "/dhwCircuits/" + self.field:
-                operationMode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry.get("operationMode") or {}, "value")
 
         self._attr_current_option = operationMode
         self.async_write_ha_state()
@@ -694,7 +694,7 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
 
         for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                operationMode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry.get("operationMode") or {}, "value")
 
         return operationMode
 
@@ -711,7 +711,7 @@ class BoschComSelectHcOperationMode(CoordinatorEntity, SelectEntity):
 
         for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                operationMode = safe_get(entry["operationMode"], "value")
+                operationMode = safe_get(entry.get("operationMode") or {}, "value")
 
         self._attr_current_option = operationMode
         self.async_write_ha_state()
@@ -901,7 +901,9 @@ class BoschComSelectHcCoolingOperationMode(CoordinatorEntity, SelectEntity):
 
         for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                coolingOperationMode = safe_get(entry["coolingOperationMode"], "value")
+                coolingOperationMode = safe_get(
+                    entry.get("coolingOperationMode") or {}, "value"
+                )
 
         return coolingOperationMode
 
@@ -918,7 +920,9 @@ class BoschComSelectHcCoolingOperationMode(CoordinatorEntity, SelectEntity):
 
         for entry in self.coordinator.data.heating_circuits or []:
             if entry.get("id") == "/heatingCircuits/" + self.field:
-                coolingOperationMode = safe_get(entry["coolingOperationMode"], "value")
+                coolingOperationMode = safe_get(
+                    entry.get("coolingOperationMode") or {}, "value"
+                )
 
         self._attr_current_option = coolingOperationMode
         self.async_write_ha_state()

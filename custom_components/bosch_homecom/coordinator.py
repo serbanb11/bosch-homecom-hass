@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 import asyncio
+import dataclasses
 from datetime import datetime, timedelta
 import logging
 from typing import TypeVar
@@ -213,6 +214,92 @@ RECORDING_PATHS: dict[str, dict] = {
 }
 
 
+# How long a field the cloud stopped delivering is served from its last known
+# value. The cloud has been seen answering 200 with single fields nulled
+# (dhw1 operationMode, the per-level setpoints) for 90 minutes while everything
+# around them stayed fresh (#182). These are settings that rarely change, so a
+# bounded hold beats flipping the entity to unknown; past the bound the null is
+# passed on so staleness cannot go unnoticed.
+LAST_KNOWN_GOOD_MAX_AGE = timedelta(minutes=15)
+
+# Never held: an empty notifications list is a real value (they were cleared),
+# and device/firmware are set by the coordinator itself.
+_LAST_KNOWN_GOOD_SKIP = frozenset({"device", "firmware", "notifications"})
+
+
+class _LastKnownGoodMixin:
+    """Fill fields the cloud nulled with their last known value, for a while.
+
+    The library swallows a failed or partial bulk response into ``None``/empty
+    values instead of raising, so a refresh "succeeds" carrying holes. Works on
+    three shapes: a plain field, a dict of resource nodes (``heat_sources``) and
+    a list of circuit references matched by ``id`` (``dhw_circuits``).
+    """
+
+    def _keep_last_known_good(self, new):
+        prev = self.data
+        held: dict[tuple, datetime] = getattr(self, "_lkg_held_since", {})
+        self._lkg_held_since = held
+        if prev is None:
+            return new
+        now = dt_util.utcnow()
+
+        def resolve(path: tuple, new_value, prev_value):
+            """Return the value to serve for ``path``."""
+            if new_value not in (None, {}, []):
+                held.pop(path, None)
+                return new_value
+            if prev_value in (None, {}, []):
+                return new_value
+            since = held.setdefault(path, now)
+            if now - since > LAST_KNOWN_GOOD_MAX_AGE:
+                return new_value
+            _LOGGER.debug(
+                "Device_Id: %s, %s missing from the cloud response, keeping the "
+                "last known value",
+                self.unique_id,
+                "/".join(map(str, path)),
+            )
+            return prev_value
+
+        def merge_node_dict(path: tuple, new_dict: dict, prev_dict: dict) -> None:
+            for key, prev_value in prev_dict.items():
+                new_dict[key] = resolve((*path, key), new_dict.get(key), prev_value)
+
+        changes = {}
+        for field in dataclasses.fields(new):
+            name = field.name
+            if name in _LAST_KNOWN_GOOD_SKIP:
+                continue
+            new_value = getattr(new, name)
+            prev_value = getattr(prev, name, None)
+            if (
+                isinstance(new_value, list)
+                and new_value
+                and isinstance(prev_value, list)
+            ):
+                prev_by_id = {
+                    ref.get("id"): ref for ref in prev_value if isinstance(ref, dict)
+                }
+                for ref in new_value:
+                    prev_ref = (
+                        prev_by_id.get(ref.get("id")) if isinstance(ref, dict) else None
+                    )
+                    if prev_ref:
+                        merge_node_dict((name, ref.get("id")), ref, prev_ref)
+            elif (
+                isinstance(new_value, dict)
+                and new_value
+                and isinstance(prev_value, dict)
+            ):
+                merge_node_dict((name,), new_value, prev_value)
+            else:
+                resolved = resolve((name,), new_value, prev_value)
+                if resolved is not new_value:
+                    changes[name] = resolved
+        return dataclasses.replace(new, **changes) if changes else new
+
+
 class _K40ExtraEndpointsMixin:
     """Fetch/cache K40-family endpoints not in the homecom_alt bulk update.
 
@@ -356,7 +443,9 @@ class _K40ExtraEndpointsMixin:
 
 
 class BoschComModuleCoordinatorK40(
-    _K40ExtraEndpointsMixin, BoschComModuleCoordinatorBase[BHCDeviceK40]
+    _K40ExtraEndpointsMixin,
+    _LastKnownGoodMixin,
+    BoschComModuleCoordinatorBase[BHCDeviceK40],
 ):
     """A coordinator to manage the fetching of BoschCom data.
 
@@ -504,7 +593,7 @@ class BoschComModuleCoordinatorK40(
         # so probe the dataclass the same way as pool to stay compatible.
         if "solar_circuits" in BHCDeviceK40.__dataclass_fields__:
             kwargs["solar_circuits"] = getattr(data, "solar_circuits", None)
-        return BHCDeviceK40(**kwargs)
+        return self._keep_last_known_good(BHCDeviceK40(**kwargs))
 
 
 class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw2]):
@@ -536,26 +625,30 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
 
 
 class BoschComModuleCoordinatorIcom(
-    _K40ExtraEndpointsMixin, BoschComModuleCoordinatorBase[BHCDeviceIcom]
+    _K40ExtraEndpointsMixin,
+    _LastKnownGoodMixin,
+    BoschComModuleCoordinatorBase[BHCDeviceIcom],
 ):
     """A coordinator for icom heat pumps (subset of K40 endpoint surface)."""
 
     def _build_device_data(self, data: BHCDeviceIcom) -> BHCDeviceIcom:
         """Build icom device data."""
-        return BHCDeviceIcom(
-            device=self.device,
-            firmware=data.firmware,
-            notifications=data.notifications,
-            holiday_mode=data.holiday_mode,
-            heat_sources=data.heat_sources,
-            dhw_circuits=data.dhw_circuits,
-            heating_circuits=data.heating_circuits,
-            solar_circuits=data.solar_circuits,
-            ventilation=data.ventilation,
-            system_info=data.system_info,
-            system_bus=data.system_bus,
-            health_status=data.health_status,
-            brand=data.brand,
+        return self._keep_last_known_good(
+            BHCDeviceIcom(
+                device=self.device,
+                firmware=data.firmware,
+                notifications=data.notifications,
+                holiday_mode=data.holiday_mode,
+                heat_sources=data.heat_sources,
+                dhw_circuits=data.dhw_circuits,
+                heating_circuits=data.heating_circuits,
+                solar_circuits=data.solar_circuits,
+                ventilation=data.ventilation,
+                system_info=data.system_info,
+                system_bus=data.system_bus,
+                health_status=data.health_status,
+                brand=data.brand,
+            )
         )
 
     async def async_set_temporary_room_setpoint(self, hc_id: str, temp: float) -> None:

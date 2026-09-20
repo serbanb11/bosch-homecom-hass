@@ -8,8 +8,10 @@ import pytest
 from custom_components.bosch_homecom.select import (
     BoschComCommoduleChargingStrategySelect,
     BoschComSelectDhwCurrentTemp,
+    BoschComSelectDhwOperationMode,
     BoschComSelectHcCoolingOperationMode,
     BoschComSelectHcHeatcoolMode,
+    BoschComSelectHcOperationMode,
     BoschComSelectHcSuwiMode,
     async_setup_entry,
 )
@@ -209,6 +211,15 @@ async def test_cooling_operation_mode_select_calls_library_and_refreshes():
 # field access (same family as #176).
 _LOOP_STATE_CASES = [
     (BoschComSelectDhwCurrentTemp, "dhw_circuits", "dhw1", "currentTemperatureLevel"),
+    # The three below crashed on a nulled node while the cloud answered 200 (#182).
+    (BoschComSelectDhwOperationMode, "dhw_circuits", "dhw1", "operationMode"),
+    (BoschComSelectHcOperationMode, "heating_circuits", "hc1", "operationMode"),
+    (
+        BoschComSelectHcCoolingOperationMode,
+        "heating_circuits",
+        "hc1",
+        "coolingOperationMode",
+    ),
     (BoschComSelectHcSuwiMode, "heating_circuits", "hc1", "currentSuWiMode"),
     (BoschComSelectHcHeatcoolMode, "heating_circuits", "hc1", "heatCoolMode"),
 ]
@@ -258,6 +269,18 @@ async def test_select_missing_or_null_field_is_unknown(cls, attr, field, key, pa
     circuit = {"id": _CIRCUIT_PREFIX[attr] + field}
     if payload is not None:
         circuit[key] = payload
+    select = _make_loop_state_select(cls, attr, field, [circuit])
+
+    assert select.current_option == "unknown"
+
+    select._handle_coordinator_update()
+    assert select._attr_current_option == "unknown"
+
+
+@pytest.mark.parametrize(("cls", "attr", "field", "key"), _LOOP_STATE_CASES)
+async def test_select_explicitly_null_field_is_unknown(cls, attr, field, key):
+    """The cloud nulling the node inside a 200 must not raise (#182)."""
+    circuit = {"id": _CIRCUIT_PREFIX[attr] + field, key: None}
     select = _make_loop_state_select(cls, attr, field, [circuit])
 
     assert select.current_option == "unknown"
