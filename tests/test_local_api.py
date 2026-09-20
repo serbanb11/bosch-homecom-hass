@@ -30,10 +30,14 @@ from custom_components.bosch_homecom.const import (
     CONF_LOCAL_PASSWORD,
     CONF_LOCAL_REMOVE,
     CONF_LOCAL_TOKEN,
+    CONF_LOCAL_TOKEN_ID,
     DOMAIN,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
 from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorK40
+from custom_components.bosch_homecom.diagnostics import (
+    async_get_config_entry_diagnostics,
+)
 from custom_components.bosch_homecom.local_sensor import (
     LOCAL_SENSORS,
     BoschComLocalSensor,
@@ -41,6 +45,7 @@ from custom_components.bosch_homecom.local_sensor import (
     _emon_field,
 )
 
+_FLOW_CLIENT = "custom_components.bosch_homecom.config_flow.HomeComK40Local"
 HOST = "192.0.2.10"
 GATEWAY = "102128202"
 LOCAL_TOKEN = "local-token"  # noqa: S105 - test fixture
@@ -241,10 +246,18 @@ async def test_local_credentials_success_stores_token(hass, entry):
         self.token = LOCAL_TOKEN
         return {"access_token": LOCAL_TOKEN}
 
-    with patch(
-        "custom_components.bosch_homecom.config_flow.HomeComK40Local.async_create_token",
-        new=fake_create,
-    ):
+    tokens = [
+        {"token_id": "1", "client_name": "eu-dataact", "created_at": "2026-01-01"},
+        {"token_id": "4", "client_name": "home-assistant", "created_at": "2026-09-01"},
+        {"token_id": "7", "client_name": "home-assistant", "created_at": "2026-09-20"},
+    ]
+    with patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create), patch(
+        f"{_FLOW_CLIENT}.async_list_tokens", new=AsyncMock(return_value=tokens)
+    ), patch(
+        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
+    ) as revoke, patch.object(
+        hass.config_entries, "async_schedule_reload"
+    ) as reload:
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             {
@@ -261,6 +274,157 @@ async def test_local_credentials_success_stores_token(hass, entry):
     # Whitespace trimmed so a copy-pasted address still works.
     assert stored[CONF_LOCAL_HOST] == HOST
     assert stored[CONF_LOCAL_TOKEN] == LOCAL_TOKEN
+    # The newest token under our client name is the one just issued.
+    assert stored[CONF_LOCAL_TOKEN_ID] == "7"
+    # First provisioning: nothing of ours to revoke.
+    revoke.assert_not_awaited()
+    # The options are unchanged, so OptionsFlowWithReload would not reload and
+    # the coordinator would never see the new token.
+    reload.assert_called_once_with(entry.entry_id)
+
+
+async def _configure_local(hass, entry, user_input):
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "local"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input
+    )
+    await hass.async_block_till_done()
+    return result
+
+
+def _with_local(hass, entry, local_conf):
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_LOCAL: {GATEWAY: local_conf}}
+    )
+
+
+@pytest.mark.asyncio
+async def test_reprovisioning_revokes_the_replaced_token(hass, entry):
+    """A new token replaces the old one on the gateway too, not just in HA."""
+    _with_local(
+        hass,
+        entry,
+        {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: "old", CONF_LOCAL_TOKEN_ID: "4"},
+    )
+
+    async def fake_create(self, login, password, client_name):
+        self.token = LOCAL_TOKEN
+        return {"access_token": LOCAL_TOKEN}
+
+    tokens = [
+        {"token_id": "4", "client_name": "home-assistant", "created_at": 1775134322},
+        {"token_id": "9", "client_name": "home-assistant", "created_at": 1790000000},
+    ]
+    with patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create), patch(
+        f"{_FLOW_CLIENT}.async_list_tokens", new=AsyncMock(return_value=tokens)
+    ), patch(
+        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
+    ) as revoke, patch.object(
+        hass.config_entries, "async_schedule_reload"
+    ):
+        await _configure_local(
+            hass,
+            entry,
+            {
+                CONF_LOCAL_HOST: HOST,
+                CONF_LOCAL_LOGIN: "login",
+                CONF_LOCAL_PASSWORD: "pass",
+                CONF_LOCAL_REMOVE: False,
+            },
+        )
+
+    revoke.assert_awaited_once_with("4")
+    stored = entry.data[CONF_LOCAL][GATEWAY]
+    assert stored[CONF_LOCAL_TOKEN] == LOCAL_TOKEN
+    assert stored[CONF_LOCAL_TOKEN_ID] == "9"
+
+
+@pytest.mark.asyncio
+async def test_token_listing_failure_does_not_block_provisioning(hass, entry):
+    """Without an id the token still works; it just cannot be revoked later."""
+    entry.add_to_hass(hass)
+
+    async def fake_create(self, login, password, client_name):
+        self.token = LOCAL_TOKEN
+        return {"access_token": LOCAL_TOKEN}
+
+    with patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create), patch(
+        f"{_FLOW_CLIENT}.async_list_tokens",
+        new=AsyncMock(side_effect=NotRespondingError("timeout")),
+    ), patch.object(hass.config_entries, "async_schedule_reload"):
+        result = await _configure_local(
+            hass,
+            entry,
+            {
+                CONF_LOCAL_HOST: HOST,
+                CONF_LOCAL_LOGIN: "login",
+                CONF_LOCAL_PASSWORD: "pass",
+                CONF_LOCAL_REMOVE: False,
+            },
+        )
+
+    assert result["type"] == "create_entry"
+    stored = entry.data[CONF_LOCAL][GATEWAY]
+    assert stored[CONF_LOCAL_TOKEN] == LOCAL_TOKEN
+    assert CONF_LOCAL_TOKEN_ID not in stored
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("revoke_error", [None, NotRespondingError("gateway gone")])
+async def test_removal_revokes_the_token_and_reloads(hass, entry, revoke_error):
+    """Removing local access frees the gateway's token slot, best effort."""
+    _with_local(
+        hass,
+        entry,
+        {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: "old", CONF_LOCAL_TOKEN_ID: "4"},
+    )
+
+    with patch(
+        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock(side_effect=revoke_error)
+    ) as revoke, patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        result = await _configure_local(
+            hass,
+            entry,
+            {
+                CONF_LOCAL_HOST: HOST,
+                CONF_LOCAL_LOGIN: "",
+                CONF_LOCAL_PASSWORD: "",
+                CONF_LOCAL_REMOVE: True,
+            },
+        )
+
+    revoke.assert_awaited_once_with("4")
+    # An unreachable gateway must not stop the user from removing local access.
+    assert result["type"] == "create_entry"
+    assert GATEWAY not in entry.data[CONF_LOCAL]
+    reload.assert_called_once_with(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_redact_local_credentials(hass, entry):
+    """The never-expiring LAN token must not reach a dump pasted into an issue."""
+    _with_local(
+        hass,
+        entry,
+        {
+            CONF_LOCAL_HOST: HOST,
+            CONF_LOCAL_TOKEN: LOCAL_TOKEN,
+            CONF_LOCAL_TOKEN_ID: "4",
+        },
+    )
+    entry.runtime_data = []
+
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+
+    local = dump["info"][CONF_LOCAL][GATEWAY]
+    assert local[CONF_LOCAL_TOKEN] == "**REDACTED**"
+    assert local[CONF_LOCAL_HOST] == "**REDACTED**"
+    assert LOCAL_TOKEN not in str(dump)
+    assert HOST not in str(dump)
 
 
 @pytest.mark.asyncio
@@ -427,6 +591,69 @@ async def test_cloud_outage_staleness_is_bounded(hass, entry, device, firmware):
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_local_sensors_keep_updating_through_a_long_outage(
+    hass, entry, device, firmware
+):
+    """Past the held-data bound the local-only sensors must still be refreshed.
+
+    DataUpdateCoordinator notifies listeners only on the first of a run of failed
+    refreshes, so the local sensors used to freeze while still reporting
+    available — in exactly the outage they exist for.
+    """
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.data = _cloud_device()
+    coordinator.local_first.async_update = AsyncMock(
+        return_value=K40Update(
+            local=_local_device(),
+            cloud=None,
+            source="local",
+            local_healthy=True,
+            cloud_error="504",
+        )
+    )
+    listener = Mock()
+    coordinator.async_add_listener(listener)
+
+    # Held cycles succeed (one notification each), then the refresh fails: the
+    # coordinator notifies once on the transition, and our hook keeps notifying
+    # on every failed refresh after it.
+    for _ in range(MAX_CLOUD_FAILURES_WITH_LOCAL + 1):
+        await coordinator.async_refresh()
+    assert coordinator.last_update_success is False
+    notified = listener.call_count
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+
+    assert listener.call_count == notified + 2
+    assert coordinator.local_data is not None
+
+    await coordinator.async_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_both_transports_failing_marks_local_unhealthy(
+    hass, entry, device, firmware
+):
+    """With no payload at all the local sensors must stop presenting as live."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.data = _cloud_device()
+    coordinator.local_healthy = True
+    coordinator.local_first = Mock()
+    coordinator.local_first.local_healthy = False
+    coordinator.local_first.async_update = AsyncMock(
+        side_effect=NotRespondingError("both down")
+    )
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert coordinator.local_healthy is False
 
 
 @pytest.mark.asyncio

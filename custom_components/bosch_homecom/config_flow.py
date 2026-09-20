@@ -45,12 +45,14 @@ from .const import (
     CONF_LOCAL_PASSWORD,
     CONF_LOCAL_REMOVE,
     CONF_LOCAL_TOKEN,
+    CONF_LOCAL_TOKEN_ID,
     CONF_REFRESH,
     CONF_UPDATE_SECONDS,
     CONF_WB_LABEL,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WB_LABEL,
     DOMAIN,
+    LOCAL_CLIENT_NAME,
     MAX_UPDATE_SECONDS,
     MIN_UPDATE_SECONDS,
     SINGLEKEY_LOGIN_URL,
@@ -395,6 +397,7 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
 
         if user_input is not None:
             if user_input.get(CONF_LOCAL_REMOVE):
+                await self._async_revoke_local_token(existing)
                 return self._save_local(None)
 
             host = user_input[CONF_LOCAL_HOST].strip()
@@ -407,7 +410,7 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 await client.async_create_token(
                     user_input[CONF_LOCAL_LOGIN],
                     user_input[CONF_LOCAL_PASSWORD],
-                    "home-assistant",
+                    LOCAL_CLIENT_NAME,
                 )
             except ProximityRequiredError:
                 # Not a credential problem: the button press is missing or the
@@ -426,9 +429,14 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
                 _LOGGER.exception("Unexpected error creating a local access token")
                 errors["base"] = "unknown"
             else:
-                return self._save_local(
-                    {CONF_LOCAL_HOST: host, CONF_LOCAL_TOKEN: client.token}
-                )
+                token_id = await self._async_new_token_id(client, existing)
+                # Re-provisioning replaces the token, so drop the old one or the
+                # gateway's store fills up and starts answering 507.
+                await self._async_revoke_local_token(existing, client)
+                config = {CONF_LOCAL_HOST: host, CONF_LOCAL_TOKEN: client.token}
+                if token_id is not None:
+                    config[CONF_LOCAL_TOKEN_ID] = token_id
+                return self._save_local(config)
 
             return self.async_show_form(
                 step_id="local_credentials",
@@ -443,6 +451,67 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
             description_placeholders={"gateway": self._local_gateway or ""},
             errors=errors,
         )
+
+    async def _async_new_token_id(
+        self, client: HomeComK40Local, existing: dict
+    ) -> str | None:
+        """Find the gateway's id for the token ``client`` was just issued.
+
+        The token response carries no id and the listing no token, so the new
+        entry is the newest one under our client name that is not the token this
+        gateway was configured with before. Best effort: without an id the token
+        still works, it just cannot be revoked later.
+        """
+        try:
+            tokens = await client.async_list_tokens()
+        except (ApiError, AuthFailedError, NotRespondingError, TimeoutError):
+            _LOGGER.debug("Could not list local tokens", exc_info=True)
+            return None
+        old_id = existing.get(CONF_LOCAL_TOKEN_ID)
+        ours = [
+            token
+            for token in tokens
+            if isinstance(token, dict)
+            and token.get("client_name") == LOCAL_CLIENT_NAME
+            and token.get("token_id") is not None
+            and str(token["token_id"]) != str(old_id)
+        ]
+        if not ours:
+            return None
+        # created_at is an epoch int in the docs and an ISO string on firmware
+        # 15.00.01; both order correctly as strings within one listing.
+        newest = max(ours, key=lambda token: str(token.get("created_at", "")))
+        return str(newest["token_id"])
+
+    async def _async_revoke_local_token(
+        self, existing: dict, client: HomeComK40Local | None = None
+    ) -> None:
+        """Revoke the token this gateway was configured with, if we know its id.
+
+        Never blocks the flow: an unreachable gateway must not stop the user from
+        removing local access, the token is then just left on the gateway.
+        """
+        token_id = existing.get(CONF_LOCAL_TOKEN_ID)
+        if not token_id or not existing.get(CONF_LOCAL_HOST):
+            return
+        if client is None:
+            if not existing.get(CONF_LOCAL_TOKEN):
+                return
+            client = HomeComK40Local(
+                async_get_clientsession(self.hass),
+                existing[CONF_LOCAL_HOST],
+                existing[CONF_LOCAL_TOKEN],
+                device_id=self._local_gateway,
+            )
+        try:
+            await client.async_revoke_token(token_id)
+        except (ApiError, AuthFailedError, NotRespondingError, TimeoutError) as err:
+            _LOGGER.warning(
+                "Could not revoke local token %s on the gateway, remove it there "
+                "if its token store fills up: %s",
+                token_id,
+                err,
+            )
 
     def _local_schema(self, host_default: str) -> vol.Schema:
         """Return the local-credentials form schema."""
@@ -470,8 +539,10 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
         new_data = dict(self._entry.data)
         new_data[CONF_LOCAL] = local
         self.hass.config_entries.async_update_entry(self._entry, data=new_data)
-        # Returning an empty options entry reloads the entry via
-        # OptionsFlowWithReload without disturbing the existing options.
+        # OptionsFlowWithReload only reloads when the *options* changed, and
+        # these are unchanged, so the coordinator would never pick the new
+        # entry.data up. Reload explicitly.
+        self.hass.config_entries.async_schedule_reload(self._entry.entry_id)
         return self.async_create_entry(title="", data=dict(self._entry.options))
 
     async def async_step_general(self, user_input=None) -> FlowResult:

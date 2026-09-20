@@ -137,6 +137,10 @@ WDDW2_NOTIFICATION_CODES: dict[str, str] = {
 CONF_LOCAL: Final = "local"
 CONF_LOCAL_HOST: Final = "local_host"
 CONF_LOCAL_TOKEN: Final = "local_token"  # noqa: S105 - config key, not a secret
+# The gateway's id for that token, needed to revoke it again. Its token store is
+# small and answers 507 once full, so tokens must not be left behind.
+CONF_LOCAL_TOKEN_ID: Final = "local_token_id"  # noqa: S105 - config key
+LOCAL_CLIENT_NAME: Final = "home-assistant"
 CONF_LOCAL_LOGIN: Final = "local_login"
 CONF_LOCAL_PASSWORD: Final = "local_password"  # noqa: S105 - config key
 CONF_LOCAL_GATEWAY: Final = "local_gateway"

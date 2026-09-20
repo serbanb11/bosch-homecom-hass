@@ -108,25 +108,7 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
 
     async def _async_update_data(self) -> T:
         """Update data via library."""
-        if self.auth_provider:
-            try:
-                await self.bhc.get_token()
-                if self.bhc.token != self.entry.data.get(
-                    CONF_TOKEN
-                ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
-                    new_data = dict(self.entry.data)
-                    new_data[CONF_TOKEN] = self.bhc.token
-                    new_data[CONF_REFRESH] = self.bhc.refresh_token
-                    self.hass.config_entries.async_update_entry(
-                        self.entry, data=new_data
-                    )
-                    _LOGGER.debug(
-                        "Device_Id: %s, persisted refreshed auth tokens",
-                        self.unique_id,
-                    )
-            except AuthFailedError:
-                self.entry.async_start_reauth(self.hass)
-                raise UpdateFailed("Re-authentication required")
+        await self._async_refresh_tokens()
 
         try:
             data = await self.bhc.async_update(self.unique_id)
@@ -139,6 +121,30 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
             raise UpdateFailed(error) from error
 
         return self._build_device_data(data)
+
+    async def _async_refresh_tokens(self) -> None:
+        """Refresh the cloud tokens and persist a rotation on the entry.
+
+        Only the ``auth_provider`` coordinator does this; the others reuse the
+        shared session. A failed refresh is the one failure that starts a reauth.
+        """
+        if not self.auth_provider:
+            return
+        try:
+            await self.bhc.get_token()
+        except AuthFailedError:
+            self.entry.async_start_reauth(self.hass)
+            raise UpdateFailed("Re-authentication required") from None
+        if self.bhc.token != self.entry.data.get(
+            CONF_TOKEN
+        ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
+            new_data = dict(self.entry.data)
+            new_data[CONF_TOKEN] = self.bhc.token
+            new_data[CONF_REFRESH] = self.bhc.refresh_token
+            self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+            _LOGGER.debug(
+                "Device_Id: %s, persisted refreshed auth tokens", self.unique_id
+            )
 
     @abstractmethod
     def _build_device_data(self, data: T) -> T:
@@ -500,8 +506,12 @@ class BoschComModuleCoordinatorK40(
             RetryError,
             NotRespondingError,
         ) as error:
-            # Both transports failed.
+            # Both transports failed. The payload never arrives on this path, so
+            # take the health from the policy object or the local-only sensors
+            # would keep presenting their last reading as live.
             self._cloud_failures += 1
+            self.local_healthy = self.local_first.local_healthy
+            self._async_notify_local_listeners()
             raise UpdateFailed(error) from error
         # A cloud AuthFailedError from the update itself is deliberately NOT
         # caught, matching the base coordinator: on a multi-device setup a
@@ -526,6 +536,7 @@ class BoschComModuleCoordinatorK40(
                 self.data is None
                 or self._cloud_failures > MAX_CLOUD_FAILURES_WITH_LOCAL
             ):
+                self._async_notify_local_listeners()
                 raise UpdateFailed(update.cloud_error or "Cloud update failed")
             _LOGGER.info(
                 "Device_Id: %s, cloud update failed (%s/%s) but the gateway "
@@ -545,25 +556,18 @@ class BoschComModuleCoordinatorK40(
         await self._fetch_recordings()
         return data
 
-    async def _async_refresh_tokens(self) -> None:
-        """Refresh and persist cloud tokens, as the base coordinator does."""
-        if not self.auth_provider:
-            return
-        try:
-            await self.bhc.get_token()
-        except AuthFailedError:
-            self.entry.async_start_reauth(self.hass)
-            raise UpdateFailed("Re-authentication required") from None
-        if self.bhc.token != self.entry.data.get(
-            CONF_TOKEN
-        ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
-            new_data = dict(self.entry.data)
-            new_data[CONF_TOKEN] = self.bhc.token
-            new_data[CONF_REFRESH] = self.bhc.refresh_token
-            self.hass.config_entries.async_update_entry(self.entry, data=new_data)
-            _LOGGER.debug(
-                "Device_Id: %s, persisted refreshed auth tokens", self.unique_id
-            )
+    @callback
+    def _async_notify_local_listeners(self) -> None:
+        """Push fresh local readings out while the refresh itself is failing.
+
+        DataUpdateCoordinator only notifies listeners on the first of a run of
+        failed refreshes, so during a long cloud outage the local-only sensors
+        stopped updating yet stayed available. After that first failure nobody
+        else tells them, so do it here; cloud-backed entities just re-write
+        themselves as unavailable.
+        """
+        if not self.last_update_success:
+            self.async_update_listeners()
 
     def _build_device_data(self, data: BHCDeviceK40) -> BHCDeviceK40:
         """Build K40 device data."""

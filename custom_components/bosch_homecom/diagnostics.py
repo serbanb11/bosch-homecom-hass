@@ -9,9 +9,19 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_CODE, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_REFRESH
+from .const import CONF_LOCAL_HOST, CONF_LOCAL_TOKEN, CONF_REFRESH
 
-TO_REDACT = {CONF_PASSWORD, CONF_USERNAME, CONF_CODE, CONF_TOKEN, CONF_REFRESH}
+# The local-API token never expires and is valid for anyone on the LAN, and the
+# host identifies the home network; both sit nested under entry.data["local"].
+TO_REDACT = {
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    CONF_CODE,
+    CONF_TOKEN,
+    CONF_REFRESH,
+    CONF_LOCAL_TOKEN,
+    CONF_LOCAL_HOST,
+}
 
 # The bacon MQTT client subscribes to users/{sub}/# — the whole account — so its
 # raw capture also carries other devices and the sharing/claim traffic. Matter
