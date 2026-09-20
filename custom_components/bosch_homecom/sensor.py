@@ -3610,12 +3610,12 @@ class BoschComK40RecordingSensor(CoordinatorEntity, SensorEntity):
 class BoschComBaconRoomTemperature(BoschComSensorBase):
     """Last room temperature a bacon device reported, with its own timestamp.
 
-    Deliberately **not** wired to the climate entity's ``current_temperature``.
-    The reading arrives on the push-only ``topics/sensor`` channel and has been
-    observed unchanged for days: it does not follow ``powerEnabled`` and does not
-    refresh while the unit runs, so presenting it as the current temperature would
-    show a two-day-old value as if it were live. Exposed here instead, with
-    ``measured_at`` alongside, so the value stays inspectable and its age obvious.
+    The same reading the climate entity shows as ``current_temperature``. It
+    arrives on the push-only ``topics/sensor`` channel and, on some firmware, has
+    been observed unchanged for days: it did not follow ``powerEnabled`` and did
+    not refresh while the unit ran. The climate entity reports it regardless of
+    age (see #162/#164), so this sensor exists to carry ``measured_at`` alongside
+    the value and make a stale reading recognisable as one.
     """
 
     _attr_has_entity_name = True
