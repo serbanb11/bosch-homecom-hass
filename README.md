@@ -73,6 +73,14 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 A K30/K40 gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.
 
+Bosch lists these products as supported by the Local API:
+
+| Product | Brand-specific names | What you can do |
+|---------|----------------------|-----------------|
+| K 40 RF / MX400 | Bosch Connect-Key K 40 RF, Buderus MX400, and K 40 RF for IVT, Vulcano, and Worcester | Read data from your connected heating system over your local network. |
+
+The integration offers local access for every gateway it lists as `k40` or `k30`. It has been verified on a Bosch Connect-Key K 40 RF; reports from the other brands are welcome.
+
 1. Go to **Settings** > **Devices & Services** > **Bosch HomeCom** > **Configure** > **Local network access (K 40 RF)**
 2. On the gateway, press the **WLAN** and **Wireless** buttons together for about one second. It then accepts a token request for five minutes
 3. Enter the gateway's hostname or IP address and the **Login** and **Pass** printed on its label, then submit
