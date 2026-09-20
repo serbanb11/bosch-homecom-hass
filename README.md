@@ -3,7 +3,7 @@
 [![version](https://img.shields.io/github/manifest-json/v/serbanb11/bosch-homecom-hass?filename=custom_components%2Fbosch_homecom%2Fmanifest.json&color=slateblue)](https://github.com/serbanb11/bosch-homecom-hass/releases/latest)
 [![HACS](https://img.shields.io/badge/HACS-Default-orange.svg?logo=HomeAssistantCommunityStore&logoColor=white)](https://github.com/hacs/integration)
 
-A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances. Cloud-polling, pure async, automatic token refresh.
+A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances. Cloud-polling, pure async, automatic token refresh, with optional read-only local network access for K 40 RF gateways.
 
 > **Disclaimer:** This project is not affiliated with Bosch or Home Assistant.
 
@@ -63,11 +63,27 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | Heating circuits with temporary setpoint | -- | -- |
 | Water Heater | -- | Operation mode | Operation mode | Operation mode + target temp | -- |
 | Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | DHW/HC modes, away | -- | Charging strategy |
-| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
+| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp, solar thermal circuits, [local-only readings](#local-network-access-k-40-rf) | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
 | Switch | Plasmacluster | -- | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
 | Binary Sensor | -- | -- | -- | -- | Network connectivity |
 | Number | -- | Ventilation summer-bypass duration | -- | -- | Electricity price |
+
+### Local network access (K 40 RF)
+
+A K30/K40 gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.
+
+1. Go to **Settings** > **Devices & Services** > **Bosch HomeCom** > **Configure** > **Local network access (K 40 RF)**
+2. On the gateway, press the **WLAN** and **Wireless** buttons together for about one second. It then accepts a token request for five minutes
+3. Enter the gateway's hostname or IP address and the **Login** and **Pass** printed on its label, then submit
+
+The integration reloads and adds:
+
+- **Local-only sensors** the cloud does not offer: compressor and electric heater power (W), the refrigerant circuit (hot gas, suction gas, compressor, high/low pressure and condenser supply temperatures), compressor and outdoor fan speed, pump flow, and heating / hot water start and runtime counters. The less commonly useful ones are disabled by default
+- A **Data source** diagnostic sensor (`both` / `local` / `cloud`), so a cloud outage can be told apart from a LAN problem
+- **Outage tolerance:** while the cloud fails but the gateway answers locally, cloud-backed entities keep their last values for up to 5 refreshes instead of going unavailable
+
+To turn it off again, open the same step and tick **Remove local access for this gateway**; the token is also revoked on the gateway. The token never expires and is redacted from diagnostics. See the [K30 / K40 wiki page](https://github.com/serbanb11/bosch-homecom-hass/wiki/K30-K40-Devices#local-network-access-k-40-rf) for details and limitations.
 
 ### ICOM heat pump — DHW heating detection
 
@@ -120,3 +136,5 @@ See the **[Wiki](https://github.com/serbanb11/bosch-homecom-hass/wiki)** for ful
 ## Acknowledgements
 
 Special thanks to [RonNabuurs](https://github.com/RonNabuurs) for his valuable work on integrating **K30** support.
+
+Special thanks to [SchnitzelKopf](https://github.com/SchnitzelKopf) for the **K40 local network access** work: implementing and testing the K 40 RF Local API support against real hardware, in both this integration and the `homecom_alt` library.
