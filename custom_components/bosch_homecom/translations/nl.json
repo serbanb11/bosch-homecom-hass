@@ -77,17 +77,20 @@
       },
       "local_credentials": {
         "title": "Lokale netwerktoegang",
-        "description": "Lees gateway {gateway} via je lokale netwerk in plaats van alleen via de Bosch-cloud. Dit is alleen-lezen: besturing blijft volledig via de cloud lopen.\n\nVereist gateway-firmware 15.00.01 of nieuwer.\n\n**Voordat je verzendt:** houd de WLAN- en Wireless-knoppen op de gateway ongeveer een seconde samen ingedrukt. De leds knipperen kort blauw, waarna de gateway vijf minuten lang een tokenverzoek accepteert.\n\nVoer de Login- en Pass-waarden van het gatewaylabel in. Streepjes in Pass worden automatisch verwijderd. Het token wordt opgeslagen en hergebruikt, dus dit is eenmalig.\n\nVink het verwijdervak aan om lokale toegang uit te schakelen.",
+        "description": "Lees gateway {gateway} via je lokale netwerk in plaats van alleen via de Bosch-cloud. Dit is alleen-lezen: besturing blijft volledig via de cloud lopen.\n\nVereist gateway-firmware 15.00.01 of nieuwer.\n\n**Voordat je verzendt:** houd de WLAN- en Wireless-knoppen op de gateway ongeveer een seconde samen ingedrukt. De leds knipperen kort blauw, waarna de gateway vijf minuten lang een tokenverzoek accepteert.\n\nVoer de Login- en Pass-waarden van het gatewaylabel in. Streepjes in Pass worden automatisch verwijderd. Het token wordt opgeslagen en hergebruikt, dus dit is eenmalig.\n\n**Heb je al een token** voor deze gateway, bijvoorbeeld van een andere integratie? Plak het dan in het tokenveld; Login, Pass en het indrukken van de knoppen zijn dan niet nodig. Een geplakt token wordt door deze integratie nooit ingetrokken.\n\nVink het verwijdervak aan om lokale toegang uit te schakelen.",
         "data": {
           "local_host": "Hostnaam of IP-adres van de gateway",
           "local_login": "Login (van het gatewaylabel)",
           "local_password": "Pass (van het gatewaylabel)",
+          "local_token": "Bestaand toegangstoken (in plaats van Login en Pass)",
           "local_remove": "Lokale toegang voor deze gateway verwijderen"
         }
       }
     },
     "error": {
       "local_cannot_connect": "Gateway niet bereikbaar. Controleer het adres. Let op: de gateway opent de leespoort pas zodra er een token bestaat — bij het eerste token is dit dus normaal totdat deze stap lukt.",
+      "local_invalid_token": "De gateway heeft dit token geweigerd. Controleer of het volledig is gekopieerd, of koppel met Login en Pass.",
+      "local_wrong_gateway": "Dit token of adres hoort bij een andere gateway. Controleer het adres en het token.",
       "local_invalid_auth": "De gateway heeft Login of Pass geweigerd. Vergelijk ze met het label; Pass wordt zonder streepjes verzonden (automatisch).",
       "local_proximity_required": "De gateway wil bewijs dat je ernaast staat. Houd de WLAN- en Wireless-knoppen een seconde samen ingedrukt en verzend binnen vijf minuten opnieuw.",
       "local_token_store_full": "De gateway kan geen extra token opslaan. Trek een ongebruikt token in en probeer het opnieuw."
