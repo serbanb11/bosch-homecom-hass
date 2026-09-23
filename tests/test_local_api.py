@@ -468,6 +468,147 @@ async def test_local_credentials_error_mapping(hass, entry, exc, expected_error)
     assert not entry.data.get(CONF_LOCAL)
 
 
+def _basic_info(gateway_id=GATEWAY):
+    return {"id": "/system/basicInfo", "gatewayId": gateway_id, "values": []}
+
+
+@pytest.mark.asyncio
+async def test_pasted_token_is_verified_and_stored(hass, entry):
+    """A pasted token skips Login/Pass and the button press entirely."""
+    entry.add_to_hass(hass)
+    seen = {}
+
+    async def fake_get(self, path):
+        seen[path] = self.token
+        return _basic_info()
+
+    with patch(f"{_FLOW_CLIENT}.async_get_resource", new=fake_get), patch(
+        f"{_FLOW_CLIENT}.async_create_token", new=AsyncMock()
+    ) as create, patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        result = await _configure_local(
+            hass,
+            entry,
+            {
+                CONF_LOCAL_HOST: f" {HOST} ",
+                CONF_LOCAL_LOGIN: "",
+                CONF_LOCAL_PASSWORD: "",
+                CONF_LOCAL_TOKEN: f"  {LOCAL_TOKEN}\n",
+                CONF_LOCAL_REMOVE: False,
+            },
+        )
+
+    assert result["type"] == "create_entry"
+    # Proven against the gateway with the pasted token before it is stored.
+    assert seen == {"/system/basicInfo": LOCAL_TOKEN}
+    create.assert_not_awaited()
+    stored = entry.data[CONF_LOCAL][GATEWAY]
+    assert stored == {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: LOCAL_TOKEN}
+    reload.assert_called_once_with(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_pasted_token_accepted_when_basic_info_is_absent(hass, entry):
+    """A 403/404 comes after authentication, so it still proves the token."""
+    entry.add_to_hass(hass)
+    with patch(
+        f"{_FLOW_CLIENT}.async_get_resource", new=AsyncMock(return_value=None)
+    ), patch.object(hass.config_entries, "async_schedule_reload"):
+        result = await _configure_local(
+            hass,
+            entry,
+            {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: LOCAL_TOKEN},
+        )
+
+    assert result["type"] == "create_entry"
+    assert entry.data[CONF_LOCAL][GATEWAY][CONF_LOCAL_TOKEN] == LOCAL_TOKEN
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("get_resource", "expected_error"),
+    [
+        (AsyncMock(side_effect=AuthFailedError("401")), "local_invalid_token"),
+        (AsyncMock(side_effect=NotRespondingError("timeout")), "local_cannot_connect"),
+        (AsyncMock(side_effect=RuntimeError("boom")), "unknown"),
+        (AsyncMock(return_value=_basic_info("999999999")), "local_wrong_gateway"),
+    ],
+    ids=["401", "unreachable", "other", "other_gateway"],
+)
+async def test_pasted_token_error_mapping(hass, entry, get_resource, expected_error):
+    """A token that does not open this gateway is never stored."""
+    entry.add_to_hass(hass)
+    with patch(f"{_FLOW_CLIENT}.async_get_resource", new=get_resource):
+        result = await _configure_local(
+            hass,
+            entry,
+            {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: LOCAL_TOKEN},
+        )
+
+    assert result["step_id"] == "local_credentials"
+    assert result["errors"]["base"] == expected_error
+    assert not entry.data.get(CONF_LOCAL)
+
+
+@pytest.mark.asyncio
+async def test_pasted_token_replaces_and_revokes_the_old_one(hass, entry):
+    """A different pasted token frees the slot of the one it replaces."""
+    _with_local(
+        hass,
+        entry,
+        {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: "old", CONF_LOCAL_TOKEN_ID: "4"},
+    )
+    with patch(
+        f"{_FLOW_CLIENT}.async_get_resource", new=AsyncMock(return_value=_basic_info())
+    ), patch(
+        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
+    ) as revoke, patch.object(
+        hass.config_entries, "async_schedule_reload"
+    ):
+        await _configure_local(
+            hass,
+            entry,
+            {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: LOCAL_TOKEN},
+        )
+
+    revoke.assert_awaited_once_with("4")
+    stored = entry.data[CONF_LOCAL][GATEWAY]
+    assert stored == {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: LOCAL_TOKEN}
+
+
+@pytest.mark.asyncio
+async def test_re_entering_the_same_token_keeps_it(hass, entry):
+    """Changing only the address must not revoke the token being kept."""
+    _with_local(
+        hass,
+        entry,
+        {
+            CONF_LOCAL_HOST: HOST,
+            CONF_LOCAL_TOKEN: LOCAL_TOKEN,
+            CONF_LOCAL_TOKEN_ID: "4",
+        },
+    )
+    with patch(
+        f"{_FLOW_CLIENT}.async_get_resource", new=AsyncMock(return_value=_basic_info())
+    ), patch(
+        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
+    ) as revoke, patch.object(
+        hass.config_entries, "async_schedule_reload"
+    ):
+        await _configure_local(
+            hass,
+            entry,
+            {CONF_LOCAL_HOST: "192.0.2.20", CONF_LOCAL_TOKEN: LOCAL_TOKEN},
+        )
+
+    revoke.assert_not_awaited()
+    stored = entry.data[CONF_LOCAL][GATEWAY]
+    assert stored == {
+        CONF_LOCAL_HOST: "192.0.2.20",
+        CONF_LOCAL_TOKEN: LOCAL_TOKEN,
+        CONF_LOCAL_TOKEN_ID: "4",
+    }
+
+
 @pytest.mark.asyncio
 async def test_local_removal_clears_config(hass, entry):
     """Ticking the removal box deletes the stored local config."""
