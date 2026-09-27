@@ -741,6 +741,7 @@ class BoschComK40PoolSetpointNumber(CoordinatorEntity, NumberEntity):
         self._attr_native_value = self._value()
         self.async_write_ha_state()
 
+
 def _build_k40_hc_tune_numbers(coordinator: BoschComModuleCoordinatorK40) -> list:
     """Writable weather-comp / UFH limits for simplified K40 heating circuits."""
     specs = (
@@ -869,4 +870,3 @@ class BoschComK40HcTuneNumber(CoordinatorEntity, NumberEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data."""
         self.async_write_ha_state()
-

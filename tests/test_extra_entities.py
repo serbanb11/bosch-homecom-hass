@@ -219,6 +219,9 @@ async def test_k40_coordinator_fetches_extra_endpoints(hass, entry, device, firm
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
     bhc.async_request_bulk = AsyncMock(return_value={})
+    bhc.async_action_universal_get = AsyncMock(
+        return_value={"value": 21.0, "writeable": True}
+    )
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
@@ -247,6 +250,7 @@ async def test_k40_coordinator_extra_endpoint_failure_graceful(
     bhc.async_get_silent_mode = AsyncMock(side_effect=ApiError("boom"))
     bhc.async_get_dhw_charge_duration = AsyncMock(side_effect=ApiError("boom"))
     bhc.async_request_bulk = AsyncMock(side_effect=ApiError("boom"))
+    bhc.async_action_universal_get = AsyncMock(side_effect=ApiError("boom"))
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
@@ -270,6 +274,9 @@ async def test_icom_coordinator_shares_extra_endpoints(hass, entry, firmware):
     )
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_action_universal_get = AsyncMock(
+        return_value={"value": 21.0, "writeable": True}
+    )
 
     coordinator = BoschComModuleCoordinatorIcom(
         hass, bhc, icom_device, firmware, entry, auth_provider=False
@@ -329,6 +336,9 @@ async def test_k40_coordinator_fetches_recordings(hass, entry, device, firmware)
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_action_universal_get = AsyncMock(
+        return_value={"value": 21.0, "writeable": True}
+    )
     bhc.async_request_bulk = AsyncMock(side_effect=_bulk_response)
 
     coordinator = BoschComModuleCoordinatorK40(
@@ -355,6 +365,9 @@ async def test_k40_coordinator_recordings_rate_limited(hass, entry, device, firm
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_action_universal_get = AsyncMock(
+        return_value={"value": 21.0, "writeable": True}
+    )
     bhc.async_request_bulk = AsyncMock(return_value={})
 
     coordinator = BoschComModuleCoordinatorK40(
@@ -382,6 +395,9 @@ async def test_k40_coordinator_recordings_failure_keeps_last_good(
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_action_universal_get = AsyncMock(
+        return_value={"value": 21.0, "writeable": True}
+    )
     bhc.async_request_bulk = AsyncMock(side_effect=ApiError("network dead"))
 
     coordinator = BoschComModuleCoordinatorK40(
@@ -443,6 +459,9 @@ async def test_k40_coordinator_recordings_skips_future_slots(
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
+    bhc.async_action_universal_get = AsyncMock(
+        return_value={"value": 21.0, "writeable": True}
+    )
     bhc.async_request_bulk = AsyncMock(side_effect=_bulk_response)
 
     coordinator = BoschComModuleCoordinatorK40(

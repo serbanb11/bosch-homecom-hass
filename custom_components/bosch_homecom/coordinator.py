@@ -408,32 +408,40 @@ class _K40ExtraEndpointsMixin:
                 continue
             self.extra_data[key] = result if result else None
 
-
     async def _async_hc_resource(self, method_name: str, universal_path: str):
         """Prefer typed homecom_alt getters; fall back to universal GET."""
         method = getattr(self.bhc, method_name, None)
-        if method is not None:
-            return await method(self.unique_id, "hc1")
-        return await self.bhc.async_action_universal_get(
-            self.unique_id, universal_path
-        )
+        if callable(method):
+            result = method(self.unique_id, "hc1")
+            if hasattr(result, "__await__"):
+                return await result
+        uni = getattr(self.bhc, "async_action_universal_get", None)
+        if callable(uni):
+            result = uni(self.unique_id, universal_path)
+            if hasattr(result, "__await__"):
+                return await result
+        return None
 
     async def async_put_hc_resource(
         self, method_name: str, universal_path: str, value
     ) -> None:
         """Prefer typed homecom_alt setters; fall back to universal PUT."""
         method = getattr(self.bhc, method_name, None)
-        if method is not None:
-            await method(self.unique_id, "hc1", value)
-            return
+        if callable(method):
+            result = method(self.unique_id, "hc1", value)
+            if hasattr(result, "__await__"):
+                await result
+                return
         put = getattr(self.bhc, "async_action_universal_put", None)
-        if put is None:
+        if not callable(put):
             raise AttributeError(
                 "homecom_alt is missing both "
                 f"{method_name} and async_action_universal_put; "
                 "upgrade homecom_alt to >=1.8.2"
             )
-        await put(self.unique_id, universal_path, value)
+        result = put(self.unique_id, universal_path, value)
+        if hasattr(result, "__await__"):
+            await result
 
     async def _fetch_recordings(self) -> None:
         """Fetch /recordings/heatSources/* time-series (hourly, rate-limited).

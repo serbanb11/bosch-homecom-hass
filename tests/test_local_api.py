@@ -138,6 +138,9 @@ def _coordinator(hass, entry, device, firmware, *, local=True):
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60})
+    bhc.async_action_universal_get = AsyncMock(
+        return_value={"value": 21.0, "writeable": True}
+    )
     bhc.async_request_bulk = AsyncMock(return_value={})
     local_client = Mock() if local else None
     coordinator = BoschComModuleCoordinatorK40(
