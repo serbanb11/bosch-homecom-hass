@@ -324,7 +324,19 @@ class _K40ExtraEndpointsMixin:
     reset detection for energy sensors.
     """
 
-    EXTRA_KEYS = ("additional_heater", "silent_mode", "dhw_charge_duration")
+    EXTRA_KEYS = (
+        "additional_heater",
+        "silent_mode",
+        "dhw_charge_duration",
+        # Weather-comp / UFH limits (cloud PointT; Local API is read-only)
+        "hc1_max_flow_temp",
+        "hc1_suwi_threshold",
+        "hc1_control_type",
+        "hc1_comfort2",
+        "hc1_eco",
+        "hc1_actual_supply_temp",
+        "hc1_heating_type",
+    )
 
     def __init__(self, *args, **kwargs) -> None:
         """Initialize coordinator with the extra-endpoint cache."""
@@ -350,6 +362,34 @@ class _K40ExtraEndpointsMixin:
             "dhw_charge_duration": lambda: self.bhc.async_get_dhw_charge_duration(
                 self.unique_id, "dhw1"
             ),
+            "hc1_max_flow_temp": lambda: self._async_hc_resource(
+                "async_get_hc_max_flow_temp",
+                "/resource/heatingCircuits/hc1/maxFlowTemp",
+            ),
+            "hc1_suwi_threshold": lambda: self._async_hc_resource(
+                "async_get_hc_suwi_threshold",
+                "/resource/heatingCircuits/hc1/suWiThreshold",
+            ),
+            "hc1_control_type": lambda: self._async_hc_resource(
+                "async_get_hc_control_type",
+                "/resource/heatingCircuits/hc1/controlType",
+            ),
+            "hc1_comfort2": lambda: self._async_hc_resource(
+                "async_get_hc_temp_level_comfort2",
+                "/resource/heatingCircuits/hc1/temperatureLevels/comfort2",
+            ),
+            "hc1_eco": lambda: self._async_hc_resource(
+                "async_get_hc_temp_level_eco",
+                "/resource/heatingCircuits/hc1/temperatureLevels/eco",
+            ),
+            "hc1_actual_supply_temp": lambda: self._async_hc_resource(
+                "async_get_hc_actual_supply_temp",
+                "/resource/heatingCircuits/hc1/actualSupplyTemp",
+            ),
+            "hc1_heating_type": lambda: self._async_hc_resource(
+                "async_get_hc_heating_type",
+                "/resource/heatingCircuits/hc1/heatingType",
+            ),
         }
         for key, thunk in thunks.items():
             try:
@@ -367,6 +407,33 @@ class _K40ExtraEndpointsMixin:
                 self.extra_data[key] = None
                 continue
             self.extra_data[key] = result if result else None
+
+
+    async def _async_hc_resource(self, method_name: str, universal_path: str):
+        """Prefer typed homecom_alt getters; fall back to universal GET."""
+        method = getattr(self.bhc, method_name, None)
+        if method is not None:
+            return await method(self.unique_id, "hc1")
+        return await self.bhc.async_action_universal_get(
+            self.unique_id, universal_path
+        )
+
+    async def async_put_hc_resource(
+        self, method_name: str, universal_path: str, value
+    ) -> None:
+        """Prefer typed homecom_alt setters; fall back to universal PUT."""
+        method = getattr(self.bhc, method_name, None)
+        if method is not None:
+            await method(self.unique_id, "hc1", value)
+            return
+        put = getattr(self.bhc, "async_action_universal_put", None)
+        if put is None:
+            raise AttributeError(
+                "homecom_alt is missing both "
+                f"{method_name} and async_action_universal_put; "
+                "upgrade homecom_alt to >=1.8.2"
+            )
+        await put(self.unique_id, universal_path, value)
 
     async def _fetch_recordings(self) -> None:
         """Fetch /recordings/heatSources/* time-series (hourly, rate-limited).

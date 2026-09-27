@@ -78,6 +78,8 @@ async def async_setup_entry(
             dhw_dur = coordinator.extra_data.get("dhw_charge_duration")
             if isinstance(dhw_dur, dict) and dhw_dur.get("writeable"):
                 entities.append(BoschComK40DhwChargeDurationNumber(coordinator))
+            if isinstance(coordinator, BoschComModuleCoordinatorK40):
+                entities.extend(_build_k40_hc_tune_numbers(coordinator))
 
     async_add_entities(entities)
 
@@ -738,3 +740,133 @@ class BoschComK40PoolSetpointNumber(CoordinatorEntity, NumberEntity):
         """Handle updated data."""
         self._attr_native_value = self._value()
         self.async_write_ha_state()
+
+def _build_k40_hc_tune_numbers(coordinator: BoschComModuleCoordinatorK40) -> list:
+    """Writable weather-comp / UFH limits for simplified K40 heating circuits."""
+    specs = (
+        (
+            "hc1_max_flow_temp",
+            "async_set_hc_max_flow_temp",
+            "/resource/heatingCircuits/hc1/maxFlowTemp",
+            "hc1_max_flow_temp",
+            30.0,
+            60.0,
+            1.0,
+        ),
+        (
+            "hc1_suwi_threshold",
+            "async_set_hc_suwi_threshold",
+            "/resource/heatingCircuits/hc1/suWiThreshold",
+            "hc1_suwi_threshold",
+            10.0,
+            30.0,
+            1.0,
+        ),
+        (
+            "hc1_comfort2",
+            "async_set_hc_temp_level_comfort2",
+            "/resource/heatingCircuits/hc1/temperatureLevels/comfort2",
+            "hc1_comfort2",
+            20.5,
+            30.0,
+            0.5,
+        ),
+        (
+            "hc1_eco",
+            "async_set_hc_temp_level_eco",
+            "/resource/heatingCircuits/hc1/temperatureLevels/eco",
+            "hc1_eco",
+            5.0,
+            20.5,
+            0.5,
+        ),
+    )
+    entities = []
+    for extra_key, setter, path, translation_key, dmin, dmax, dstep in specs:
+        data = coordinator.extra_data.get(extra_key)
+        if isinstance(data, dict) and data.get("writeable") == 0:
+            continue
+        min_value = float(
+            (data or {}).get("minValue", dmin) if isinstance(data, dict) else dmin
+        )
+        max_value = float(
+            (data or {}).get("maxValue", dmax) if isinstance(data, dict) else dmax
+        )
+        step = float(
+            ((data or {}).get("stepSize") if isinstance(data, dict) else None) or dstep
+        )
+        entities.append(
+            BoschComK40HcTuneNumber(
+                coordinator,
+                extra_key=extra_key,
+                setter=setter,
+                universal_path=path,
+                translation_key=translation_key,
+                min_value=min_value,
+                max_value=max_value,
+                step=step,
+            )
+        )
+    return entities
+
+
+class BoschComK40HcTuneNumber(CoordinatorEntity, NumberEntity):
+    """Writable K40 heating-circuit float resource (max flow, SuWi, setpoints)."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_mode = NumberMode.BOX
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        *,
+        extra_key: str,
+        setter: str,
+        universal_path: str,
+        translation_key: str,
+        min_value: float,
+        max_value: float,
+        step: float,
+    ) -> None:
+        """Initialize."""
+        super().__init__(coordinator)
+        self._extra_key = extra_key
+        self._setter = setter
+        self._universal_path = universal_path
+        self._attr_translation_key = translation_key
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{translation_key}"
+        self._attr_native_min_value = min_value
+        self._attr_native_max_value = max_value
+        self._attr_native_step = step
+
+    def _data(self) -> dict | None:
+        data = self.coordinator.extra_data.get(self._extra_key)
+        return data if isinstance(data, dict) else None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return current value."""
+        data = self._data()
+        if not data or data.get("value") is None:
+            return None
+        try:
+            return float(data["value"])
+        except (TypeError, ValueError):
+            return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Write value via typed homecom_alt setter or universal PUT."""
+        await self.coordinator.async_put_hc_resource(
+            self._setter, self._universal_path, float(value)
+        )
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        self.async_write_ha_state()
+

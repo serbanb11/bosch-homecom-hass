@@ -5,6 +5,7 @@ from datetime import timedelta
 from homeassistant import config_entries, core
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import callback
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -244,6 +245,19 @@ async def async_setup_entry(
                         "async_put_silent_mode",
                     )
                 )
+            if isinstance(coordinator, BoschComModuleCoordinatorK40):
+                ct = extra.get("hc1_control_type")
+                if not (isinstance(ct, dict) and ct.get("writeable") == 0):
+                    allowed = list(
+                        (ct or {}).get("allowedValues")
+                        or ["wdcsimplified", "wdcoptimized"]
+                    )
+                    entities.append(
+                        BoschComK40HcControlTypeSelect(
+                            coordinator,
+                            allowed_values=allowed,
+                        )
+                    )
 
     async_add_entities(entities)
 
