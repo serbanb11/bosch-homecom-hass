@@ -328,7 +328,8 @@ class _K40ExtraEndpointsMixin:
         "additional_heater",
         "silent_mode",
         "dhw_charge_duration",
-        # Weather-comp / UFH limits (cloud PointT; Local API is read-only)
+        # Weather-comp / UFH limits (cloud PointT; Local API is read-only).
+        # Requires homecom_alt>=1.8.2 (serbanb11/homecom_alt#133).
         "hc1_max_flow_temp",
         "hc1_suwi_threshold",
         "hc1_control_type",
