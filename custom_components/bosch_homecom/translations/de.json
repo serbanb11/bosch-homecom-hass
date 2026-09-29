@@ -412,6 +412,9 @@
       "dhw_outlet_temperature": {
         "name": "Ausgangstemperatur"
       },
+      "dhw_wddw2_temperature": {
+        "name": "Warmwassertemperatur"
+      },
       "dhw_water_flow": {
         "name": "Wasserdurchfluss"
       },
@@ -419,7 +422,7 @@
         "name": "Temperaturdifferenz"
       },
       "dhw_heating_active": {
-        "name": "Warmwasserbereitung"
+        "name": "Wassererwärmung"
       },
       "dhw_heat_source_starts": {
         "name": "Betriebszyklen"

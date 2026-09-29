@@ -410,6 +410,9 @@
       "dhw_outlet_temperature": {
         "name": "Outlet Temperature"
       },
+      "dhw_wddw2_temperature": {
+        "name": "Water heater temperature"
+      },
       "dhw_water_flow": {
         "name": "Water Flow"
       },

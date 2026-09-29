@@ -1474,8 +1474,11 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
             unique_id=f"{coordinator.unique_id}-{field}-sensor",
             icon="mdi:water-boiler",
         )
-        self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": field}
+        # A wddw2 has exactly one circuit, always called dhw1, so the shared
+        # "{circuit} temperature" name renders as "dhw1 temperature" and shows
+        # an internal id to the user. The K40 sensor above keeps the
+        # placeholder, where several circuits do exist.
+        self._attr_translation_key = "dhw_wddw2_temperature"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_suggested_object_id = field + "_sensor"
         self._attr_should_poll = False

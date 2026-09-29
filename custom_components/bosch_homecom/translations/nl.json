@@ -410,6 +410,9 @@
       "dhw_outlet_temperature": {
         "name": "Uitgangstemperatuur"
       },
+      "dhw_wddw2_temperature": {
+        "name": "Boilertemperatuur"
+      },
       "dhw_water_flow": {
         "name": "Waterstroom"
       },
