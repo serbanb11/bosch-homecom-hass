@@ -96,7 +96,7 @@
       "local_token_store_full": "Das Gateway kann kein weiteres Token speichern. Ein nicht benötigtes Token widerrufen und erneut versuchen."
     },
     "abort": {
-      "no_k40_gateway": "Für dieses Konto ist kein K40- oder K30-Gateway konfiguriert."
+      "no_k40_gateway": "Für dieses Konto ist kein K 40 RF-Gateway konfiguriert. Die lokale API ist auf dem K 30 RF nicht verfügbar."
     }
   },
   "entity": {

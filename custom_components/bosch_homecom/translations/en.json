@@ -96,7 +96,7 @@
       "local_token_store_full": "The gateway cannot store another token. Revoke an unused token on the gateway and try again."
     },
     "abort": {
-      "no_k40_gateway": "No K40 or K30 gateway is configured for this account."
+      "no_k40_gateway": "No K 40 RF gateway is configured for this account. The Local API is not available on the K 30 RF."
     }
   },
   "entity": {

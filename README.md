@@ -63,7 +63,7 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | Heating circuits with temporary setpoint | -- | -- |
 | Water Heater | -- | Operation mode | Operation mode | Operation mode + target temp | -- |
 | Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | DHW/HC modes, away | -- | Charging strategy |
-| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp, solar thermal circuits, [local-only readings](#local-network-access-k-40-rf) | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
+| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp, solar thermal circuits, [local-only readings](#local-network-access-k-40-rf) (K40 only) | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
 | Switch | Plasmacluster | -- | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
 | Binary Sensor | -- | -- | -- | -- | Network connectivity |
@@ -71,7 +71,7 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 ### Local network access (K 40 RF)
 
-A K30/K40 gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.
+A K 40 RF gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.
 
 Bosch lists these products as supported by the Local API:
 
@@ -79,7 +79,9 @@ Bosch lists these products as supported by the Local API:
 |---------|----------------------|-----------------|
 | K 40 RF / MX400 | Bosch Connect-Key K 40 RF, Buderus MX400, and K 40 RF for IVT, Vulcano, and Worcester | Read data from your connected heating system over your local network. |
 
-The integration offers local access for every gateway it lists as `k40` or `k30`. It has been verified on a Bosch Connect-Key K 40 RF; reports from the other brands are welcome.
+It has been verified on a Bosch Connect-Key K 40 RF; reports from the other brands are welcome.
+
+> **Not for the K 30 RF.** The K 30 has no Local API: it has a single button, no blue LED, and Bosch's *Local API access* document (6721127216) lists only the K 40 RF and MX400. A token request from a K 30 fails with "gateway not reachable" (see [#186](https://github.com/serbanb11/bosch-homecom-hass/issues/186)).
 
 1. Go to **Settings** > **Devices & Services** > **Bosch HomeCom** > **Configure** > **Local network access (K 40 RF)**
 2. On the gateway, press the **WLAN** and **Wireless** buttons together for about one second. It then accepts a token request for five minutes

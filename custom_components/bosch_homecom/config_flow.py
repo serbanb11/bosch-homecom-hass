@@ -341,10 +341,11 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
         self._local_gateway: str | None = None
 
     def _k40_gateways(self) -> dict[str, str]:
-        """Return {device_id: label} for the configured K40-family gateways.
+        """Return {device_id: label} for the configured K 40 RF gateways.
 
-        Only k40/k30 gateways are offered: the Local API is a K 40 RF feature and
-        the other device types have no equivalent.
+        Only k40 gateways are offered. The Local API is a K 40 RF / MX400
+        feature: a K 30 RF has neither the buttons nor the token port, so a
+        request from it only ever fails with "not reachable" (#186).
         """
         selected = self._entry.data.get(CONF_DEVICES) or {}
         gateways: dict[str, str] = {}
@@ -352,7 +353,7 @@ class BoschHomeComOptionsFlowHandler(config_entries.OptionsFlowWithReload):
             if not enabled or not isinstance(key, str) or "_" not in key:
                 continue
             device_id, _, device_type = key.rpartition("_")
-            if device_type in ("k40", "k30"):
+            if device_type == "k40":
                 gateways[device_id] = f"{device_id} ({device_type})"
         return gateways
 

@@ -226,11 +226,16 @@ async def test_local_multiple_gateways_asks_which(hass):
 
 
 @pytest.mark.asyncio
-async def test_local_aborts_without_a_k40(hass):
-    """A cloud account with no k40/k30 has nothing to configure locally."""
+@pytest.mark.parametrize("devices", [{"999_rac": True}, {"888_k30": True}])
+async def test_local_aborts_without_a_k40(hass, devices):
+    """Only a K 40 RF can be configured locally.
+
+    A K 30 RF has no Local API (no buttons, no token port, not in Bosch's list
+    of applicable variants), so offering it only produced "not reachable" (#186).
+    """
     entry = MockConfigEntry(
         domain=DOMAIN,
-        data={CONF_USERNAME: "user", CONF_DEVICES: {"999_rac": True}},
+        data={CONF_USERNAME: "user", CONF_DEVICES: devices},
     )
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)

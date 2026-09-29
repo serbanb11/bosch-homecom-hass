@@ -96,7 +96,7 @@
       "local_token_store_full": "De gateway kan geen extra token opslaan. Trek een ongebruikt token in en probeer het opnieuw."
     },
     "abort": {
-      "no_k40_gateway": "Voor dit account is geen K40- of K30-gateway geconfigureerd."
+      "no_k40_gateway": "Voor dit account is geen K 40 RF-gateway geconfigureerd. De lokale API is niet beschikbaar op de K 30 RF."
     }
   },
   "entity": {
