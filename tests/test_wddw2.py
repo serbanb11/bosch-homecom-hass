@@ -250,6 +250,17 @@ def test_notifications_filters_historical():
     assert sensor.state == "High temperature"
 
 
+def test_notifications_maps_self_test_failure():
+    """E10 is a fault a TR4001 raises and the table did not know.
+
+    An unmapped code falls through to the bare code, so the sensor read "E10"
+    where the manufacturer's app reads "self-test failed". Seen on a TR4001.
+    """
+    coord = _coordinator(notifications=[{"dcd": "E10", "act": "A", "fc": "1"}])
+    sensor = BoschComSensorNotificationsWddw2(coordinator=coord, config_entry=Mock())
+    assert sensor.state == "Self-test failed"
+
+
 def test_notifications_none_when_all_historical():
     coord = _coordinator(notifications=[{"dcd": "E01", "act": "H"}])
     sensor = BoschComSensorNotificationsWddw2(coordinator=coord, config_entry=Mock())
