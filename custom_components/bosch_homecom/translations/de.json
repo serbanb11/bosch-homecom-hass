@@ -272,6 +272,9 @@
       },
       "pool_additional_heater_mode": {
         "name": "Pool Zuheizer"
+      },
+      "hc1_control_type": {
+        "name": "HC1 control type"
       }
     },
     "sensor": {
@@ -586,6 +589,18 @@
       },
       "pool_setpoint_temp": {
         "name": "Pool Sollwert"
+      },
+      "hc1_max_flow_temp": {
+        "name": "HC1 max flow temperature"
+      },
+      "hc1_suwi_threshold": {
+        "name": "HC1 summer/winter threshold"
+      },
+      "hc1_comfort2": {
+        "name": "HC1 comfort setpoint"
+      },
+      "hc1_eco": {
+        "name": "HC1 eco setpoint"
       }
     },
     "button": {

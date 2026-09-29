@@ -5,6 +5,7 @@ from datetime import timedelta
 from homeassistant import config_entries, core
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import callback
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -244,6 +245,19 @@ async def async_setup_entry(
                         "async_put_silent_mode",
                     )
                 )
+            if isinstance(coordinator, BoschComModuleCoordinatorK40):
+                ct = extra.get("hc1_control_type")
+                if not (isinstance(ct, dict) and ct.get("writeable") == 0):
+                    allowed = list(
+                        (ct or {}).get("allowedValues")
+                        or ["wdcsimplified", "wdcoptimized"]
+                    )
+                    entities.append(
+                        BoschComK40HcControlTypeSelect(
+                            coordinator,
+                            allowed_values=allowed,
+                        )
+                    )
 
     async_add_entities(entities)
 
@@ -1398,4 +1412,47 @@ class BoschComK40ExtraSelect(CoordinatorEntity, SelectEntity):
         data = self.coordinator.extra_data.get(self._key)
         if data and isinstance(data, dict):
             self._attr_current_option = data.get("value")
+        self.async_write_ha_state()
+
+
+class BoschComK40HcControlTypeSelect(CoordinatorEntity, SelectEntity):
+    """Select for K40 heating-circuit controlType (wdcsimplified / wdcoptimized)."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "hc1_control_type"
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        *,
+        allowed_values: list[str],
+    ) -> None:
+        """Initialize."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-hc1_control_type"
+        self._attr_options = allowed_values
+
+    @property
+    def current_option(self) -> str | None:
+        """Return current control type."""
+        data = self.coordinator.extra_data.get("hc1_control_type")
+        if isinstance(data, dict):
+            return data.get("value")
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        """Write control type."""
+        await self.coordinator.async_put_hc_resource(
+            "async_put_hc_control_type",
+            "/resource/heatingCircuits/hc1/controlType",
+            option,
+        )
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
         self.async_write_ha_state()
