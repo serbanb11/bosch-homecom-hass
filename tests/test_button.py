@@ -1,6 +1,6 @@
 """Test button platform."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from homecom_alt import BHCDeviceCommodule, BHCDeviceRac
 import pytest

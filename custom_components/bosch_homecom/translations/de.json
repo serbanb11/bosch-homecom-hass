@@ -274,7 +274,7 @@
         "name": "Pool Zuheizer"
       },
       "hc1_control_type": {
-        "name": "HC1 control type"
+        "name": "Heizkreis 1 Regelungsart"
       }
     },
     "sensor": {
@@ -603,16 +603,16 @@
         "name": "Pool Sollwert"
       },
       "hc1_max_flow_temp": {
-        "name": "HC1 max flow temperature"
+        "name": "Heizkreis 1 max. Vorlauftemperatur"
       },
       "hc1_suwi_threshold": {
-        "name": "HC1 summer/winter threshold"
+        "name": "Heizkreis 1 Sommer/Winter-Schwelle"
       },
       "hc1_comfort2": {
-        "name": "HC1 comfort setpoint"
+        "name": "Heizkreis 1 Komfort-Sollwert"
       },
       "hc1_eco": {
-        "name": "HC1 eco setpoint"
+        "name": "Heizkreis 1 Eco-Sollwert"
       }
     },
     "button": {

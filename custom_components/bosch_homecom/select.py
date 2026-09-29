@@ -246,18 +246,7 @@ async def async_setup_entry(
                     )
                 )
             if isinstance(coordinator, BoschComModuleCoordinatorK40):
-                ct = extra.get("hc1_control_type")
-                if not (isinstance(ct, dict) and ct.get("writeable") == 0):
-                    allowed = list(
-                        (ct or {}).get("allowedValues")
-                        or ["wdcsimplified", "wdcoptimized"]
-                    )
-                    entities.append(
-                        BoschComK40HcControlTypeSelect(
-                            coordinator,
-                            allowed_values=allowed,
-                        )
-                    )
+                entities.extend(_build_k40_hc_control_type_select(coordinator))
 
     async_add_entities(entities)
 
@@ -1415,6 +1404,22 @@ class BoschComK40ExtraSelect(CoordinatorEntity, SelectEntity):
         self.async_write_ha_state()
 
 
+def _build_k40_hc_control_type_select(
+    coordinator: BoschComModuleCoordinatorK40,
+) -> list:
+    """The hc1 controlType select, when the device reports it as writable."""
+    data = coordinator.extra_data.get("hc1_control_type")
+    if not (
+        isinstance(data, dict) and data.get("writeable") and data.get("allowedValues")
+    ):
+        return []
+    return [
+        BoschComK40HcControlTypeSelect(
+            coordinator, allowed_values=list(data["allowedValues"])
+        )
+    ]
+
+
 class BoschComK40HcControlTypeSelect(CoordinatorEntity, SelectEntity):
     """Select for K40 heating-circuit controlType (wdcsimplified / wdcoptimized)."""
 
@@ -1445,12 +1450,7 @@ class BoschComK40HcControlTypeSelect(CoordinatorEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Write control type."""
-        await self.coordinator.async_put_hc_resource(
-            "async_put_hc_control_type",
-            "/resource/heatingCircuits/hc1/controlType",
-            option,
-        )
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_set_hc_tune("hc1_control_type", option)
 
     @callback
     def _handle_coordinator_update(self) -> None:

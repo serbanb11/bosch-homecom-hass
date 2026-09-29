@@ -272,7 +272,7 @@
         "name": "Zwembad bijverwarming"
       },
       "hc1_control_type": {
-        "name": "HC1 control type"
+        "name": "Circuit 1 regeltype"
       }
     },
     "sensor": {
@@ -601,16 +601,16 @@
         "name": "Zwembad instelwaarde"
       },
       "hc1_max_flow_temp": {
-        "name": "HC1 max flow temperature"
+        "name": "Circuit 1 max. aanvoertemperatuur"
       },
       "hc1_suwi_threshold": {
-        "name": "HC1 summer/winter threshold"
+        "name": "Circuit 1 zomer/winter-drempel"
       },
       "hc1_comfort2": {
-        "name": "HC1 comfort setpoint"
+        "name": "Circuit 1 comfort-instelwaarde"
       },
       "hc1_eco": {
-        "name": "HC1 eco setpoint"
+        "name": "Circuit 1 eco-instelwaarde"
       }
     },
     "button": {

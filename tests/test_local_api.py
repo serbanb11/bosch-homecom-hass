@@ -34,7 +34,10 @@ from custom_components.bosch_homecom.const import (
     DOMAIN,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
-from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorK40
+from custom_components.bosch_homecom.coordinator import (
+    HC_TUNE_ENDPOINTS,
+    BoschComModuleCoordinatorK40,
+)
 from custom_components.bosch_homecom.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -138,9 +141,8 @@ def _coordinator(hass, entry, device, firmware, *, local=True):
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60})
-    bhc.async_action_universal_get = AsyncMock(
-        return_value={"value": 21.0, "writeable": True}
-    )
+    for getter, _setter in HC_TUNE_ENDPOINTS.values():
+        setattr(bhc, getter, AsyncMock(return_value=None))
     bhc.async_request_bulk = AsyncMock(return_value={})
     local_client = Mock() if local else None
     coordinator = BoschComModuleCoordinatorK40(
@@ -672,7 +674,7 @@ async def test_coordinator_without_local_uses_cloud_path(hass, entry, device, fi
 async def test_coordinator_both_transports_ok(hass, entry, device, firmware):
     """Cloud data is returned and the local payload is exposed alongside it."""
     entry.add_to_hass(hass)
-    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator, bhc = _coordinator(hass, entry, device, firmware)
     local = _local_device()
     coordinator.local_first.async_update = AsyncMock(
         return_value=K40Update(
@@ -686,6 +688,8 @@ async def test_coordinator_both_transports_ok(hass, entry, device, firmware):
     assert coordinator.local_data is local
     assert coordinator.local_source == "both"
     assert coordinator.local_healthy is True
+    # The local path bypasses the mixin, so it must fetch the HC settings too.
+    bhc.async_get_hc_max_flow_temp.assert_awaited_once_with(device["deviceId"], "hc1")
 
 
 @pytest.mark.asyncio

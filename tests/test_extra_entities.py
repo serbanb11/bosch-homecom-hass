@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-from homecom_alt import BHCDeviceK40
+from homeassistant.exceptions import HomeAssistantError
+from homecom_alt import ApiError, BHCDeviceK40
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.bosch_homecom.button import BoschComK40DhwChargeButton
 from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DOMAIN
 from custom_components.bosch_homecom.coordinator import (
+    HC_TUNE_ENDPOINTS,
+    HC_TUNE_POLL_INTERVAL,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
-from custom_components.bosch_homecom.number import BoschComK40DhwChargeDurationNumber
-from custom_components.bosch_homecom.select import BoschComK40ExtraSelect
+from custom_components.bosch_homecom.number import (
+    BoschComK40DhwChargeDurationNumber,
+    BoschComK40HcTuneNumber,
+    _build_k40_hc_tune_numbers,
+)
+from custom_components.bosch_homecom.select import (
+    BoschComK40ExtraSelect,
+    BoschComK40HcControlTypeSelect,
+    _build_k40_hc_control_type_select,
+)
 from custom_components.bosch_homecom.sensor import (
     BoschComK40ExtraSensor,
     BoschComK40HeatDemandSensor,
@@ -200,7 +212,15 @@ def _mock_coordinator(extra_data=None, heat_sources=None):
     coordinator.bhc.async_put_additional_heater_mode = AsyncMock()
     coordinator.bhc.async_put_silent_mode = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
+    coordinator.async_set_hc_tune = AsyncMock()
     return coordinator
+
+
+def _mock_hc_tune(bhc, **kwargs):
+    """Give ``bhc`` awaitable HC tune getters; a plain MagicMock is not."""
+    kwargs.setdefault("return_value", None)
+    for getter, _setter in HC_TUNE_ENDPOINTS.values():
+        setattr(bhc, getter, AsyncMock(**kwargs))
 
 
 # ===================================================================
@@ -219,9 +239,7 @@ async def test_k40_coordinator_fetches_extra_endpoints(hass, entry, device, firm
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
     bhc.async_request_bulk = AsyncMock(return_value={})
-    bhc.async_action_universal_get = AsyncMock(
-        return_value={"value": 21.0, "writeable": True}
-    )
+    _mock_hc_tune(bhc)
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
@@ -250,7 +268,7 @@ async def test_k40_coordinator_extra_endpoint_failure_graceful(
     bhc.async_get_silent_mode = AsyncMock(side_effect=ApiError("boom"))
     bhc.async_get_dhw_charge_duration = AsyncMock(side_effect=ApiError("boom"))
     bhc.async_request_bulk = AsyncMock(side_effect=ApiError("boom"))
-    bhc.async_action_universal_get = AsyncMock(side_effect=ApiError("boom"))
+    _mock_hc_tune(bhc, side_effect=ApiError("boom"))
 
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, auth_provider=False
@@ -274,9 +292,6 @@ async def test_icom_coordinator_shares_extra_endpoints(hass, entry, firmware):
     )
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
-    bhc.async_action_universal_get = AsyncMock(
-        return_value={"value": 21.0, "writeable": True}
-    )
 
     coordinator = BoschComModuleCoordinatorIcom(
         hass, bhc, icom_device, firmware, entry, auth_provider=False
@@ -336,9 +351,7 @@ async def test_k40_coordinator_fetches_recordings(hass, entry, device, firmware)
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
-    bhc.async_action_universal_get = AsyncMock(
-        return_value={"value": 21.0, "writeable": True}
-    )
+    _mock_hc_tune(bhc)
     bhc.async_request_bulk = AsyncMock(side_effect=_bulk_response)
 
     coordinator = BoschComModuleCoordinatorK40(
@@ -365,9 +378,7 @@ async def test_k40_coordinator_recordings_rate_limited(hass, entry, device, firm
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
-    bhc.async_action_universal_get = AsyncMock(
-        return_value={"value": 21.0, "writeable": True}
-    )
+    _mock_hc_tune(bhc)
     bhc.async_request_bulk = AsyncMock(return_value={})
 
     coordinator = BoschComModuleCoordinatorK40(
@@ -395,9 +406,7 @@ async def test_k40_coordinator_recordings_failure_keeps_last_good(
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
-    bhc.async_action_universal_get = AsyncMock(
-        return_value={"value": 21.0, "writeable": True}
-    )
+    _mock_hc_tune(bhc)
     bhc.async_request_bulk = AsyncMock(side_effect=ApiError("network dead"))
 
     coordinator = BoschComModuleCoordinatorK40(
@@ -459,9 +468,7 @@ async def test_k40_coordinator_recordings_skips_future_slots(
     bhc.async_get_additional_heater_mode = AsyncMock(return_value={"value": "auto"})
     bhc.async_get_silent_mode = AsyncMock(return_value={"value": "off"})
     bhc.async_get_dhw_charge_duration = AsyncMock(return_value={"value": 60.0})
-    bhc.async_action_universal_get = AsyncMock(
-        return_value={"value": 21.0, "writeable": True}
-    )
+    _mock_hc_tune(bhc)
     bhc.async_request_bulk = AsyncMock(side_effect=_bulk_response)
 
     coordinator = BoschComModuleCoordinatorK40(
@@ -623,3 +630,230 @@ def test_dhw_charge_duration_limits():
     number = BoschComK40DhwChargeDurationNumber(coordinator)
     assert number._attr_native_min_value == 60
     assert number._attr_native_max_value == 2880
+
+
+# ===================================================================
+# Heating-circuit tune settings (HC_TUNE_ENDPOINTS)
+# ===================================================================
+
+MAX_FLOW = {
+    "value": 35.0,
+    "writeable": 1,
+    "minValue": 25.0,
+    "maxValue": 45.0,
+    "stepSize": 1.0,
+}
+CONTROL_TYPE = {
+    "value": "wdcsimplified",
+    "writeable": 1,
+    "allowedValues": ["wdcsimplified", "wdcoptimized"],
+}
+
+
+def _k40_bhc():
+    """A K40 client mock whose HC tune getters report nothing."""
+    bhc = MagicMock()
+    bhc.get_token = AsyncMock()
+    bhc.async_update = AsyncMock(return_value=_make_k40_data())
+    bhc.async_get_additional_heater_mode = AsyncMock(return_value=None)
+    bhc.async_get_silent_mode = AsyncMock(return_value=None)
+    bhc.async_get_dhw_charge_duration = AsyncMock(return_value=None)
+    bhc.async_request_bulk = AsyncMock(return_value={})
+    _mock_hc_tune(bhc)
+    return bhc
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_fetches_hc_tune(hass, entry, device, firmware):
+    """Each setting is read for hc1; one the device lacks is stored as None."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    bhc.async_get_hc_max_flow_temp = AsyncMock(return_value=MAX_FLOW)
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+
+    await coordinator._async_update_data()
+
+    for getter, _setter in HC_TUNE_ENDPOINTS.values():
+        getattr(bhc, getter).assert_awaited_once_with("102128202", "hc1")
+    assert coordinator.extra_data["hc1_max_flow_temp"] == MAX_FLOW
+    assert coordinator.extra_data["hc1_eco"] is None
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_hc_tune_rate_limited(
+    hass, entry, device, firmware, freezer
+):
+    """The settings are re-read only once HC_TUNE_POLL_INTERVAL has passed."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+
+    await coordinator._async_update_data()
+    freezer.tick(HC_TUNE_POLL_INTERVAL - timedelta(seconds=1))
+    await coordinator._async_update_data()
+    assert bhc.async_get_hc_max_flow_temp.await_count == 1
+
+    freezer.tick(timedelta(seconds=2))
+    await coordinator._async_update_data()
+    assert bhc.async_get_hc_max_flow_temp.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_hc_tune_failure_keeps_last_value(
+    hass, entry, device, firmware
+):
+    """A failing read keeps the last good value and retries on the next tick."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    bhc.async_get_hc_max_flow_temp = AsyncMock(return_value=MAX_FLOW)
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    await coordinator._async_update_data()
+
+    _mock_hc_tune(bhc, side_effect=ApiError("boom"))
+    coordinator._last_hc_tune_fetch = None
+    await coordinator._async_update_data()
+    assert coordinator.extra_data["hc1_max_flow_temp"] == MAX_FLOW
+
+    # Every read failed, so the next tick tries again instead of waiting.
+    await coordinator._async_update_data()
+    assert bhc.async_get_hc_max_flow_temp.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_icom_coordinator_skips_hc_tune(hass, entry, firmware):
+    """Only K40 exposes the settings, so ICOM does not spend requests on them."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    coordinator = BoschComModuleCoordinatorIcom(
+        hass,
+        bhc,
+        {"deviceId": "102128202", "deviceType": "icom"},
+        firmware,
+        entry,
+        auth_provider=False,
+    )
+
+    await coordinator._fetch_hc_tune()
+
+    bhc.async_get_hc_max_flow_temp.assert_not_awaited()
+    assert "hc1_max_flow_temp" not in coordinator.extra_data
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_set_hc_tune(hass, entry, device, firmware):
+    """A write uses the typed setter and forces a re-read on the refresh."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    bhc.async_set_hc_max_flow_temp = AsyncMock()
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    await coordinator._async_update_data()
+    coordinator.async_request_refresh = AsyncMock()
+
+    await coordinator.async_set_hc_tune("hc1_max_flow_temp", 40.0)
+
+    bhc.async_set_hc_max_flow_temp.assert_awaited_once_with("102128202", "hc1", 40.0)
+    assert coordinator._last_hc_tune_fetch is None
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_k40_coordinator_set_hc_tune_error(hass, entry, device, firmware):
+    """A refused write surfaces as HomeAssistantError and refreshes nothing."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    bhc.async_put_hc_control_type = AsyncMock(side_effect=ApiError("refused"))
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    coordinator.async_request_refresh = AsyncMock()
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_hc_tune("hc1_control_type", "wdcoptimized")
+
+    coordinator.async_request_refresh.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        None,
+        {**MAX_FLOW, "writeable": 0},
+        {**MAX_FLOW, "value": None},
+        {k: v for k, v in MAX_FLOW.items() if k != "minValue"},
+        {k: v for k, v in MAX_FLOW.items() if k != "maxValue"},
+    ],
+    ids=["unsupported", "read_only", "no_value", "no_min", "no_max"],
+)
+def test_hc_tune_number_needs_device_limits(data):
+    """No entity unless the device reports a writable value and its range."""
+    coordinator = _mock_coordinator(extra_data={"hc1_max_flow_temp": data})
+    assert _build_k40_hc_tune_numbers(coordinator) == []
+
+
+def test_hc_tune_number_uses_device_limits():
+    """The range comes from the device; the step falls back when it is absent."""
+    eco = {"value": 17.0, "writeable": 1, "minValue": 12.0, "maxValue": 19.0}
+    coordinator = _mock_coordinator(
+        extra_data={"hc1_max_flow_temp": MAX_FLOW, "hc1_eco": eco}
+    )
+
+    numbers = {n.translation_key: n for n in _build_k40_hc_tune_numbers(coordinator)}
+
+    assert set(numbers) == {"hc1_max_flow_temp", "hc1_eco"}
+    max_flow = numbers["hc1_max_flow_temp"]
+    assert max_flow.unique_id == "102128202-hc1_max_flow_temp"
+    assert (max_flow.native_min_value, max_flow.native_max_value) == (25.0, 45.0)
+    assert max_flow.native_value == 35.0
+    assert numbers["hc1_eco"].native_step == 0.5
+
+
+@pytest.mark.asyncio
+async def test_hc_tune_number_set_value():
+    """Setting the number writes through the coordinator."""
+    coordinator = _mock_coordinator(extra_data={"hc1_max_flow_temp": MAX_FLOW})
+    number = BoschComK40HcTuneNumber(
+        coordinator, key="hc1_max_flow_temp", min_value=25, max_value=45, step=1
+    )
+
+    await number.async_set_native_value(40)
+
+    coordinator.async_set_hc_tune.assert_awaited_once_with("hc1_max_flow_temp", 40.0)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        None,
+        {**CONTROL_TYPE, "writeable": 0},
+        {k: v for k, v in CONTROL_TYPE.items() if k != "allowedValues"},
+    ],
+    ids=["unsupported", "read_only", "no_options"],
+)
+def test_hc_control_type_select_needs_device_options(data):
+    """No select unless the device lists the control types it accepts."""
+    coordinator = _mock_coordinator(extra_data={"hc1_control_type": data})
+    assert _build_k40_hc_control_type_select(coordinator) == []
+
+
+@pytest.mark.asyncio
+async def test_hc_control_type_select():
+    """The options are the device's own and a choice writes through."""
+    coordinator = _mock_coordinator(extra_data={"hc1_control_type": CONTROL_TYPE})
+    [select] = _build_k40_hc_control_type_select(coordinator)
+    assert isinstance(select, BoschComK40HcControlTypeSelect)
+
+    assert select.options == ["wdcsimplified", "wdcoptimized"]
+    assert select.current_option == "wdcsimplified"
+    await select.async_select_option("wdcoptimized")
+
+    coordinator.async_set_hc_tune.assert_awaited_once_with(
+        "hc1_control_type", "wdcoptimized"
+    )

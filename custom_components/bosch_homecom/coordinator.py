@@ -18,6 +18,7 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.data_entry_flow import UnknownFlow
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import async_track_point_in_utc_time
@@ -179,6 +180,24 @@ class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
 
 
 RECORDINGS_POLL_INTERVAL = timedelta(hours=1)
+HC_TUNE_POLL_INTERVAL = timedelta(minutes=15)
+
+# Weather-compensation / underfloor-heating settings of heating circuit hc1,
+# as extra_data key -> (homecom_alt getter, setter). Exposed as number and
+# select entities on K40 only; requires homecom_alt>=1.8.2.
+HC_TUNE_ENDPOINTS: dict[str, tuple[str, str]] = {
+    "hc1_max_flow_temp": ("async_get_hc_max_flow_temp", "async_set_hc_max_flow_temp"),
+    "hc1_suwi_threshold": (
+        "async_get_hc_suwi_threshold",
+        "async_set_hc_suwi_threshold",
+    ),
+    "hc1_control_type": ("async_get_hc_control_type", "async_put_hc_control_type"),
+    "hc1_comfort2": (
+        "async_get_hc_temp_level_comfort2",
+        "async_set_hc_temp_level_comfort2",
+    ),
+    "hc1_eco": ("async_get_hc_temp_level_eco", "async_set_hc_temp_level_eco"),
+}
 
 # Maps (path_suffix under /recordings/heatSources/) -> {key, agg} for the
 # local coordinator.recordings dict. Discovered via refEnum browsability
@@ -322,22 +341,14 @@ class _K40ExtraEndpointsMixin:
     value is kept — the sensors thus stay flat at their last good number
     rather than resetting to zero, which would trip HA's ``total_increasing``
     reset detection for energy sensors.
+
+    Coordinators that set ``FETCH_HC_TUNE`` also fetch the HC_TUNE_ENDPOINTS
+    heating-circuit settings into ``extra_data``, every HC_TUNE_POLL_INTERVAL.
     """
 
-    EXTRA_KEYS = (
-        "additional_heater",
-        "silent_mode",
-        "dhw_charge_duration",
-        # Weather-comp / UFH limits (cloud PointT; Local API is read-only).
-        # Requires homecom_alt>=1.8.2 (serbanb11/homecom_alt#133).
-        "hc1_max_flow_temp",
-        "hc1_suwi_threshold",
-        "hc1_control_type",
-        "hc1_comfort2",
-        "hc1_eco",
-        "hc1_actual_supply_temp",
-        "hc1_heating_type",
-    )
+    EXTRA_KEYS = ("additional_heater", "silent_mode", "dhw_charge_duration")
+    # Whether to fetch the HC_TUNE_ENDPOINTS settings (K40 only, see there).
+    FETCH_HC_TUNE = False
 
     def __init__(self, *args, **kwargs) -> None:
         """Initialize coordinator with the extra-endpoint cache."""
@@ -345,11 +356,13 @@ class _K40ExtraEndpointsMixin:
         self.extra_data: dict[str, dict | None] = {}
         self.recordings: dict[str, float] = {}
         self._last_recordings_fetch = None
+        self._last_hc_tune_fetch = None
 
     async def _async_update_data(self):
         """Update via library, then fetch the standalone endpoints."""
         data = await super()._async_update_data()
         await self._fetch_extra_endpoints()
+        await self._fetch_hc_tune()
         await self._fetch_recordings()
         return data
 
@@ -362,34 +375,6 @@ class _K40ExtraEndpointsMixin:
             "silent_mode": lambda: self.bhc.async_get_silent_mode(self.unique_id),
             "dhw_charge_duration": lambda: self.bhc.async_get_dhw_charge_duration(
                 self.unique_id, "dhw1"
-            ),
-            "hc1_max_flow_temp": lambda: self._async_hc_resource(
-                "async_get_hc_max_flow_temp",
-                "/resource/heatingCircuits/hc1/maxFlowTemp",
-            ),
-            "hc1_suwi_threshold": lambda: self._async_hc_resource(
-                "async_get_hc_suwi_threshold",
-                "/resource/heatingCircuits/hc1/suWiThreshold",
-            ),
-            "hc1_control_type": lambda: self._async_hc_resource(
-                "async_get_hc_control_type",
-                "/resource/heatingCircuits/hc1/controlType",
-            ),
-            "hc1_comfort2": lambda: self._async_hc_resource(
-                "async_get_hc_temp_level_comfort2",
-                "/resource/heatingCircuits/hc1/temperatureLevels/comfort2",
-            ),
-            "hc1_eco": lambda: self._async_hc_resource(
-                "async_get_hc_temp_level_eco",
-                "/resource/heatingCircuits/hc1/temperatureLevels/eco",
-            ),
-            "hc1_actual_supply_temp": lambda: self._async_hc_resource(
-                "async_get_hc_actual_supply_temp",
-                "/resource/heatingCircuits/hc1/actualSupplyTemp",
-            ),
-            "hc1_heating_type": lambda: self._async_hc_resource(
-                "async_get_hc_heating_type",
-                "/resource/heatingCircuits/hc1/heatingType",
             ),
         }
         for key, thunk in thunks.items():
@@ -409,40 +394,59 @@ class _K40ExtraEndpointsMixin:
                 continue
             self.extra_data[key] = result if result else None
 
-    async def _async_hc_resource(self, method_name: str, universal_path: str):
-        """Prefer typed homecom_alt getters; fall back to universal GET."""
-        method = getattr(self.bhc, method_name, None)
-        if callable(method):
-            result = method(self.unique_id, "hc1")
-            if hasattr(result, "__await__"):
-                return await result
-        uni = getattr(self.bhc, "async_action_universal_get", None)
-        if callable(uni):
-            result = uni(self.unique_id, universal_path)
-            if hasattr(result, "__await__"):
-                return await result
-        return None
+    async def _fetch_hc_tune(self) -> None:
+        """Fetch the HC_TUNE_ENDPOINTS settings, rate-limited.
 
-    async def async_put_hc_resource(
-        self, method_name: str, universal_path: str, value
-    ) -> None:
-        """Prefer typed homecom_alt setters; fall back to universal PUT."""
-        method = getattr(self.bhc, method_name, None)
-        if callable(method):
-            result = method(self.unique_id, "hc1", value)
-            if hasattr(result, "__await__"):
-                await result
-                return
-        put = getattr(self.bhc, "async_action_universal_put", None)
-        if not callable(put):
-            raise AttributeError(
-                "homecom_alt is missing both "
-                f"{method_name} and async_action_universal_put; "
-                "upgrade homecom_alt to >=1.8.2"
-            )
-        result = put(self.unique_id, universal_path, value)
-        if hasattr(result, "__await__"):
-            await result
+        These are installer-style settings that rarely change, so polling them
+        every tick would only add cloud requests. A resource the device lacks
+        answers 403/404, which the library returns as ``None``: that is stored
+        and produces no entity. A failing request keeps the last good value.
+        """
+        if not self.FETCH_HC_TUNE:
+            return
+        now = dt_util.utcnow()
+        if (
+            self._last_hc_tune_fetch is not None
+            and now - self._last_hc_tune_fetch < HC_TUNE_POLL_INTERVAL
+        ):
+            return
+
+        answered = False
+        for key, (getter, _setter) in HC_TUNE_ENDPOINTS.items():
+            try:
+                result = await getattr(self.bhc, getter)(self.unique_id, "hc1")
+            except (
+                ApiError,
+                InvalidSensorDataError,
+                NotRespondingError,
+                RetryError,
+                TimeoutError,
+            ):
+                _LOGGER.debug(
+                    "Device %s: endpoint %s failed, keeping last value",
+                    self.unique_id,
+                    key,
+                )
+                continue
+            answered = True
+            self.extra_data[key] = result if result else None
+        # Only an outage that failed every request retries on the next tick.
+        if answered:
+            self._last_hc_tune_fetch = now
+
+    async def async_set_hc_tune(self, key: str, value: float | str) -> None:
+        """Write one HC_TUNE_ENDPOINTS setting and re-read them all.
+
+        The next refresh bypasses HC_TUNE_POLL_INTERVAL so the entity shows what
+        the device accepted rather than the value from up to 15 minutes ago.
+        """
+        setter = HC_TUNE_ENDPOINTS[key][1]
+        try:
+            await getattr(self.bhc, setter)(self.unique_id, "hc1", value)
+        except (ApiError, NotRespondingError, RetryError, TimeoutError) as err:
+            raise HomeAssistantError(f"Could not set {key} to {value}: {err}") from err
+        self._last_hc_tune_fetch = None
+        await self.async_request_refresh()
 
     async def _fetch_recordings(self) -> None:
         """Fetch /recordings/heatSources/* time-series (hourly, rate-limited).
@@ -546,6 +550,8 @@ class BoschComModuleCoordinatorK40(
       local transport the behaviour is unchanged: the refresh fails immediately.
     """
 
+    FETCH_HC_TUNE = True
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -627,8 +633,9 @@ class BoschComModuleCoordinatorK40(
         # mixin's _async_update_data to drive the local transport, so they have
         # to be invoked here or the additionalHeater / silentMode /
         # dhwChargeDuration entities and the recordings would silently stop
-        # updating whenever local access is enabled. Both cache on failure.
+        # updating whenever local access is enabled. All cache on failure.
         await self._fetch_extra_endpoints()
+        await self._fetch_hc_tune()
         await self._fetch_recordings()
         return data
 
