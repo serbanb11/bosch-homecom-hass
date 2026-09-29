@@ -357,7 +357,10 @@
         "name": "Buitentemperatuur"
       },
       "notifications": {
-        "name": "Meldingen"
+        "name": "Meldingen",
+        "state": {
+          "none": "Geen"
+        }
       },
       "energy_history_hourly": {
         "name": "Energiegeschiedenis (uurlijks)"

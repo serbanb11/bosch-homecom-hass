@@ -1,5 +1,7 @@
 """Tests for wddw2 (Tronic TR4001) switches, water heater and notifications."""
 
+import json
+
 from unittest.mock import AsyncMock, Mock
 
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
@@ -392,3 +394,30 @@ async def test_every_wddw2_entity_is_translatable(hass):
         or getattr(entity, "_attr_translation_key", None) is None
     ]
     assert not benannt, f"entities without a translation key: {sorted(set(benannt))}"
+
+
+def test_notifications_sentinel_is_translated():
+    """The "none" the sensor reports when nothing is pending must be translated.
+
+    BoschComSensorNotificationsWddw2 returns the literal string "none" rather
+    than a fault text, and Home Assistant resolves that through
+    entity.sensor.notifications.state. Without it the sensor shows the bare
+    word "none" in every language, which is what happened when this entry was
+    dropped: the name survived and only the state translation was lost, so a
+    check over names alone sees nothing wrong.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    component = (
+        Path(__file__).resolve().parents[1] / "custom_components" / "bosch_homecom"
+    )
+    for datei in (
+        "strings.json",
+        "translations/en.json",
+        "translations/de.json",
+        "translations/nl.json",
+    ):
+        daten = json.loads((component / datei).read_text(encoding="utf-8"))
+        zustaende = daten["entity"]["sensor"]["notifications"].get("state", {})
+        assert "none" in zustaende, f"{datei} does not translate the none state"
+        assert zustaende["none"], f"{datei} translates none to an empty string"

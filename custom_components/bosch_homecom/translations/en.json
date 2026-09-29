@@ -357,7 +357,10 @@
         "name": "Outdoor temperature"
       },
       "notifications": {
-        "name": "Notifications"
+        "name": "Notifications",
+        "state": {
+          "none": "None"
+        }
       },
       "energy_history_hourly": {
         "name": "Energy history (hourly)"

@@ -359,7 +359,10 @@
         "name": "Außentemperatur"
       },
       "notifications": {
-        "name": "Benachrichtigungen"
+        "name": "Benachrichtigungen",
+        "state": {
+          "none": "Keine"
+        }
       },
       "energy_history_hourly": {
         "name": "Energieverlauf (stündlich)"
