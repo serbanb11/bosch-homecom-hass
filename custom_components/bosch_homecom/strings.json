@@ -390,6 +390,12 @@
       "outdoor_temp": {
         "name": "Outdoor temperature"
       },
+      "hs_brine_inflow_temp": {
+        "name": "Brine collector inflow temperature"
+      },
+      "hs_brine_outflow_temp": {
+        "name": "Brine collector outflow temperature"
+      },
       "notifications": {
         "name": "Notifications",
         "state": {

@@ -362,6 +362,12 @@
       "outdoor_temp": {
         "name": "Buitentemperatuur"
       },
+      "hs_brine_inflow_temp": {
+        "name": "Bron-collector aanvoertemperatuur"
+      },
+      "hs_brine_outflow_temp": {
+        "name": "Bron-collector retourtemperatuur"
+      },
       "notifications": {
         "name": "Meldingen",
         "state": {

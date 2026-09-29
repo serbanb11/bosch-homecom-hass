@@ -184,6 +184,19 @@ async def async_setup_entry(
                     field="outdoor_temp",
                 )
             )
+            # Brine circuit collector temperatures (ground-source heat pumps).
+            # A unit without a brine circuit answers 404, which the library
+            # stores as None, so gate on the node so nothing dead is onboarded.
+            heat_sources = coordinator.data.heat_sources or {}
+            for field in BRINE_TEMP_FIELDS:
+                if isinstance(heat_sources.get(field), dict):
+                    entities.append(
+                        BoschComSensorHsBrineTemp(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            field=field,
+                        )
+                    )
             # Swimming pool current temperature
             if coordinator.data.pool:
                 entities.append(
@@ -1093,6 +1106,68 @@ class BoschComSensorVentilation(BoschComSensorBase):
                 }
         # See BoschComSensorDhw.extra_state_attributes — must return a mapping.
         return {}
+
+
+# heat_sources node -> translation key. Read from
+# /heatSources/hs1/brineCircuit/collector{In,Out}flowTemp by homecom_alt.
+BRINE_TEMP_FIELDS: Final[dict[str, str]] = {
+    "collectorInflowTemp": "hs_brine_inflow_temp",
+    "collectorOutflowTemp": "hs_brine_outflow_temp",
+}
+
+
+class BoschComSensorHsBrineTemp(BoschComSensorBase):
+    """Brine circuit collector inflow or outflow temperature of a heat pump.
+
+    The heat-source sensor already carries both as string attributes; this
+    gives each a numeric, unit-aware entity that can be graphed and recorded.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        field: str,
+    ) -> None:
+        """Initialize the sensor."""
+        key = BRINE_TEMP_FIELDS[field]
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{key}",
+            icon="mdi:thermometer-water",
+        )
+        self._attr_translation_key = key
+        self._attr_suggested_object_id = key
+        self._attr_should_poll = False
+        self.field = field
+
+    def _reading(self) -> dict:
+        node = (self.coordinator.data.heat_sources or {}).get(self.field)
+        return node if isinstance(node, dict) else {}
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Follow unitOfMeasure on a Fahrenheit system."""
+        if self._reading().get("unitOfMeasure") == "F":
+            return UnitOfTemperature.FAHRENHEIT
+        return self._attr_native_unit_of_measurement
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the collector temperature."""
+        value = self._reading().get("value")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
 
 class BoschComSensorOutdoorTemp(BoschComSensorBase):

@@ -364,6 +364,12 @@
       "outdoor_temp": {
         "name": "Außentemperatur"
       },
+      "hs_brine_inflow_temp": {
+        "name": "Sole-Kollektor Vorlauftemperatur"
+      },
+      "hs_brine_outflow_temp": {
+        "name": "Sole-Kollektor Rücklauftemperatur"
+      },
       "notifications": {
         "name": "Benachrichtigungen",
         "state": {

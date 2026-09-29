@@ -151,6 +151,7 @@ async def test_setup_skips_readings_the_device_does_not_serve() -> None:
         energy_history=None,
         hourly_energy_history=None,
         devices=None,
+        heat_sources=None,
         solar_circuits=[
             {
                 "id": "/solarCircuits/sc1",
