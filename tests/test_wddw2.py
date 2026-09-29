@@ -1,7 +1,6 @@
 """Tests for wddw2 (Tronic TR4001) switches, water heater and notifications."""
 
 import json
-
 from unittest.mock import AsyncMock, Mock
 
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
