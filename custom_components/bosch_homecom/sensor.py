@@ -363,7 +363,6 @@ async def async_setup_entry(
                 entities.append(
                     BoschComDerivedDeltaTSensor(
                         coordinator=coordinator,
-                        name="DHW Delta T",
                         unique_suffix="dhw1-delta_t",
                     )
                 )
@@ -374,7 +373,6 @@ async def async_setup_entry(
                 entities.append(
                     BoschComHeatingActiveBinarySensor(
                         coordinator=coordinator,
-                        name="DHW Heating Active",
                         unique_suffix="dhw1-heating_active",
                         delta_t_threshold=3.0,
                     )
@@ -1674,10 +1672,10 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
 class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
     """Derived sensor: delta T = outlet - inlet."""
 
-    def __init__(self, coordinator, name: str, unique_suffix: str):
+    def __init__(self, coordinator, unique_suffix: str):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
+        self._attr_translation_key = "dhw_delta_t"
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
@@ -1766,14 +1764,13 @@ class BoschComHeatingActiveBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(
         self,
         coordinator,
-        name: str,
         unique_suffix: str,
         *,
         delta_t_threshold: float = 3.0,
     ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
+        self._attr_translation_key = "dhw_heating_active"
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._delta_t_threshold = delta_t_threshold

@@ -413,6 +413,12 @@
       "dhw_water_flow": {
         "name": "Water Flow"
       },
+      "dhw_delta_t": {
+        "name": "Temperature Difference"
+      },
+      "dhw_heating_active": {
+        "name": "Water Heating"
+      },
       "dhw_heat_source_starts": {
         "name": "Heat Source Starts"
       },

@@ -413,6 +413,12 @@
       "dhw_water_flow": {
         "name": "Waterstroom"
       },
+      "dhw_delta_t": {
+        "name": "Temperatuurverschil"
+      },
+      "dhw_heating_active": {
+        "name": "Waterverwarming"
+      },
       "dhw_heat_source_starts": {
         "name": "Bedrijfscycli"
       },

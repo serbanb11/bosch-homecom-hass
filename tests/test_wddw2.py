@@ -366,3 +366,29 @@ async def test_descriptor_sensor_skipped_when_circuit_lacks_the_field(hass):
     # The fields it does report are unaffected.
     assert "102051881-dhw1-outlet_temperature" in unique_ids
     assert "102051881-dhw1-inlet_temperature" in unique_ids
+
+
+async def test_every_wddw2_entity_is_translatable(hass):
+    """No entity a wddw2 onboards may carry a hardcoded name.
+
+    _attr_name wins over _attr_translation_key, so an entity that sets it
+    shows the same English string in every language. This asserts the shape of
+    what setup produces rather than the presence of a declared key, which is
+    what a check over strings.json can see: a key that stops being used simply
+    disappears from its view.
+    """
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    config_entry = Mock()
+    config_entry.runtime_data = [coord]
+
+    entities = []
+    await sensor_async_setup_entry(hass, config_entry, entities.extend)
+
+    assert entities, "setup produced no entities to check"
+    benannt = [
+        type(entity).__name__
+        for entity in entities
+        if getattr(entity, "_attr_name", None) is not None
+        or getattr(entity, "_attr_translation_key", None) is None
+    ]
+    assert not benannt, f"entities without a translation key: {sorted(set(benannt))}"

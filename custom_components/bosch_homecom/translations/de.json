@@ -415,6 +415,12 @@
       "dhw_water_flow": {
         "name": "Wasserdurchfluss"
       },
+      "dhw_delta_t": {
+        "name": "Temperaturdifferenz"
+      },
+      "dhw_heating_active": {
+        "name": "Warmwasserbereitung"
+      },
       "dhw_heat_source_starts": {
         "name": "Betriebszyklen"
       },
