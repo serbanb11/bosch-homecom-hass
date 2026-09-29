@@ -45,16 +45,13 @@ class LocalSensorDescription(SensorEntityDescription):
     ``numberOfStarts``); when it is ``None`` the payload's scalar ``value`` is
     used.
 
-    Inherits SensorEntityDescription so HA 2025.1+/2026 entity helpers find the
-    expected description attributes (e.g. suggested_unit_of_measurement).
+    Must stay a SensorEntityDescription: it is the entity's
+    ``entity_description``, from which Home Assistant reads fields such as
+    ``suggested_unit_of_measurement`` while adding the entity (issue #184).
     """
 
     resource: str
     field: str | None = None
-    # Short alias used by LOCAL_SENSORS below; mirrored onto
-    # native_unit_of_measurement in the entity constructor.
-    unit: str | None = None
-    enabled_by_default: bool = True
 
 
 _TEMP = SensorDeviceClass.TEMPERATURE
@@ -69,7 +66,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         translation_key="local_compressor_power",
         resource="/heatSources/compressor/powerElecActual",
         device_class=SensorDeviceClass.POWER,
-        unit=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         state_class=_MEASUREMENT,
     ),
     LocalSensorDescription(
@@ -77,7 +74,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         translation_key="local_eheater_power",
         resource="/heatSources/eHeater/powerElecActual",
         device_class=SensorDeviceClass.POWER,
-        unit=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         state_class=_MEASUREMENT,
     ),
     # --- refrigerant circuit -------------------------------------------------
@@ -86,7 +83,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         translation_key="local_hot_gas_temp",
         resource="/heatSources/hs1/refrigerant/hotGasTemp",
         device_class=_TEMP,
-        unit=_CELSIUS,
+        native_unit_of_measurement=_CELSIUS,
         state_class=_MEASUREMENT,
     ),
     LocalSensorDescription(
@@ -94,7 +91,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         translation_key="local_suction_gas_temp",
         resource="/heatSources/hs1/refrigerant/suctionGasTemp",
         device_class=_TEMP,
-        unit=_CELSIUS,
+        native_unit_of_measurement=_CELSIUS,
         state_class=_MEASUREMENT,
     ),
     LocalSensorDescription(
@@ -102,7 +99,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         translation_key="local_compressor_temp",
         resource="/heatSources/hs1/refrigerant/compressorTemp",
         device_class=_TEMP,
-        unit=_CELSIUS,
+        native_unit_of_measurement=_CELSIUS,
         state_class=_MEASUREMENT,
     ),
     LocalSensorDescription(
@@ -110,50 +107,50 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         translation_key="local_high_pressure_temp",
         resource="/heatSources/hs1/refrigerant/highPressureTemp",
         device_class=_TEMP,
-        unit=_CELSIUS,
+        native_unit_of_measurement=_CELSIUS,
         state_class=_MEASUREMENT,
-        enabled_by_default=False,
+        entity_registry_enabled_default=False,
     ),
     LocalSensorDescription(
         key="local_low_pressure_temp",
         translation_key="local_low_pressure_temp",
         resource="/heatSources/hs1/refrigerant/lowPressureTemp",
         device_class=_TEMP,
-        unit=_CELSIUS,
+        native_unit_of_measurement=_CELSIUS,
         state_class=_MEASUREMENT,
-        enabled_by_default=False,
+        entity_registry_enabled_default=False,
     ),
     LocalSensorDescription(
         key="local_condenser_supply_temp",
         translation_key="local_condenser_supply_temp",
         resource="/heatSources/hs1/supplyFlowCondenserTemp",
         device_class=_TEMP,
-        unit=_CELSIUS,
+        native_unit_of_measurement=_CELSIUS,
         state_class=_MEASUREMENT,
-        enabled_by_default=False,
+        entity_registry_enabled_default=False,
     ),
     LocalSensorDescription(
         key="local_compressor_speed",
         translation_key="local_compressor_speed",
         resource="/heatSources/hs1/refrigerant/compressorActualSpeed",
-        unit="%",
+        native_unit_of_measurement="%",
         state_class=_MEASUREMENT,
     ),
     LocalSensorDescription(
         key="local_odu_fan_speed",
         translation_key="local_odu_fan_speed",
         resource="/heatSources/hs1/oduFanSpeed",
-        unit="%",
+        native_unit_of_measurement="%",
         state_class=_MEASUREMENT,
-        enabled_by_default=False,
+        entity_registry_enabled_default=False,
     ),
     LocalSensorDescription(
         key="local_pump_volume_flow",
         translation_key="local_pump_volume_flow",
         resource="/heatSources/hs1/pumpVolumeFlow",
-        unit=UnitOfVolumeFlowRate.LITERS_PER_MINUTE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_MINUTE,
         state_class=_MEASUREMENT,
-        enabled_by_default=False,
+        entity_registry_enabled_default=False,
     ),
     # --- per-mode counters: the cloud only exposes the totals ----------------
     LocalSensorDescription(
@@ -178,7 +175,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         resource="/heatSources/hs1/workingTime",
         field="ch",
         device_class=SensorDeviceClass.DURATION,
-        unit=UnitOfTime.SECONDS,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=_DIAGNOSTIC,
     ),
@@ -188,7 +185,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         resource="/heatSources/hs1/workingTime",
         field="dhw",
         device_class=SensorDeviceClass.DURATION,
-        unit=UnitOfTime.SECONDS,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=_DIAGNOSTIC,
     ),
@@ -211,6 +208,7 @@ def _emon_field(values: Any, field: str) -> Any | None:
 class BoschComLocalSensor(CoordinatorEntity, SensorEntity):
     """A sensor backed by a single K 40 RF Local API resource."""
 
+    entity_description: LocalSensorDescription
     _attr_has_entity_name = True
     _attr_should_poll = False
 
@@ -218,16 +216,7 @@ class BoschComLocalSensor(CoordinatorEntity, SensorEntity):
         """Initialize."""
         super().__init__(coordinator)
         self.entity_description = description
-        self._description = description
         self._attr_unique_id = f"{coordinator.unique_id}-{description.key}"
-        self._attr_translation_key = description.translation_key
-        self._attr_device_class = description.device_class
-        self._attr_native_unit_of_measurement = (
-            description.unit or description.native_unit_of_measurement
-        )
-        self._attr_state_class = description.state_class
-        self._attr_entity_category = description.entity_category
-        self._attr_entity_registry_enabled_default = description.enabled_by_default
         self._attr_device_info = coordinator.device_info
         self._config_entry = config_entry
         self.set_attr()
@@ -249,14 +238,14 @@ class BoschComLocalSensor(CoordinatorEntity, SensorEntity):
         """Read this sensor's value out of the local payload."""
         local = getattr(self.coordinator, "local_data", None)
         resources = getattr(local, "resources", None) or {}
-        payload = resources.get(self._description.resource)
+        payload = resources.get(self.entity_description.resource)
         if not isinstance(payload, dict):
             self._attr_native_value = None
             return
 
-        if self._description.field is not None:
+        if self.entity_description.field is not None:
             self._attr_native_value = _emon_field(
-                payload.get("values"), self._description.field
+                payload.get("values"), self.entity_description.field
             )
             return
         self._attr_native_value = payload.get("value")

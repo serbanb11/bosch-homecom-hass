@@ -401,7 +401,9 @@ async def test_every_wddw2_entity_is_translatable(hass):
         type(entity).__name__
         for entity in entities
         if getattr(entity, "_attr_name", None) is not None
-        or getattr(entity, "_attr_translation_key", None) is None
+        # The property, not _attr_translation_key: an entity may take its key
+        # from its entity_description instead.
+        or entity.translation_key is None
     ]
     assert not benannt, f"entities without a translation key: {sorted(set(benannt))}"
 

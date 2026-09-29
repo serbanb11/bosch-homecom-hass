@@ -7,6 +7,7 @@ coordinator's local-first behaviour, and the local-only sensors.
 from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.const import CONF_TOKEN, CONF_USERNAME
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homecom_alt import (
     ApiError,
@@ -19,7 +20,10 @@ from homecom_alt import (
     TokenStoreFullError,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    MockEntityPlatform,
+)
 
 from custom_components.bosch_homecom.const import (
     CONF_DEVICES,
@@ -920,6 +924,43 @@ async def test_local_sensor_reads_scalar_and_emon_values(hass, entry, device, fi
     assert power.native_value == 25.0
     assert starts.native_value == 129
     assert power.available is True
+
+
+@pytest.mark.asyncio
+async def test_local_sensors_add_to_the_platform(hass, entry, device, firmware, caplog):
+    """Every local sensor survives being added by Home Assistant (issue #184).
+
+    Adding reads fields such as ``suggested_unit_of_measurement`` from the
+    entity description, which a plain dataclass description lacks. Building the
+    entity directly, as the other tests do, never gets that far.
+    """
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device()
+    coordinator.local_healthy = True
+    sensors = [BoschComLocalSensor(coordinator, entry, d) for d in LOCAL_SENSORS]
+
+    platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)
+    await platform.async_add_entities(sensors)
+
+    assert "Error adding entity" not in caplog.text
+    registry = er.async_get(hass)
+    entries = {
+        sensor.entity_description.key: registry.async_get(sensor.entity_id)
+        for sensor in sensors
+    }
+    assert all(entries.values())
+    disabled = {key for key, reg in entries.items() if reg.disabled_by}
+    assert disabled == {
+        d.key for d in LOCAL_SENSORS if not d.entity_registry_enabled_default
+    }
+    assert len(disabled) == 5
+
+    power = hass.states.get(entries["local_compressor_power"].entity_id)
+    assert power.state == "25.0"
+    assert power.attributes["unit_of_measurement"] == "W"
+    assert power.attributes["device_class"] == "power"
+    assert power.attributes["state_class"] == "measurement"
 
 
 @pytest.mark.asyncio
