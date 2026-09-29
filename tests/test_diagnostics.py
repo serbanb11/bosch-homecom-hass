@@ -78,3 +78,49 @@ async def test_async_get_config_entry_diagnostics_dumps_bacon_shadow(hass):
     # The empty pointt function lists are omitted for bacon devices.
     assert "firmwares" not in dumped
     assert "stardard_functions" not in dumped
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_dump_heating_system_payloads(hass):
+    """K30/K40 dumps carry the circuits, so a heating-circuit report is actionable.
+
+    Two reports about a summer/winter field came with dumps that could not show
+    it (#170, #186). A RAC payload, which lacks these fields, is unchanged.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, title="test-user", data={})
+    entry.add_to_hass(hass)
+    hc = {"id": "/heatingCircuits/hc1", "currentSuWiMode": {"value": "forced"}}
+    entry.runtime_data = [
+        SimpleNamespace(
+            data=SimpleNamespace(
+                device={"deviceId": "123", "deviceType": "k30"},
+                firmware={"value": "1.0.0"},
+                notifications=[],
+                heat_sources={"pumpType": {"value": "hp"}},
+                dhw_circuits=[{"id": "/dhwCircuits/dhw1"}],
+                heating_circuits=[hc],
+                ventilation=None,
+                devices=[{"id": "/devices/thermostat1"}],
+            )
+        ),
+        SimpleNamespace(
+            data=SimpleNamespace(
+                device={"deviceId": "456", "deviceType": "rac"},
+                firmware={},
+                notifications=[],
+                stardard_functions=[],
+            )
+        ),
+    ]
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    k30, rac = diagnostics["data"]
+    assert k30["heating_circuits"] == [hc]
+    assert k30["dhw_circuits"] == [{"id": "/dhwCircuits/dhw1"}]
+    assert k30["heat_sources"] == {"pumpType": {"value": "hp"}}
+    assert k30["ventilation"] is None
+    # The thermostat list must not overwrite the device info under "devices".
+    assert k30["devices"] == {"deviceId": "123", "deviceType": "k30"}
+    assert k30["thermostat_devices"] == [{"id": "/devices/thermostat1"}]
+    assert "heating_circuits" not in rac

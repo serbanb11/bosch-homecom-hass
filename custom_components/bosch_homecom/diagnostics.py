@@ -87,6 +87,22 @@ def _bacon_raw_captures(coordinators: Any) -> dict[str, Any]:
     return {}
 
 
+_HEATING_FIELDS = (
+    "heat_sources",
+    "dhw_circuits",
+    "heating_circuits",
+    "ventilation",
+    "zones",
+    "solar_circuits",
+    "holiday_mode",
+    "away_mode",
+    "outdoor_temp",
+    "pool",
+    # BHCDeviceK40.devices is the thermostat list; "devices" is taken above.
+    ("devices", "thermostat_devices"),
+)
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, config_entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -110,17 +126,24 @@ async def async_get_config_entry_diagnostics(
                 }
             )
         else:
-            data_out.append(
-                {
-                    "devices": device,
-                    "firmwares": getattr(data, "firmware", {}),
-                    "notifications": getattr(data, "notifications", []),
-                    # (mantém a grafia para compatibilidade)
-                    "stardard_functions": getattr(data, "stardard_functions", []),
-                    "advanced_functions": getattr(data, "advanced_functions", []),
-                    "switch_programs": getattr(data, "switch_programs", []),
-                }
-            )
+            entry = {
+                "devices": device,
+                "firmwares": getattr(data, "firmware", {}),
+                "notifications": getattr(data, "notifications", []),
+                # (mantém a grafia para compatibilidade)
+                "stardard_functions": getattr(data, "stardard_functions", []),
+                "advanced_functions": getattr(data, "advanced_functions", []),
+                "switch_programs": getattr(data, "switch_programs", []),
+            }
+            # The heating-system payloads (K30/K40/icom/rrc2/wddw2). Twice a
+            # report about a heating-circuit field came with a dump that could
+            # not show it (#170, #186). Only fields the payload has are added,
+            # so a RAC dump stays as it was.
+            for field in _HEATING_FIELDS:
+                attr, key = field if isinstance(field, tuple) else (field, field)
+                if hasattr(data, attr):
+                    entry[key] = getattr(data, attr)
+            data_out.append(entry)
 
     coordinators = config_entry.runtime_data
     return {

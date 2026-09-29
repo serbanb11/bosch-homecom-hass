@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
+from homeassistant.exceptions import HomeAssistantError
 from homecom_alt import BHCDeviceCommodule, BHCDeviceRac
 import pytest
 
@@ -352,13 +353,32 @@ async def test_suwi_select_uses_the_writable_setting():
     coordinator.async_request_refresh.assert_awaited_once()
 
 
-async def test_suwi_select_not_created_for_read_only_status_alone():
-    """A read-only currentSuWiMode with no setting offers no dead control."""
-    _, selects = await _setup_suwi_selects(
+async def test_suwi_select_kept_for_read_only_status_alone():
+    """A read-only currentSuWiMode still gets a select, so the mode stays visible.
+
+    v1.4.5 dropped the entity whenever the status was flagged read-only, which
+    took the summer/winter select away from every K30 (#186). The mode is
+    shown; a write is refused with a clear error instead of being dropped.
+    """
+    coordinator, selects = await _setup_suwi_selects(
         {"id": "/heatingCircuits/hc1", "currentSuWiMode": _SUWI_STATUS}
     )
 
-    assert selects == []
+    assert len(selects) == 1
+    select = selects[0]
+    assert select._attr_unique_id == "k40-123-hc1-suwi"
+    assert select.current_option == "cooling"
+    assert select.extra_state_attributes == {
+        "source": "currentSuWiMode",
+        "writable": False,
+    }
+
+    with pytest.raises(HomeAssistantError, match="read-only"):
+        await select.async_select_option("forced")
+
+    coordinator.bhc.async_put_hc_suwi_mode.assert_not_awaited()
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_not_awaited()
+    coordinator.async_request_refresh.assert_not_awaited()
 
 
 async def test_suwi_select_falls_back_when_setting_is_missing():
@@ -370,6 +390,7 @@ async def test_suwi_select_falls_back_when_setting_is_missing():
 
     assert len(selects) == 1
     assert selects[0].current_option == "cooling"
+    assert selects[0].extra_state_attributes["writable"] is True
 
     await selects[0].async_select_option("off")
 
@@ -378,8 +399,8 @@ async def test_suwi_select_falls_back_when_setting_is_missing():
     )
 
 
-async def test_suwi_select_skips_a_read_only_setting():
-    """A setting flagged read-only is not offered either."""
+async def test_suwi_select_ignores_a_read_only_setting():
+    """A setting flagged read-only is not used; the status is shown instead."""
     _, selects = await _setup_suwi_selects(
         {
             "id": "/heatingCircuits/hc1",
@@ -388,4 +409,6 @@ async def test_suwi_select_skips_a_read_only_setting():
         }
     )
 
-    assert selects == []
+    assert len(selects) == 1
+    assert selects[0]._source == "currentSuWiMode"
+    assert selects[0].current_option == "cooling"

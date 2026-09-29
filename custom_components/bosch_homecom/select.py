@@ -1,10 +1,12 @@
 """Bosch HomeCom Custom Component."""
 
 from datetime import timedelta
+from typing import Any
 
 from homeassistant import config_entries, core
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -724,19 +726,22 @@ def _suwi_source(entry: dict) -> str | None:
     """Pick the heating-circuit resource the summer/winter select reads and writes.
 
     ``suWiSwitchMode`` is the setting; ``currentSuWiMode`` only reports the mode
-    the controller is in and is read-only on the gateways seen so far, so writes
-    to it were refused and the option reverted on the next poll (#170). It is
-    kept as a fallback for a gateway that does not expose the setting, unless it
-    is explicitly flagged read-only.
+    the controller is in and the cloud refuses writes to it (#170). A writable
+    setting wins. Otherwise the select is still created from ``currentSuWiMode``
+    so the mode stays visible, and a write is rejected with a clear error
+    instead of being silently dropped: v1.4.5 dropped the entity on any gateway
+    that flags it read-only, which took the select away from every K30 (#186).
     """
-    for key in ("suWiSwitchMode", "currentSuWiMode"):
-        node = entry.get(key)
-        if (
-            isinstance(node, dict)
-            and node.get("allowedValues")
-            and node.get("writeable", 1)
-        ):
-            return key
+    setting = entry.get("suWiSwitchMode")
+    if (
+        isinstance(setting, dict)
+        and setting.get("allowedValues")
+        and setting.get("writeable", 1)
+    ):
+        return "suWiSwitchMode"
+    status = entry.get("currentSuWiMode")
+    if isinstance(status, dict) and status.get("allowedValues"):
+        return "currentSuWiMode"
     return None
 
 
@@ -765,8 +770,29 @@ class BoschComSelectHcSuwiMode(CoordinatorEntity, SelectEntity):
         self.field = field
         self._source = source
 
+    def _node(self) -> dict:
+        for entry in self.coordinator.data.heating_circuits or []:
+            if entry.get("id") == "/heatingCircuits/" + self.field:
+                return entry.get(self._source) or {}
+        return {}
+
+    @property
+    def _writable(self) -> bool:
+        """Whether the gateway accepts writes to the resource this select uses."""
+        return bool(self._node().get("writeable", 1))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the resource and whether it can be written."""
+        return {"source": self._source, "writable": self._writable}
+
     async def async_select_option(self, option: str) -> None:
         """Set the option."""
+        if not self._writable:
+            raise HomeAssistantError(
+                f"{self.field} summer/winter mode is read-only on this gateway: "
+                f"the cloud does not accept writes to {self._source}"
+            )
         bhc = self._coordinator.bhc
         put = (
             bhc.async_put_hc_suwi_switch_mode
