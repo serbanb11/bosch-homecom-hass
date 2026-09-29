@@ -19,6 +19,7 @@ from typing import Any
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
+    SensorEntityDescription,
     SensorStateClass,
 )
 from homeassistant.const import (
@@ -35,24 +36,24 @@ _LOGGER = logging.getLogger(__name__)
 PARALLEL_UPDATES = 1
 
 
-@dataclass(frozen=True)
-class LocalSensorDescription:
+@dataclass(frozen=True, kw_only=True)
+class LocalSensorDescription(SensorEntityDescription):
     """Describes one local-API sensor.
 
     ``resource`` is the Local API path. ``field`` picks a single key out of an
     ``emonValue`` payload's ``values`` list (e.g. the ``dhw`` entry of
     ``numberOfStarts``); when it is ``None`` the payload's scalar ``value`` is
     used.
+
+    Inherits SensorEntityDescription so HA 2025.1+/2026 entity helpers find the
+    expected description attributes (e.g. suggested_unit_of_measurement).
     """
 
-    key: str
-    translation_key: str
     resource: str
     field: str | None = None
-    device_class: SensorDeviceClass | None = None
+    # Short alias used by LOCAL_SENSORS below; mirrored onto
+    # native_unit_of_measurement in the entity constructor.
     unit: str | None = None
-    state_class: SensorStateClass | None = None
-    entity_category: EntityCategory | None = None
     enabled_by_default: bool = True
 
 
@@ -221,7 +222,9 @@ class BoschComLocalSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{description.key}"
         self._attr_translation_key = description.translation_key
         self._attr_device_class = description.device_class
-        self._attr_native_unit_of_measurement = description.unit
+        self._attr_native_unit_of_measurement = (
+            description.unit or description.native_unit_of_measurement
+        )
         self._attr_state_class = description.state_class
         self._attr_entity_category = description.entity_category
         self._attr_entity_registry_enabled_default = description.enabled_by_default
