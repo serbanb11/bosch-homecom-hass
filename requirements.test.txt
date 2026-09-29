@@ -1,4 +1,4 @@
-homecom_alt>=1.8.1
+homecom_alt>=1.8.2
 pytest
 pytest-cov
 pytest-homeassistant-custom-component
