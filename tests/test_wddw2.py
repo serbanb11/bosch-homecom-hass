@@ -1,5 +1,7 @@
 """Tests for wddw2 (Tronic TR4001) switches, water heater and notifications."""
 
+import json
+
 from unittest.mock import AsyncMock, Mock
 
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
@@ -248,6 +250,17 @@ def test_notifications_filters_historical():
     assert sensor.state == "High temperature"
 
 
+def test_notifications_maps_self_test_failure():
+    """E10 is a fault a TR4001 raises and the table did not know.
+
+    An unmapped code falls through to the bare code, so the sensor read "E10"
+    where the manufacturer's app reads "self-test failed". Seen on a TR4001.
+    """
+    coord = _coordinator(notifications=[{"dcd": "E10", "act": "A", "fc": "1"}])
+    sensor = BoschComSensorNotificationsWddw2(coordinator=coord, config_entry=Mock())
+    assert sensor.state == "Self-test failed"
+
+
 def test_notifications_none_when_all_historical():
     coord = _coordinator(notifications=[{"dcd": "E01", "act": "H"}])
     sensor = BoschComSensorNotificationsWddw2(coordinator=coord, config_entry=Mock())
@@ -282,8 +295,25 @@ def test_notifications_history_attribute():
 # ---------------------------------------------------------------------------
 
 
-def _dhw1_circuit():
-    return {"id": "/dhwCircuits/dhw1", "actualTemp": {"value": 48}}
+def _dhw1_circuit(**overrides):
+    """A circuit reporting every field the wddw2 descriptors reference.
+
+    Setup skips a descriptor whose field the circuit does not report, so a
+    fixture that carries only actualTemp yields no descriptor sensors at all.
+    Pass a field as None to model a device that lacks it.
+    """
+    circuit = {
+        "id": "/dhwCircuits/dhw1",
+        "actualTemp": {"value": 48},
+        "operationMode": {"value": "eco"},
+        "airBoxTemperature": {"value": 21},
+        "inletTemperature": {"value": 12},
+        "outletTemperature": {"value": 48},
+        "waterFlow": {"value": 6},
+        "nbStarts": {"value": 1234},
+    }
+    circuit.update(overrides)
+    return {key: value for key, value in circuit.items() if value is not None}
 
 
 async def test_descriptor_sensors_use_per_circuit_unique_ids(hass):
@@ -323,3 +353,82 @@ async def test_setup_removes_stale_fallback_registry_entries(hass):
 
     assert registry.async_get(stale.entity_id) is None
     assert registry.async_get(legit.entity_id) is not None
+
+
+# ---------------------------------------------------------------------------
+# What a device actually onboards
+# ---------------------------------------------------------------------------
+
+
+async def test_descriptor_sensor_skipped_when_circuit_lacks_the_field(hass):
+    """A device without a field gets no sensor for it.
+
+    A Tronic TR4001 has no air box. Creating the descriptor anyway onboards an
+    Air Box Temperature sensor that stays unknown for the life of the install,
+    and a user cannot tell it apart from one that is merely offline.
+    """
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit(airBoxTemperature=None)])
+    config_entry = Mock()
+    config_entry.runtime_data = [coord]
+
+    entities = []
+    await sensor_async_setup_entry(hass, config_entry, entities.extend)
+
+    unique_ids = {e._attr_unique_id for e in entities if e._attr_unique_id}
+    assert "102051881-dhw1-air_box_temperature" not in unique_ids
+    # The fields it does report are unaffected.
+    assert "102051881-dhw1-outlet_temperature" in unique_ids
+    assert "102051881-dhw1-inlet_temperature" in unique_ids
+
+
+async def test_every_wddw2_entity_is_translatable(hass):
+    """No entity a wddw2 onboards may carry a hardcoded name.
+
+    _attr_name wins over _attr_translation_key, so an entity that sets it
+    shows the same English string in every language. This asserts the shape of
+    what setup produces rather than the presence of a declared key, which is
+    what a check over strings.json can see: a key that stops being used simply
+    disappears from its view.
+    """
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    config_entry = Mock()
+    config_entry.runtime_data = [coord]
+
+    entities = []
+    await sensor_async_setup_entry(hass, config_entry, entities.extend)
+
+    assert entities, "setup produced no entities to check"
+    benannt = [
+        type(entity).__name__
+        for entity in entities
+        if getattr(entity, "_attr_name", None) is not None
+        or getattr(entity, "_attr_translation_key", None) is None
+    ]
+    assert not benannt, f"entities without a translation key: {sorted(set(benannt))}"
+
+
+def test_notifications_sentinel_is_translated():
+    """The "none" the sensor reports when nothing is pending must be translated.
+
+    BoschComSensorNotificationsWddw2 returns the literal string "none" rather
+    than a fault text, and Home Assistant resolves that through
+    entity.sensor.notifications.state. Without it the sensor shows the bare
+    word "none" in every language, which is what happened when this entry was
+    dropped: the name survived and only the state translation was lost, so a
+    check over names alone sees nothing wrong.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    component = (
+        Path(__file__).resolve().parents[1] / "custom_components" / "bosch_homecom"
+    )
+    for datei in (
+        "strings.json",
+        "translations/en.json",
+        "translations/de.json",
+        "translations/nl.json",
+    ):
+        daten = json.loads((component / datei).read_text(encoding="utf-8"))
+        zustaende = daten["entity"]["sensor"]["notifications"].get("state", {})
+        assert "none" in zustaende, f"{datei} does not translate the none state"
+        assert zustaende["none"], f"{datei} translates none to an empty string"

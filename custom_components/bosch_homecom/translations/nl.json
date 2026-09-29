@@ -363,7 +363,10 @@
         "name": "Buitentemperatuur"
       },
       "notifications": {
-        "name": "Meldingen"
+        "name": "Meldingen",
+        "state": {
+          "none": "Geen"
+        }
       },
       "energy_history_hourly": {
         "name": "Energiegeschiedenis (uurlijks)"
@@ -416,8 +419,17 @@
       "dhw_outlet_temperature": {
         "name": "Uitgangstemperatuur"
       },
+      "dhw_wddw2_temperature": {
+        "name": "Boilertemperatuur"
+      },
       "dhw_water_flow": {
         "name": "Waterstroom"
+      },
+      "dhw_delta_t": {
+        "name": "Temperatuurverschil"
+      },
+      "dhw_heating_active": {
+        "name": "Waterverwarming"
       },
       "dhw_heat_source_starts": {
         "name": "Bedrijfscycli"

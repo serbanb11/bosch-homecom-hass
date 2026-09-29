@@ -365,7 +365,10 @@
         "name": "Außentemperatur"
       },
       "notifications": {
-        "name": "Benachrichtigungen"
+        "name": "Benachrichtigungen",
+        "state": {
+          "none": "Keine"
+        }
       },
       "energy_history_hourly": {
         "name": "Energieverlauf (stündlich)"
@@ -418,8 +421,17 @@
       "dhw_outlet_temperature": {
         "name": "Ausgangstemperatur"
       },
+      "dhw_wddw2_temperature": {
+        "name": "Warmwassertemperatur"
+      },
       "dhw_water_flow": {
         "name": "Wasserdurchfluss"
+      },
+      "dhw_delta_t": {
+        "name": "Temperaturdifferenz"
+      },
+      "dhw_heating_active": {
+        "name": "Wassererwärmung"
       },
       "dhw_heat_source_starts": {
         "name": "Betriebszyklen"

@@ -19,6 +19,9 @@
         }
       },
       "sensor": {
+        "dhw_heating_active": {
+          "default": "mdi:heating-coil"
+        },
         "dhw_operation_mode": {
           "default": "mdi:shower-head"
         },

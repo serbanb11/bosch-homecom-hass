@@ -319,9 +319,24 @@ async def async_setup_entry(
                         if stale_entity_id:
                             entity_registry.async_remove(stale_entity_id)
 
+                # Not every wddw2 carries every field. A Tronic TR4001 has
+                # no air box, so creating its descriptor anyway onboards an
+                # Air Box Temperature sensor that stays unknown for the life
+                # of the install. Skip a descriptor whose field the circuit
+                # does not report.
+                dhw_by_id = {
+                    ref["id"].split("/")[-1]: ref
+                    for ref in coordinator.data.dhw_circuits
+                    if re.fullmatch(r"dhw\d", ref["id"].split("/")[-1])
+                }
+
                 for desc in wddw2_desc:
                     for dhw_id in dhw_ids:
                         path = desc.get("path", [])
+                        circuit = dhw_by_id.get(dhw_id)
+                        field = path[-1] if path else None
+                        if circuit is not None and circuit.get(field) is None:
+                            continue
                         resolved_path = _resolve_path(path, dhw_id)
                         unique_suffix = f"{dhw_id}-{desc['key']}"
                         try:
@@ -348,7 +363,6 @@ async def async_setup_entry(
                 entities.append(
                     BoschComDerivedDeltaTSensor(
                         coordinator=coordinator,
-                        name="DHW Delta T",
                         unique_suffix="dhw1-delta_t",
                     )
                 )
@@ -359,7 +373,6 @@ async def async_setup_entry(
                 entities.append(
                     BoschComHeatingActiveBinarySensor(
                         coordinator=coordinator,
-                        name="DHW Heating Active",
                         unique_suffix="dhw1-heating_active",
                         delta_t_threshold=3.0,
                     )
@@ -1461,8 +1474,11 @@ class BoschComSensorDhwWddw2(BoschComSensorBase):
             unique_id=f"{coordinator.unique_id}-{field}-sensor",
             icon="mdi:water-boiler",
         )
-        self._attr_translation_key = "dhw"
-        self._attr_translation_placeholders = {"circuit": field}
+        # A wddw2 has exactly one circuit, always called dhw1, so the shared
+        # "{circuit} temperature" name renders as "dhw1 temperature" and shows
+        # an internal id to the user. The K40 sensor above keeps the
+        # placeholder, where several circuits do exist.
+        self._attr_translation_key = "dhw_wddw2_temperature"
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_suggested_object_id = field + "_sensor"
         self._attr_should_poll = False
@@ -1659,10 +1675,10 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
 class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
     """Derived sensor: delta T = outlet - inlet."""
 
-    def __init__(self, coordinator, name: str, unique_suffix: str):
+    def __init__(self, coordinator, unique_suffix: str):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
+        self._attr_translation_key = "dhw_delta_t"
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
@@ -1751,14 +1767,13 @@ class BoschComHeatingActiveBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(
         self,
         coordinator,
-        name: str,
         unique_suffix: str,
         *,
         delta_t_threshold: float = 3.0,
     ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_name = name
+        self._attr_translation_key = "dhw_heating_active"
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
         self._attr_device_info = coordinator.device_info
         self._delta_t_threshold = delta_t_threshold
