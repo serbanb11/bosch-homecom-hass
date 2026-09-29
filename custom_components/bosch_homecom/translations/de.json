@@ -77,17 +77,20 @@
       },
       "local_credentials": {
         "title": "Lokaler Netzwerkzugriff",
-        "description": "Gateway {gateway} über das lokale Netzwerk lesen statt nur über die Bosch-Cloud. Nur lesend: Die Steuerung läuft weiterhin vollständig über die Cloud.\n\nErfordert Gateway-Firmware 15.00.01 oder neuer.\n\n**Vor dem Absenden:** die Tasten WLAN und Wireless am Gateway gleichzeitig etwa eine Sekunde drücken. Die LEDs blinken kurz blau, danach akzeptiert das Gateway fünf Minuten lang eine Token-Anfrage.\n\nLogin und Pass vom Aufkleber des Gateways eingeben. Bindestriche in Pass werden automatisch entfernt. Das Token wird gespeichert und wiederverwendet, der Vorgang ist also nur einmal nötig.\n\nZum Abschalten des lokalen Zugriffs das Entfernen-Feld ankreuzen.",
+        "description": "Gateway {gateway} über das lokale Netzwerk lesen statt nur über die Bosch-Cloud. Nur lesend: Die Steuerung läuft weiterhin vollständig über die Cloud.\n\nErfordert Gateway-Firmware 15.00.01 oder neuer.\n\n**Vor dem Absenden:** die Tasten WLAN und Wireless am Gateway gleichzeitig etwa eine Sekunde drücken. Die LEDs blinken kurz blau, danach akzeptiert das Gateway fünf Minuten lang eine Token-Anfrage.\n\nLogin und Pass vom Aufkleber des Gateways eingeben. Bindestriche in Pass werden automatisch entfernt. Das Token wird gespeichert und wiederverwendet, der Vorgang ist also nur einmal nötig.\n\n**Schon ein Token** für dieses Gateway vorhanden, z. B. aus einer anderen Integration? Dann stattdessen ins Token-Feld einfügen; Login, Pass und der Tastendruck entfallen. Ein eingefügtes Token wird von dieser Integration nie widerrufen.\n\nZum Abschalten des lokalen Zugriffs das Entfernen-Feld ankreuzen.",
         "data": {
           "local_host": "Hostname oder IP-Adresse des Gateways",
           "local_login": "Login (vom Gateway-Aufkleber)",
           "local_password": "Pass (vom Gateway-Aufkleber)",
+          "local_token": "Vorhandenes Zugriffstoken (statt Login und Pass)",
           "local_remove": "Lokalen Zugriff für dieses Gateway entfernen"
         }
       }
     },
     "error": {
       "local_cannot_connect": "Gateway nicht erreichbar. Adresse prüfen. Hinweis: Das Gateway gibt den Leseport erst frei, wenn ein Token existiert — beim ersten Token ist das also normal, bis dieser Schritt erfolgreich ist.",
+      "local_invalid_token": "Das Gateway hat dieses Token abgelehnt. Prüfen, ob es vollständig kopiert wurde, oder stattdessen mit Login und Pass koppeln.",
+      "local_wrong_gateway": "Token oder Adresse gehören zu einem anderen Gateway. Bitte Adresse und Token prüfen.",
       "local_invalid_auth": "Das Gateway hat Login oder Pass abgelehnt. Bitte mit dem Aufkleber vergleichen; Pass wird ohne Bindestriche gesendet (automatisch).",
       "local_proximity_required": "Das Gateway verlangt einen Nachweis, dass du davor stehst. Die Tasten WLAN und Wireless eine Sekunde gleichzeitig drücken und innerhalb von fünf Minuten erneut absenden.",
       "local_token_store_full": "Das Gateway kann kein weiteres Token speichern. Ein nicht benötigtes Token widerrufen und erneut versuchen."

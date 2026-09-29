@@ -77,17 +77,20 @@
       },
       "local_credentials": {
         "title": "Local network access",
-        "description": "Read gateway {gateway} over your local network instead of only through the Bosch cloud. This is read-only: all control keeps going through the cloud.\n\nRequires gateway firmware 15.00.01 or newer.\n\n**Before you submit:** press the WLAN and Wireless buttons on the gateway at the same time for about one second. The LEDs blink blue briefly and the gateway then accepts a token request for five minutes.\n\nEnter the Login and Pass values printed on the gateway label. Any hyphens in Pass are removed for you. The token is stored and reused, so you only do this once.\n\nTo turn local access off again, tick the removal box.",
+        "description": "Read gateway {gateway} over your local network instead of only through the Bosch cloud. This is read-only: all control keeps going through the cloud.\n\nRequires gateway firmware 15.00.01 or newer.\n\n**Before you submit:** press the WLAN and Wireless buttons on the gateway at the same time for about one second. The LEDs blink blue briefly and the gateway then accepts a token request for five minutes.\n\nEnter the Login and Pass values printed on the gateway label. Any hyphens in Pass are removed for you. The token is stored and reused, so you only do this once.\n\n**Already have a token** for this gateway, e.g. from another integration? Paste it into the token field instead; Login, Pass and the button press are then not needed. A pasted token is never revoked by this integration.\n\nTo turn local access off again, tick the removal box.",
         "data": {
           "local_host": "Gateway hostname or IP address",
           "local_login": "Login (from the gateway label)",
           "local_password": "Pass (from the gateway label)",
+          "local_token": "Existing access token (instead of Login and Pass)",
           "local_remove": "Remove local access for this gateway"
         }
       }
     },
     "error": {
       "local_cannot_connect": "Cannot reach the gateway. Check the address, and note that the gateway only serves the read port once a token exists — if this is the first token, that is expected until this step succeeds.",
+      "local_invalid_token": "The gateway rejected this token. Check that it was copied completely, or pair with Login and Pass instead.",
+      "local_wrong_gateway": "This token or address belongs to a different gateway. Check the address and the token.",
       "local_invalid_auth": "The gateway rejected the Login or Pass. Check them against the label; Pass must be entered without hyphens (this is done for you).",
       "local_proximity_required": "The gateway needs proof you are next to it. Press the WLAN and Wireless buttons together for one second, then submit again within five minutes.",
       "local_token_store_full": "The gateway cannot store another token. Revoke an unused token on the gateway and try again."
