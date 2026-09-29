@@ -319,9 +319,24 @@ async def async_setup_entry(
                         if stale_entity_id:
                             entity_registry.async_remove(stale_entity_id)
 
+                # Not every wddw2 carries every field. A Tronic TR4001 has
+                # no air box, so creating its descriptor anyway onboards an
+                # Air Box Temperature sensor that stays unknown for the life
+                # of the install. Skip a descriptor whose field the circuit
+                # does not report.
+                dhw_by_id = {
+                    ref["id"].split("/")[-1]: ref
+                    for ref in coordinator.data.dhw_circuits
+                    if re.fullmatch(r"dhw\d", ref["id"].split("/")[-1])
+                }
+
                 for desc in wddw2_desc:
                     for dhw_id in dhw_ids:
                         path = desc.get("path", [])
+                        circuit = dhw_by_id.get(dhw_id)
+                        field = path[-1] if path else None
+                        if circuit is not None and circuit.get(field) is None:
+                            continue
                         resolved_path = _resolve_path(path, dhw_id)
                         unique_suffix = f"{dhw_id}-{desc['key']}"
                         try:

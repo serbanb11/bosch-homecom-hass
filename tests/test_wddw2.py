@@ -282,8 +282,25 @@ def test_notifications_history_attribute():
 # ---------------------------------------------------------------------------
 
 
-def _dhw1_circuit():
-    return {"id": "/dhwCircuits/dhw1", "actualTemp": {"value": 48}}
+def _dhw1_circuit(**overrides):
+    """A circuit reporting every field the wddw2 descriptors reference.
+
+    Setup skips a descriptor whose field the circuit does not report, so a
+    fixture that carries only actualTemp yields no descriptor sensors at all.
+    Pass a field as None to model a device that lacks it.
+    """
+    circuit = {
+        "id": "/dhwCircuits/dhw1",
+        "actualTemp": {"value": 48},
+        "operationMode": {"value": "eco"},
+        "airBoxTemperature": {"value": 21},
+        "inletTemperature": {"value": 12},
+        "outletTemperature": {"value": 48},
+        "waterFlow": {"value": 6},
+        "nbStarts": {"value": 1234},
+    }
+    circuit.update(overrides)
+    return {key: value for key, value in circuit.items() if value is not None}
 
 
 async def test_descriptor_sensors_use_per_circuit_unique_ids(hass):
@@ -323,3 +340,29 @@ async def test_setup_removes_stale_fallback_registry_entries(hass):
 
     assert registry.async_get(stale.entity_id) is None
     assert registry.async_get(legit.entity_id) is not None
+
+
+# ---------------------------------------------------------------------------
+# What a device actually onboards
+# ---------------------------------------------------------------------------
+
+
+async def test_descriptor_sensor_skipped_when_circuit_lacks_the_field(hass):
+    """A device without a field gets no sensor for it.
+
+    A Tronic TR4001 has no air box. Creating the descriptor anyway onboards an
+    Air Box Temperature sensor that stays unknown for the life of the install,
+    and a user cannot tell it apart from one that is merely offline.
+    """
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit(airBoxTemperature=None)])
+    config_entry = Mock()
+    config_entry.runtime_data = [coord]
+
+    entities = []
+    await sensor_async_setup_entry(hass, config_entry, entities.extend)
+
+    unique_ids = {e._attr_unique_id for e in entities if e._attr_unique_id}
+    assert "102051881-dhw1-air_box_temperature" not in unique_ids
+    # The fields it does report are unaffected.
+    assert "102051881-dhw1-outlet_temperature" in unique_ids
+    assert "102051881-dhw1-inlet_temperature" in unique_ids
