@@ -467,6 +467,9 @@
       "heat_produced_total": {
         "name": "Geproduceerde warmte totaal"
       },
+      "energy_consumed_total": {
+        "name": "Verbruikte energie totaal"
+      },
       "heat_recovered_ventilation": {
         "name": "Ventilatie teruggewonnen warmte"
       },

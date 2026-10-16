@@ -263,6 +263,15 @@ ICOM_HC_TUNE_KEYS = ("hc1_suwi_threshold", "hc1_heat_curve_min", "hc1_heat_curve
 #             per-hour sample-sums; the count is the number of samples that
 #             went into the sum. Used for temperature time-series such as
 #             ``actualSupplyTemperature``.
+#   ``minute_sum`` -> ``sum(y) / 60``. The icom ``total/energyMonitoring/*``
+#             branch stores each hour as a sum of per-minute samples (``c``
+#             is the sample count, 59 or 60). ``y`` is a multiple of 60 even
+#             when ``c`` is 59, so the hour's energy is ``y / 60`` kWh (#178).
+#
+# An icom has the ``total/energyMonitoring/*`` branch and no ``emon`` branch,
+# a K40 the reverse, so both are requested in the same bulk call and the
+# unsupported family simply drops out. Both map onto the same keys, hence the
+# same entities. A device serving both (none known) would keep the later entry.
 RECORDING_PATHS: dict[str, dict] = {
     # Energy counters — /recordings/heatSources/emon/*, unit kWh
     "emon/total/compressor": {"key": "energy_compressor_total", "agg": "sum"},
@@ -287,6 +296,24 @@ RECORDING_PATHS: dict[str, dict] = {
     # Sensor time-series — direct leaves under /recordings/heatSources/*,
     # per-hour sample-sum with count -> averaging.
     "actualSupplyTemperature": {"key": "supply_temp_avg_today", "agg": "avg"},
+    # icom heat pumps (#178): the same totals under a different branch, with
+    # per-minute sample sums. consumedEnergy has no emon counterpart.
+    "total/energyMonitoring/compressor": {
+        "key": "energy_compressor_total",
+        "agg": "minute_sum",
+    },
+    "total/energyMonitoring/eheater": {
+        "key": "energy_eheater_total",
+        "agg": "minute_sum",
+    },
+    "total/energyMonitoring/outputProduced": {
+        "key": "heat_produced_total",
+        "agg": "minute_sum",
+    },
+    "total/energyMonitoring/consumedEnergy": {
+        "key": "energy_consumed_total",
+        "agg": "minute_sum",
+    },
 }
 
 
@@ -504,10 +531,11 @@ class _K40ExtraEndpointsMixin:
         """Fetch /recordings/heatSources/* time-series (hourly, rate-limited).
 
         Runs at most once per RECORDINGS_POLL_INTERVAL. The bulk endpoint
-        accepts up to 30 paths per call — 14 fits comfortably. Each entry
-        of RECORDING_PATHS has its own aggregation mode:
+        accepts up to 30 paths per call — 21 fits. Each entry of
+        RECORDING_PATHS has its own aggregation mode:
             ``sum`` -> sum of ``y`` (kWh counters)
             ``avg`` -> sum(y) / sum(c) (sensor sample averages)
+            ``minute_sum`` -> sum(y) / 60 (icom per-minute sample sums)
         """
         now = dt_util.utcnow()
         if (
@@ -576,6 +604,8 @@ class _K40ExtraEndpointsMixin:
             if meta["agg"] == "avg":
                 if c_sum > 0:
                     self.recordings[meta["key"]] = round(y_sum / c_sum, 2)
+            elif meta["agg"] == "minute_sum":
+                self.recordings[meta["key"]] = round(y_sum / 60, 3)
             else:  # "sum"
                 self.recordings[meta["key"]] = round(y_sum, 3)
 

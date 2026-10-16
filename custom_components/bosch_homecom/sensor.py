@@ -31,7 +31,10 @@ from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+)
 
 from .const import BOSCH_SENSOR_DESCRIPTORS, DOMAIN, WDDW2_NOTIFICATION_CODES
 from .coordinator import (
@@ -554,12 +557,13 @@ async def async_setup_entry(
 
             # Recording sensors from /recordings/heatSources/*.
             # Enabled-by-default policy:
-            #   - Top-level totals (5) + supply temperature avg (1) = main use.
+            #   - Top-level totals (6) + supply temperature avg (1) = main use.
             #   - Per-mode breakdowns (8) = diagnostics, users enable per entity.
             defaults_on = {
                 "energy_compressor_total",
                 "energy_eheater_total",
                 "energy_ventilation_total",
+                "energy_consumed_total",
                 "heat_produced_total",
                 "heat_recovered_ventilation",
                 "supply_temp_avg_today",
@@ -568,6 +572,7 @@ async def async_setup_entry(
                 "energy_compressor_total",
                 "energy_eheater_total",
                 "energy_ventilation_total",
+                "energy_consumed_total",
                 "heat_produced_total",
                 "heat_recovered_ventilation",
                 "energy_compressor_ch",
@@ -586,6 +591,7 @@ async def async_setup_entry(
                 "energy_compressor_total",
                 "energy_eheater_total",
                 "energy_ventilation_total",
+                "energy_consumed_total",
                 "heat_produced_total",
                 "heat_recovered_ventilation",
                 "energy_compressor_ch",
@@ -606,25 +612,32 @@ async def async_setup_entry(
                 )
                 recording_keys.extend(pool_keys)
                 defaults_on.update(pool_keys)
+            # A recording sensor is created only once its key has been
+            # served. A K40 has the emon/* branch and an icom the
+            # total/energyMonitoring/* branch, never both, so creating every
+            # key left icom users with permanently unknown sensors (#178). A
+            # key missing at setup, because the device lacks it or the hourly
+            # fetch failed, stays pending and is added by the first update
+            # that carries it.
+            recording_pending: list[_PendingSensor] = []
             for key in recording_keys:
-                if key in energy_keys:
-                    dev_class = SensorDeviceClass.ENERGY
-                    state_class = SensorStateClass.TOTAL_INCREASING
-                    unit = "kWh"
-                else:  # supply_temp_avg_today
-                    dev_class = SensorDeviceClass.TEMPERATURE
-                    state_class = SensorStateClass.MEASUREMENT
-                    unit = "°C"
-                entities.append(
-                    BoschComK40RecordingSensor(
-                        coordinator,
-                        key,
-                        key,
-                        device_class=dev_class,
-                        state_class=state_class,
-                        native_unit=unit,
-                        enabled_default=key in defaults_on,
-                    )
+                _add_or_defer(
+                    (
+                        partial(_recording_present, coordinator, key),
+                        partial(
+                            _build_recording_sensor,
+                            coordinator,
+                            key,
+                            energy=key in energy_keys,
+                            enabled_default=key in defaults_on,
+                        ),
+                    ),
+                    entities,
+                    recording_pending,
+                )
+            if recording_pending:
+                _add_pending_sensors_later(
+                    coordinator, config_entry, recording_pending, async_add_entities
                 )
 
     if entities:
@@ -3713,6 +3726,84 @@ class BoschComK40StartCountsSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
+# A sensor created only once its data is present: (has_data, build). Setup
+# builds the ones whose data is there and keeps the rest pending; a coordinator
+# listener adds those on the first update that carries their data, so a
+# transient gap at setup does not drop a sensor for good and a device that
+# never serves the data never gets one.
+_PendingSensor = tuple[Callable[[], bool], Callable[[], "SensorEntity | None"]]
+
+
+def _add_or_defer(
+    candidate: _PendingSensor,
+    entities: list[SensorEntity],
+    pending: list[_PendingSensor],
+) -> None:
+    """Build a candidate whose data is present, otherwise keep it pending."""
+    has_data, build = candidate
+    if not has_data():
+        pending.append(candidate)
+        return
+    if (sensor := build()) is not None:
+        entities.append(sensor)
+
+
+def _add_pending_sensors_later(
+    coordinator: DataUpdateCoordinator,
+    config_entry: config_entries.ConfigEntry,
+    pending: list[_PendingSensor],
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add the pending sensors on the first update that carries their data."""
+
+    @callback
+    def _async_add_present() -> None:
+        new: list[SensorEntity] = []
+        for candidate in [c for c in pending if c[0]()]:
+            pending.remove(candidate)
+            if (sensor := candidate[1]()) is not None:
+                new.append(sensor)
+        if new:
+            async_add_entities(new)
+
+    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_present))
+
+
+def _recording_present(
+    coordinator: BoschComModuleCoordinatorK40 | BoschComModuleCoordinatorIcom,
+    key: str,
+) -> bool:
+    """Return whether the recordings fetch has served this key."""
+    return key in coordinator.recordings
+
+
+def _build_recording_sensor(
+    coordinator: BoschComModuleCoordinatorK40 | BoschComModuleCoordinatorIcom,
+    key: str,
+    *,
+    energy: bool,
+    enabled_default: bool,
+) -> SensorEntity:
+    """Build the recording sensor for one RECORDING_PATHS key."""
+    if energy:
+        dev_class = SensorDeviceClass.ENERGY
+        state_class = SensorStateClass.TOTAL_INCREASING
+        unit = "kWh"
+    else:  # supply_temp_avg_today
+        dev_class = SensorDeviceClass.TEMPERATURE
+        state_class = SensorStateClass.MEASUREMENT
+        unit = "°C"
+    return BoschComK40RecordingSensor(
+        coordinator,
+        key,
+        key,
+        device_class=dev_class,
+        state_class=state_class,
+        native_unit=unit,
+        enabled_default=enabled_default,
+    )
+
+
 class BoschComK40RecordingSensor(CoordinatorEntity, SensorEntity):
     """Today's-so-far value derived from a /recordings/heatSources/* time-series.
 
@@ -3727,6 +3818,10 @@ class BoschComK40RecordingSensor(CoordinatorEntity, SensorEntity):
     For sensor endpoints (``avg`` aggregation), the state is today's running
     average across all hourly buckets so far — with ``state_class: measurement``
     (not total_increasing) since it is not cumulative.
+
+    The icom ``total/energyMonitoring/*`` paths (``minute_sum`` aggregation)
+    feed the same energy keys, so the entity is identical on both device
+    families; only the coordinator's aggregation differs.
     """
 
     _attr_has_entity_name = True

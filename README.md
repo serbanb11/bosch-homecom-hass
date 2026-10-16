@@ -63,13 +63,15 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | Heating circuits with temporary setpoint | -- | -- |
 | Water Heater | -- | Operation mode | Operation mode | Operation mode + target temp | -- |
 | Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | DHW/HC modes, away | -- | Charging strategy |
-| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp, solar thermal circuits, [local-only readings](#local-network-access-k-40-rf) (K40 only) | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
+| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp, solar thermal circuits, daily energy recordings, [local-only readings](#local-network-access-k-40-rf) (K40 only) | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp, daily energy recordings | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
 | Switch | Plasmacluster | -- | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
 | Binary Sensor | -- | -- | -- | -- | Network connectivity |
 | Number | -- | Ventilation summer-bypass duration | Heat curve base/end point, summer/winter threshold (when the device reports them as writable) | -- | Electricity price |
 
 **Cloud hiccups:** the Bosch cloud occasionally times out a single poll. Up to 2 consecutive failed refreshes are ridden out on the last known values (logged at info level) before entities go unavailable, so a one-off timeout no longer takes the device down for a minute.
+
+**Energy recordings:** today's compressor, electric heater, consumed and produced energy come from `/recordings/heatSources`. A K40 serves them under `emon/*`, an icom under `total/energyMonitoring/*`; both are requested and a sensor is created only once its data has actually been served, so a device gets exactly the recordings it has.
 
 ### Local network access (K 40 RF)
 

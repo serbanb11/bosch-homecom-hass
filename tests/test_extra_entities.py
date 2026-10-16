@@ -33,7 +33,9 @@ from custom_components.bosch_homecom.select import (
 from custom_components.bosch_homecom.sensor import (
     BoschComK40ExtraSensor,
     BoschComK40HeatDemandSensor,
+    BoschComK40RecordingSensor,
     BoschComK40StartCountsSensor,
+    async_setup_entry as sensor_async_setup_entry,
 )
 
 
@@ -327,7 +329,8 @@ async def test_k40_coordinator_fetches_recordings(hass, entry, device, firmware)
     # Distinguishable payloads: sum for kWh, avg (y/c) for supply temperature
     def _bulk_response(dev_id, paths):
         assert dev_id == "102128202"
-        assert len(paths) == 17  # 16 emon + 1 actualSupplyTemperature
+        # 16 emon + 1 actualSupplyTemperature + 4 icom total/energyMonitoring
+        assert len(paths) == 21
         result = {}
         for p in paths:
             if "emon/total/ventilation" in p:
@@ -482,6 +485,139 @@ async def test_k40_coordinator_recordings_skips_future_slots(
     assert coordinator.recordings["energy_compressor_total"] == 9.0
     # Avg aggregation: only the 2 real buckets count, placeholder ignored.
     assert coordinator.recordings["supply_temp_avg_today"] == 28.80
+
+
+# ---------------------------------------------------------------------------
+# Issue #178: icom serves its energy under total/energyMonitoring/*, not emon/*
+# ---------------------------------------------------------------------------
+
+
+def _minute_sum_payload(hourly_y: list[tuple[float, int]]) -> dict:
+    """An icom yRecording: y is a sum of per-minute samples, c their count."""
+    return {
+        "type": "yRecording",
+        "sampleRate": "P1H",
+        "recording": [{"y": y, "c": c} for y, c in hourly_y],
+    }
+
+
+@pytest.mark.asyncio
+async def test_icom_coordinator_aggregates_energy_monitoring_per_minute(
+    hass, entry, firmware
+):
+    """The icom branch is summed as y/60 per hour, the emon keys stay absent.
+
+    Modelled on the capture in #178: y is a multiple of 60 even for an hour
+    with 59 samples, so y/60 is the hour's kWh (y/c would give 2.03).
+    """
+    entry.add_to_hass(hass)
+
+    def _bulk_response(dev_id, paths):
+        result = {}
+        for p in paths:
+            if "total/energyMonitoring/compressor" in p:
+                result[p] = _minute_sum_payload([(0, 60), (60, 60), (120, 59)])
+            elif "total/energyMonitoring/consumedEnergy" in p:
+                result[p] = _minute_sum_payload([(0, 60), (60, 60), (120, 59)])
+            elif "total/energyMonitoring/outputProduced" in p:
+                result[p] = _minute_sum_payload([(120, 60), (240, 60), (120, 59)])
+            elif "total/energyMonitoring/eheater" in p:
+                result[p] = _minute_sum_payload([(0, 60), (0, 60), (0, 59)])
+            # emon/* and actualSupplyTemperature: this device has no such paths.
+        return result
+
+    bhc = MagicMock()
+    bhc.async_request_bulk = AsyncMock(side_effect=_bulk_response)
+    coordinator = BoschComModuleCoordinatorIcom(
+        hass,
+        bhc,
+        {"deviceId": "102128202", "deviceType": "icom"},
+        firmware,
+        entry,
+        auth_provider=False,
+    )
+
+    await coordinator._fetch_recordings()
+
+    assert coordinator.recordings == {
+        "energy_compressor_total": 3.0,
+        "energy_consumed_total": 3.0,
+        "heat_produced_total": 8.0,
+        "energy_eheater_total": 0.0,
+    }
+
+
+async def _k40_platform(hass, entry, device, firmware, recordings):
+    """Run the sensor platform for a K40 whose recordings fetch served ``recordings``.
+
+    Returns the added entities (the list keeps growing when the pending
+    listener adds more) and the coordinator.
+    """
+    entry.add_to_hass(hass)
+    bhc = MagicMock()
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+    # Shape the data as a refresh would: the coordinator swaps in its device dict.
+    coordinator.async_set_updated_data(coordinator._build_device_data(_make_k40_data()))
+    coordinator.recordings.update(recordings)
+    entry.runtime_data = [coordinator]
+    entities: list = []
+    await sensor_async_setup_entry(hass, entry, entities.extend)
+    return entities, coordinator
+
+
+def _recording_ids(entities) -> set[str]:
+    return {e.unique_id for e in entities if isinstance(e, BoschComK40RecordingSensor)}
+
+
+@pytest.mark.asyncio
+async def test_recording_sensors_only_for_served_keys(hass, entry, device, firmware):
+    """Only recordings the device actually served get a sensor at setup."""
+    entities, coordinator = await _k40_platform(
+        hass,
+        entry,
+        device,
+        firmware,
+        {"energy_compressor_total": 4.0, "heat_produced_total": 8.0},
+    )
+
+    assert _recording_ids(entities) == {
+        "102128202-energy_compressor_total",
+        "102128202-heat_produced_total",
+    }
+    await coordinator.async_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_recording_sensor_missing_at_setup_is_added_later(
+    hass, entry, device, firmware
+):
+    """A key that shows up on a later fetch gets its sensor then, exactly once."""
+    entities, coordinator = await _k40_platform(
+        hass, entry, device, firmware, {"energy_compressor_total": 4.0}
+    )
+    assert "102128202-energy_consumed_total" not in _recording_ids(entities)
+
+    coordinator.recordings["energy_consumed_total"] = 3.0
+    coordinator.async_update_listeners()
+    assert "102128202-energy_consumed_total" in _recording_ids(entities)
+
+    # Still pending keys do not appear, and an added one is not added twice.
+    count = len(entities)
+    coordinator.async_update_listeners()
+    assert len(entities) == count
+    assert "102128202-heat_produced_dhw" not in _recording_ids(entities)
+    await coordinator.async_shutdown()
+
+
+@pytest.mark.asyncio
+async def test_no_recording_sensors_when_nothing_served(hass, entry, device, firmware):
+    """A device without recordings gets none, instead of 14 unknown ones."""
+    entities, coordinator = await _k40_platform(hass, entry, device, firmware, {})
+
+    assert _recording_ids(entities) == set()
+    await coordinator.async_shutdown()
 
 
 # ===================================================================

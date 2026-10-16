@@ -51,6 +51,7 @@ All entities:
 - Use `_attr_translation_key` for names
 - Implement `_handle_coordinator_update()` -> `self.set_attr()` + `self.async_write_ha_state()`
 - Control methods call `self.coordinator.bhc.async_*()` then `self.coordinator.async_request_refresh()`
+- Sensors whose data may be absent at setup use the pending pattern in `sensor.py` (`_add_or_defer`, `_add_pending_sensors_later`): built when their data is present, otherwise added by a coordinator listener on the first update that carries it
 
 ### Services (registered in `async_setup`)
 

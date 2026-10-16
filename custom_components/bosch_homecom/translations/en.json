@@ -467,6 +467,9 @@
       "heat_produced_total": {
         "name": "Heat produced total"
       },
+      "energy_consumed_total": {
+        "name": "Consumed energy total"
+      },
       "heat_recovered_ventilation": {
         "name": "Ventilation heat recovered"
       },

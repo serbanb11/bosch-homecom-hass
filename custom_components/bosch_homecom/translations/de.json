@@ -469,6 +469,9 @@
       "heat_produced_total": {
         "name": "Wärme erzeugt gesamt"
       },
+      "energy_consumed_total": {
+        "name": "Energie verbraucht gesamt"
+      },
       "heat_recovered_ventilation": {
         "name": "Wärmerückgewinnung Lüftung"
       },
