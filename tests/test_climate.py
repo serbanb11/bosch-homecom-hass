@@ -10,6 +10,7 @@ from custom_components.bosch_homecom.climate import (
     BoschComRacClimate,
 )
 from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorIcom
+from custom_components.bosch_homecom.sensor import BoschComSensorHc
 
 
 def _rac_ref(name: str, value: str) -> dict:
@@ -268,3 +269,50 @@ async def test_set_temperature_no_temperature_is_noop():
     coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_not_awaited()
     coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
     coordinator.async_request_refresh.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Issue #194: icom circuits name the room temperature "roomtemperature"
+# ---------------------------------------------------------------------------
+
+_ICOM_ROOM_TEMP = {
+    "id": "/heatingCircuits/hc1/roomtemperature",
+    "type": "floatValue",
+    "writeable": 0,
+    "recordable": 1,
+    "value": 21.2,
+    "unitOfMeasure": "C",
+}
+
+
+def test_icom_room_temperature_reaches_the_climate_entity():
+    """The raw roomtemperature key an icom circuit carries sets current_temperature."""
+    coordinator = _make_icom_coordinator(suwi="forced")
+    coordinator.data.heating_circuits[0]["roomtemperature"] = _ICOM_ROOM_TEMP
+    climate = _make_climate(coordinator)
+
+    climate.set_attr()
+
+    assert climate.current_temperature == 21.2
+
+
+def test_k40_room_temperature_still_uses_room_temp_key():
+    """The K40 spelling keeps working alongside the icom one."""
+    coordinator = _make_k40_coordinator(suwi="forced", heatcool="heating")
+    coordinator.data.heating_circuits[0]["roomTemp"] = {"value": 20.5}
+    climate = _make_climate(coordinator)
+
+    climate.set_attr()
+
+    assert climate.current_temperature == 20.5
+
+
+def test_icom_room_temperature_reaches_the_status_sensor_attribute():
+    """The heating circuit status sensor exposes it as the roomTemp attribute."""
+    coordinator = _make_icom_coordinator(suwi="forced")
+    coordinator.data.heating_circuits[0]["roomtemperature"] = _ICOM_ROOM_TEMP
+    sensor = BoschComSensorHc(
+        coordinator=coordinator, config_entry=MagicMock(), field="hc1"
+    )
+
+    assert sensor.extra_state_attributes["roomTemp"] == 21.2

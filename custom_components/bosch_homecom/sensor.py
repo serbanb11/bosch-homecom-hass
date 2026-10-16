@@ -947,7 +947,11 @@ class BoschComSensorHc(BoschComSensorBase):
                 heatCoolMode_value = (entry.get("heatCoolMode") or {}).get(
                     "value", "unknown"
                 )
-                roomTemp_value = (entry.get("roomTemp") or {}).get("value", "unknown")
+                # K40 circuits carry roomTemp, icom circuits the raw
+                # roomtemperature (#194).
+                roomTemp_value = (
+                    entry.get("roomTemp") or entry.get("roomtemperature") or {}
+                ).get("value", "unknown")
                 actualHumidity_value = (entry.get("actualHumidity") or {}).get(
                     "value", "unknown"
                 )

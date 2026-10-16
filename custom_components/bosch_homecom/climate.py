@@ -489,7 +489,9 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                     self._attr_temperature_unit = _parse_temp_unit(
                         heating_circuits[key].get("unitOfMeasure")
                     )
-                case "roomTemp":
+                # homecom_alt names the /roomtemperature reading roomTemp on a
+                # K40 circuit but keeps the raw name on an icom circuit (#194).
+                case "roomTemp" | "roomtemperature":
                     room_temp = heating_circuits[key]["value"]
                     if isinstance(room_temp, (int, float)) and -40 <= room_temp <= 60:
                         self._attr_current_temperature = room_temp
