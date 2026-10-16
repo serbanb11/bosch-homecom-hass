@@ -1,5 +1,6 @@
 """Tests for wddw2 (Tronic TR4001) switches, water heater and notifications."""
 
+from dataclasses import replace
 import json
 from unittest.mock import AsyncMock, Mock
 
@@ -433,3 +434,119 @@ def test_notifications_sentinel_is_translated():
         zustaende = daten["entity"]["sensor"]["notifications"].get("state", {})
         assert "none" in zustaende, f"{datei} does not translate the none state"
         assert zustaende["none"], f"{datei} translates none to an empty string"
+
+
+# ---------------------------------------------------------------------------
+# A cloud hiccup at setup must not drop a sensor for good
+# ---------------------------------------------------------------------------
+
+
+async def _setup_recording(hass, coord):
+    """Run sensor setup; return the added entities and the late listener.
+
+    Setup and the listener share one async_add_entities, so whatever the
+    listener adds later lands in the same list.
+    """
+    config_entry = Mock()
+    config_entry.runtime_data = [coord]
+    entities = []
+    await sensor_async_setup_entry(hass, config_entry, entities.extend)
+    listener = (
+        coord.async_add_listener.call_args.args[0]
+        if coord.async_add_listener.called
+        else None
+    )
+    return entities, listener
+
+
+def _ids(entities):
+    return [e._attr_unique_id for e in entities if e._attr_unique_id]
+
+
+async def test_descriptor_sensor_missing_at_setup_is_added_later(hass):
+    """A field lost to a 502/504 at setup gets its sensor once it shows up.
+
+    homecom_alt returns the same empty value for a 504 as for a 404, so setup
+    cannot tell a transient cloud failure from a device that lacks the field.
+    Skipping for good would drop a sensor the device does have until the next
+    reload, and strand its registry entry as no longer provided.
+    """
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit(inletTemperature=None)])
+    entities, listener = await _setup_recording(hass, coord)
+    assert "102051881-dhw1-inlet_temperature" not in _ids(entities)
+
+    coord.data = _make_data(dhw_circuits=[_dhw1_circuit()])
+    listener()
+
+    assert _ids(entities).count("102051881-dhw1-inlet_temperature") == 1
+    # Once added it is no longer pending: a further update adds nothing.
+    count = len(entities)
+    listener()
+    assert len(entities) == count
+
+
+async def test_field_the_device_lacks_stays_absent_across_updates(hass):
+    """A field that never shows up never gets a sensor (TR4001 air box)."""
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit(airBoxTemperature=None)])
+    entities, listener = await _setup_recording(hass, coord)
+    count = len(entities)
+
+    for _ in range(3):
+        listener()
+
+    assert len(entities) == count
+    assert "102051881-dhw1-air_box_temperature" not in _ids(entities)
+
+
+async def test_totals_sensor_missing_at_setup_is_added_later(hass):
+    """The issue #129 totals follow the same rule as the descriptors."""
+    full_hs = {
+        key: {"value": 1}
+        for key in (
+            "actualPower",
+            "powerPercentage",
+            "operationHours",
+            "electricityTotalConsumption",
+        )
+    }
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    # The 504 shape: every heat-source endpoint came back empty.
+    coord.data = replace(
+        coord.data,
+        heat_sources=dict.fromkeys(full_hs, {}),
+        water_total_consumption={"value": 1102},
+    )
+    entities, listener = await _setup_recording(hass, coord)
+    assert "102051881-water-total-consumption" in _ids(entities)
+    assert "102051881-hs-actual-power" not in _ids(entities)
+
+    coord.data = replace(coord.data, heat_sources=full_hs)
+    listener()
+
+    for suffix in (
+        "hs-actual-power",
+        "hs-power-percentage",
+        "hs-operation-hours",
+        "electricity-total-consumption",
+    ):
+        assert _ids(entities).count(f"102051881-{suffix}") == 1
+
+
+async def test_no_listener_when_every_sensor_is_present(hass):
+    """A device reporting everything at setup registers no late listener."""
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    coord.data = replace(
+        coord.data,
+        heat_sources={
+            key: {"value": 1}
+            for key in (
+                "actualPower",
+                "powerPercentage",
+                "operationHours",
+                "electricityTotalConsumption",
+            )
+        },
+        water_total_consumption={"value": 1102},
+    )
+    _, listener = await _setup_recording(hass, coord)
+    assert listener is None

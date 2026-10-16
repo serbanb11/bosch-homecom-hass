@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import partial
 import json
 import logging
 import re
@@ -300,8 +302,17 @@ async def async_setup_entry(
                         )
                     )
 
+            # A sensor whose value is missing at setup is not created. Absent
+            # is not the same as missing, though: the library turns a 502/504
+            # into the same empty value as a 404, so a cloud hiccup during
+            # setup would drop a sensor the device does have. Such sensors
+            # stay pending and are added by the first update that carries
+            # their value; one the device really lacks simply never is.
+            wddw2_pending: list[_Wddw2Candidate] = []
+
             # Issue #129: surface heat-source + water totals (top-level paths).
-            entities.extend(_build_wddw2_totals_sensors(coordinator))
+            for candidate in _wddw2_totals_candidates(coordinator):
+                _add_or_defer(candidate, entities, wddw2_pending)
 
             # NEW: generic sensors from descriptors (BOSCH_SENSOR_DESCRIPTORS["wddw2"])
             wddw2_desc = BOSCH_SENSOR_DESCRIPTORS.get("wddw2", [])
@@ -337,39 +348,26 @@ async def async_setup_entry(
                 # Air Box Temperature sensor that stays unknown for the life
                 # of the install. Skip a descriptor whose field the circuit
                 # does not report.
-                dhw_by_id = {
-                    ref["id"].split("/")[-1]: ref
-                    for ref in coordinator.data.dhw_circuits
-                    if re.fullmatch(r"dhw\d", ref["id"].split("/")[-1])
-                }
-
+                #
+                # A skipped descriptor stays pending, see wddw2_pending above.
                 for desc in wddw2_desc:
                     for dhw_id in dhw_ids:
-                        path = desc.get("path", [])
-                        circuit = dhw_by_id.get(dhw_id)
-                        field = path[-1] if path else None
-                        if circuit is not None and circuit.get(field) is None:
-                            continue
-                        resolved_path = _resolve_path(path, dhw_id)
-                        unique_suffix = f"{dhw_id}-{desc['key']}"
-                        try:
-                            entities.append(
-                                BoschComGenericSensor(
-                                    coordinator=coordinator,
-                                    name=desc["name"],
-                                    unique_suffix=unique_suffix,
-                                    path=resolved_path,
-                                    unit=desc.get("unit"),
-                                    device_class=desc.get("device_class"),
-                                    state_class=desc.get("state_class"),
-                                    translation_key=desc.get("translation_key"),
-                                    entity_category=desc.get("entity_category"),
-                                )
-                            )
-                        except Exception:  # keep onboarding even if one fails
-                            _LOGGER.debug(
-                                "Failed to add generic sensor %s", unique_suffix
-                            )
+                        _add_or_defer(
+                            (
+                                partial(
+                                    _wddw2_circuit_has_field, coordinator, desc, dhw_id
+                                ),
+                                partial(
+                                    _build_wddw2_descriptor_sensor,
+                                    coordinator,
+                                    desc,
+                                    dhw_id,
+                                    _resolve_path(desc.get("path", []), dhw_id),
+                                ),
+                            ),
+                            entities,
+                            wddw2_pending,
+                        )
 
             # NEW: derived sensors (single set; adjust to per-circuit if precisares)
             try:
@@ -392,6 +390,13 @@ async def async_setup_entry(
                 )
             except Exception:
                 _LOGGER.debug("Failed to add DHW Heating Active binary sensor")
+
+            if wddw2_pending:
+                config_entry.async_on_unload(
+                    coordinator.async_add_listener(
+                        _wddw2_late_sensor_listener(wddw2_pending, async_add_entities)
+                    )
+                )
 
         # ---- Commodule (EV Charger) ----
         elif device_type == "commodule":
@@ -3392,99 +3397,166 @@ class BoschComWddw2TotalsSensor(CoordinatorEntity, SensorEntity):
         return node.get("value")
 
 
-def _build_wddw2_totals_sensors(
-    coordinator: BoschComModuleCoordinatorWddw2,
-) -> list[SensorEntity]:
-    """Build the 5 priority WDDW2 totals sensors from issue #129."""
-    entities: list[SensorEntity] = []
+# A wddw2 sensor that is only created once its value is present: whether the
+# coordinator's current data carries it, and how to build it.
+_Wddw2Candidate = tuple[Callable[[], bool], Callable[[], "SensorEntity | None"]]
+
+# The 5 priority WDDW2 totals sensors from issue #129, as keyword arguments to
+# BoschComWddw2TotalsSensor.
+_WDDW2_TOTALS: Final[tuple[dict[str, Any], ...]] = (
+    {
+        "source": "water_total_consumption",
+        "sub_key": None,
+        "name_suffix": "water_total_consumption",
+        "unique_suffix": "water-total-consumption",
+        "device_class": SensorDeviceClass.WATER,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "unit": UnitOfVolume.LITERS,
+        "icon": "mdi:water",
+        "translation_key": "water_total_consumption",
+    },
+    {
+        "source": "heat_sources",
+        "sub_key": "electricityTotalConsumption",
+        "name_suffix": "electricity_total_consumption",
+        "unique_suffix": "electricity-total-consumption",
+        "device_class": SensorDeviceClass.ENERGY,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "translation_key": "hs_electricity_total",
+    },
+    {
+        "source": "heat_sources",
+        "sub_key": "operationHours",
+        "name_suffix": "hs_operation_hours",
+        "unique_suffix": "hs-operation-hours",
+        "device_class": SensorDeviceClass.DURATION,
+        "state_class": SensorStateClass.TOTAL_INCREASING,
+        "unit": UnitOfTime.HOURS,
+        "translation_key": "hs_operation_hours",
+        "entity_category": "diagnostic",
+    },
+    {
+        "source": "heat_sources",
+        "sub_key": "actualPower",
+        "name_suffix": "hs_actual_power",
+        "unique_suffix": "hs-actual-power",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.KILO_WATT,
+        "translation_key": "hs_actual_power",
+    },
+    {
+        "source": "heat_sources",
+        "sub_key": "powerPercentage",
+        "name_suffix": "hs_power_percentage",
+        "unique_suffix": "hs-power-percentage",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "icon": "mdi:gauge",
+        "translation_key": "hs_power_percentage",
+        "entity_category": "diagnostic",
+    },
+)
+
+
+def _wddw2_totals_has_value(
+    coordinator: BoschComModuleCoordinatorWddw2, spec: dict[str, Any]
+) -> bool:
+    """Return whether the current data carries a value for a totals sensor."""
     data = coordinator.data
     if data is None:
-        return entities
+        return False
+    node = getattr(data, spec["source"], None)
+    if spec["sub_key"] is not None:
+        node = (node or {}).get(spec["sub_key"])
+    return isinstance(node, dict) and "value" in node
 
-    if isinstance(data.water_total_consumption, dict) and (
-        "value" in data.water_total_consumption
-    ):
-        entities.append(
-            BoschComWddw2TotalsSensor(
-                coordinator,
-                source="water_total_consumption",
-                sub_key=None,
-                name_suffix="water_total_consumption",
-                unique_suffix="water-total-consumption",
-                device_class=SensorDeviceClass.WATER,
-                state_class=SensorStateClass.TOTAL_INCREASING,
-                unit=UnitOfVolume.LITERS,
-                icon="mdi:water",
-                translation_key="water_total_consumption",
-            )
-        )
 
-    hs = data.heat_sources or {}
-    if isinstance(hs.get("electricityTotalConsumption"), dict) and (
-        "value" in hs["electricityTotalConsumption"]
-    ):
-        entities.append(
-            BoschComWddw2TotalsSensor(
-                coordinator,
-                source="heat_sources",
-                sub_key="electricityTotalConsumption",
-                name_suffix="electricity_total_consumption",
-                unique_suffix="electricity-total-consumption",
-                device_class=SensorDeviceClass.ENERGY,
-                state_class=SensorStateClass.TOTAL_INCREASING,
-                unit=UnitOfEnergy.KILO_WATT_HOUR,
-                translation_key="hs_electricity_total",
-            )
+def _wddw2_totals_candidates(
+    coordinator: BoschComModuleCoordinatorWddw2,
+) -> list[_Wddw2Candidate]:
+    """Return the totals sensors from issue #129 as candidates."""
+    return [
+        (
+            partial(_wddw2_totals_has_value, coordinator, spec),
+            partial(BoschComWddw2TotalsSensor, coordinator, **spec),
         )
-    if isinstance(hs.get("operationHours"), dict) and "value" in hs["operationHours"]:
-        entities.append(
-            BoschComWddw2TotalsSensor(
-                coordinator,
-                source="heat_sources",
-                sub_key="operationHours",
-                name_suffix="hs_operation_hours",
-                unique_suffix="hs-operation-hours",
-                device_class=SensorDeviceClass.DURATION,
-                state_class=SensorStateClass.TOTAL_INCREASING,
-                unit=UnitOfTime.HOURS,
-                translation_key="hs_operation_hours",
-                entity_category="diagnostic",
-            )
-        )
-    if isinstance(hs.get("actualPower"), dict) and "value" in hs["actualPower"]:
-        entities.append(
-            BoschComWddw2TotalsSensor(
-                coordinator,
-                source="heat_sources",
-                sub_key="actualPower",
-                name_suffix="hs_actual_power",
-                unique_suffix="hs-actual-power",
-                device_class=SensorDeviceClass.POWER,
-                state_class=SensorStateClass.MEASUREMENT,
-                unit=UnitOfPower.KILO_WATT,
-                translation_key="hs_actual_power",
-            )
-        )
-    if isinstance(hs.get("powerPercentage"), dict) and (
-        "value" in hs["powerPercentage"]
-    ):
-        entities.append(
-            BoschComWddw2TotalsSensor(
-                coordinator,
-                source="heat_sources",
-                sub_key="powerPercentage",
-                name_suffix="hs_power_percentage",
-                unique_suffix="hs-power-percentage",
-                device_class=None,
-                state_class=SensorStateClass.MEASUREMENT,
-                unit=PERCENTAGE,
-                icon="mdi:gauge",
-                translation_key="hs_power_percentage",
-                entity_category="diagnostic",
-            )
-        )
+        for spec in _WDDW2_TOTALS
+    ]
 
-    return entities
+
+def _wddw2_circuit_has_field(
+    coordinator: BoschComModuleCoordinatorWddw2,
+    desc: dict[str, Any],
+    dhw_id: str,
+) -> bool:
+    """Return whether the circuit reports the field a descriptor reads."""
+    path = desc.get("path", [])
+    field = path[-1] if path else None
+    for ref in coordinator.data.dhw_circuits or []:
+        if ref["id"].split("/")[-1] == dhw_id:
+            return ref.get(field) is not None
+    return False
+
+
+def _build_wddw2_descriptor_sensor(
+    coordinator: BoschComModuleCoordinatorWddw2,
+    desc: dict[str, Any],
+    dhw_id: str,
+    path: list[str],
+) -> SensorEntity | None:
+    """Build the generic sensor for one wddw2 descriptor and circuit."""
+    unique_suffix = f"{dhw_id}-{desc['key']}"
+    try:
+        return BoschComGenericSensor(
+            coordinator=coordinator,
+            name=desc["name"],
+            unique_suffix=unique_suffix,
+            path=path,
+            unit=desc.get("unit"),
+            device_class=desc.get("device_class"),
+            state_class=desc.get("state_class"),
+            translation_key=desc.get("translation_key"),
+            entity_category=desc.get("entity_category"),
+        )
+    except Exception:  # keep onboarding even if one fails
+        _LOGGER.debug("Failed to add generic sensor %s", unique_suffix)
+        return None
+
+
+def _add_or_defer(
+    candidate: _Wddw2Candidate,
+    entities: list[SensorEntity],
+    pending: list[_Wddw2Candidate],
+) -> None:
+    """Build a candidate whose value is present, otherwise keep it pending."""
+    has_value, build = candidate
+    if not has_value():
+        pending.append(candidate)
+        return
+    if (sensor := build()) is not None:
+        entities.append(sensor)
+
+
+def _wddw2_late_sensor_listener(
+    pending: list[_Wddw2Candidate],
+    async_add_entities: AddEntitiesCallback,
+) -> Callable[[], None]:
+    """Return a coordinator listener that adds pending sensors once present."""
+
+    @callback
+    def _async_add_present() -> None:
+        entities: list[SensorEntity] = []
+        for candidate in [c for c in pending if c[0]()]:
+            pending.remove(candidate)
+            if (sensor := candidate[1]()) is not None:
+                entities.append(sensor)
+        if entities:
+            async_add_entities(entities)
+
+    return _async_add_present
 
 
 # ===================================================================
