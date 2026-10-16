@@ -184,7 +184,8 @@ HC_TUNE_POLL_INTERVAL = timedelta(minutes=15)
 
 # Weather-compensation / underfloor-heating settings of heating circuit hc1,
 # as extra_data key -> (homecom_alt getter, setter). Exposed as number and
-# select entities on K40 only; requires homecom_alt>=1.8.2.
+# select entities; each coordinator reads only its HC_TUNE_KEYS.
+# Requires homecom_alt>=1.8.2.
 HC_TUNE_ENDPOINTS: dict[str, tuple[str, str]] = {
     "hc1_max_flow_temp": ("async_get_hc_max_flow_temp", "async_set_hc_max_flow_temp"),
     "hc1_suwi_threshold": (
@@ -197,7 +198,28 @@ HC_TUNE_ENDPOINTS: dict[str, tuple[str, str]] = {
         "async_set_hc_temp_level_comfort2",
     ),
     "hc1_eco": ("async_get_hc_temp_level_eco", "async_set_hc_temp_level_eco"),
+    "hc1_heat_curve_min": (
+        "async_get_hc_heat_curve_min",
+        "async_set_hc_heat_curve_min",
+    ),
+    "hc1_heat_curve_max": (
+        "async_get_hc_heat_curve_max",
+        "async_set_hc_heat_curve_max",
+    ),
 }
+
+K40_HC_TUNE_KEYS = (
+    "hc1_max_flow_temp",
+    "hc1_suwi_threshold",
+    "hc1_control_type",
+    "hc1_comfort2",
+    "hc1_eco",
+)
+
+# icom gateways are quick to rate-limit (#110, #120), so they read only what an
+# outdoor-reset heat pump without a room sensor needs to be adjusted: its heat
+# curve and the summer/winter threshold. Three requests per HC_TUNE_POLL_INTERVAL.
+ICOM_HC_TUNE_KEYS = ("hc1_suwi_threshold", "hc1_heat_curve_min", "hc1_heat_curve_max")
 
 # Maps (path_suffix under /recordings/heatSources/) -> {key, agg} for the
 # local coordinator.recordings dict. Discovered via refEnum browsability
@@ -342,13 +364,13 @@ class _K40ExtraEndpointsMixin:
     rather than resetting to zero, which would trip HA's ``total_increasing``
     reset detection for energy sensors.
 
-    Coordinators that set ``FETCH_HC_TUNE`` also fetch the HC_TUNE_ENDPOINTS
+    Coordinators that set ``HC_TUNE_KEYS`` also fetch those HC_TUNE_ENDPOINTS
     heating-circuit settings into ``extra_data``, every HC_TUNE_POLL_INTERVAL.
     """
 
     EXTRA_KEYS = ("additional_heater", "silent_mode", "dhw_charge_duration")
-    # Whether to fetch the HC_TUNE_ENDPOINTS settings (K40 only, see there).
-    FETCH_HC_TUNE = False
+    # Which HC_TUNE_ENDPOINTS settings to fetch; none by default.
+    HC_TUNE_KEYS: tuple[str, ...] = ()
 
     def __init__(self, *args, **kwargs) -> None:
         """Initialize coordinator with the extra-endpoint cache."""
@@ -402,7 +424,7 @@ class _K40ExtraEndpointsMixin:
         answers 403/404, which the library returns as ``None``: that is stored
         and produces no entity. A failing request keeps the last good value.
         """
-        if not self.FETCH_HC_TUNE:
+        if not self.HC_TUNE_KEYS:
             return
         now = dt_util.utcnow()
         if (
@@ -412,7 +434,8 @@ class _K40ExtraEndpointsMixin:
             return
 
         answered = False
-        for key, (getter, _setter) in HC_TUNE_ENDPOINTS.items():
+        for key in self.HC_TUNE_KEYS:
+            getter = HC_TUNE_ENDPOINTS[key][0]
             try:
                 result = await getattr(self.bhc, getter)(self.unique_id, "hc1")
             except (
@@ -550,7 +573,7 @@ class BoschComModuleCoordinatorK40(
       local transport the behaviour is unchanged: the refresh fails immediately.
     """
 
-    FETCH_HC_TUNE = True
+    HC_TUNE_KEYS = K40_HC_TUNE_KEYS
 
     def __init__(
         self,
@@ -717,6 +740,8 @@ class BoschComModuleCoordinatorIcom(
     BoschComModuleCoordinatorBase[BHCDeviceIcom],
 ):
     """A coordinator for icom heat pumps (subset of K40 endpoint surface)."""
+
+    HC_TUNE_KEYS = ICOM_HC_TUNE_KEYS
 
     def _build_device_data(self, data: BHCDeviceIcom) -> BHCDeviceIcom:
         """Build icom device data."""

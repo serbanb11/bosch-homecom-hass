@@ -67,7 +67,7 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Switch | Plasmacluster | -- | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
 | Binary Sensor | -- | -- | -- | -- | Network connectivity |
-| Number | -- | Ventilation summer-bypass duration | -- | -- | Electricity price |
+| Number | -- | Ventilation summer-bypass duration | Heat curve base/end point, summer/winter threshold (when the device reports them as writable) | -- | Electricity price |
 
 ### Local network access (K 40 RF)
 

@@ -617,6 +617,12 @@
       },
       "hc1_eco": {
         "name": "HC1 eco setpoint"
+      },
+      "hc1_heat_curve_min": {
+        "name": "HC1 heat curve base point"
+      },
+      "hc1_heat_curve_max": {
+        "name": "HC1 heat curve end point"
       }
     },
     "button": {

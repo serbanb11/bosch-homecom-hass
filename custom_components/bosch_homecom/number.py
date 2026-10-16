@@ -78,8 +78,7 @@ async def async_setup_entry(
             dhw_dur = coordinator.extra_data.get("dhw_charge_duration")
             if isinstance(dhw_dur, dict) and dhw_dur.get("writeable"):
                 entities.append(BoschComK40DhwChargeDurationNumber(coordinator))
-            if isinstance(coordinator, BoschComModuleCoordinatorK40):
-                entities.extend(_build_k40_hc_tune_numbers(coordinator))
+            entities.extend(_build_k40_hc_tune_numbers(coordinator))
 
     async_add_entities(entities)
 
@@ -751,11 +750,19 @@ _HC_TUNE_NUMBER_STEPS: dict[str, float] = {
     "hc1_suwi_threshold": 1.0,
     "hc1_comfort2": 0.5,
     "hc1_eco": 0.5,
+    "hc1_heat_curve_min": 1.0,
+    "hc1_heat_curve_max": 1.0,
 }
 
 
-def _build_k40_hc_tune_numbers(coordinator: BoschComModuleCoordinatorK40) -> list:
-    """Writable weather-comp / UFH settings the device reports for hc1."""
+def _build_k40_hc_tune_numbers(
+    coordinator: BoschComModuleCoordinatorK40 | BoschComModuleCoordinatorIcom,
+) -> list:
+    """Writable weather-comp / UFH settings the device reports for hc1.
+
+    Only the coordinator's HC_TUNE_KEYS are fetched, so the others stay absent
+    from ``extra_data`` and produce no entity.
+    """
     entities = []
     for key, default_step in _HC_TUNE_NUMBER_STEPS.items():
         data = coordinator.extra_data.get(key)
@@ -780,7 +787,7 @@ def _build_k40_hc_tune_numbers(coordinator: BoschComModuleCoordinatorK40) -> lis
 
 
 class BoschComK40HcTuneNumber(CoordinatorEntity, NumberEntity):
-    """Writable K40 heating-circuit temperature (max flow, SuWi, setpoints)."""
+    """Writable K40/icom heating-circuit temperature (flow, SuWi, heat curve)."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -790,7 +797,7 @@ class BoschComK40HcTuneNumber(CoordinatorEntity, NumberEntity):
 
     def __init__(
         self,
-        coordinator: BoschComModuleCoordinatorK40,
+        coordinator: BoschComModuleCoordinatorK40 | BoschComModuleCoordinatorIcom,
         *,
         key: str,
         min_value: float,

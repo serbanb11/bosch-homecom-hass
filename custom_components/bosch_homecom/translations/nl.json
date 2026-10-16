@@ -617,6 +617,12 @@
       },
       "hc1_eco": {
         "name": "Circuit 1 eco-instelwaarde"
+      },
+      "hc1_heat_curve_min": {
+        "name": "Circuit 1 stooklijn voetpunt"
+      },
+      "hc1_heat_curve_max": {
+        "name": "Circuit 1 stooklijn eindpunt"
       }
     },
     "button": {

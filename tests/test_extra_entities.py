@@ -15,6 +15,8 @@ from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DO
 from custom_components.bosch_homecom.coordinator import (
     HC_TUNE_ENDPOINTS,
     HC_TUNE_POLL_INTERVAL,
+    ICOM_HC_TUNE_KEYS,
+    K40_HC_TUNE_KEYS,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
@@ -675,8 +677,12 @@ async def test_k40_coordinator_fetches_hc_tune(hass, entry, device, firmware):
 
     await coordinator._async_update_data()
 
-    for getter, _setter in HC_TUNE_ENDPOINTS.values():
-        getattr(bhc, getter).assert_awaited_once_with("102128202", "hc1")
+    for key in K40_HC_TUNE_KEYS:
+        getattr(bhc, HC_TUNE_ENDPOINTS[key][0]).assert_awaited_once_with(
+            "102128202", "hc1"
+        )
+    bhc.async_get_hc_heat_curve_min.assert_not_awaited()
+    bhc.async_get_hc_heat_curve_max.assert_not_awaited()
     assert coordinator.extra_data["hc1_max_flow_temp"] == MAX_FLOW
     assert coordinator.extra_data["hc1_eco"] is None
 
@@ -725,12 +731,13 @@ async def test_k40_coordinator_hc_tune_failure_keeps_last_value(
     assert bhc.async_get_hc_max_flow_temp.await_count == 2
 
 
-@pytest.mark.asyncio
-async def test_icom_coordinator_skips_hc_tune(hass, entry, firmware):
-    """Only K40 exposes the settings, so ICOM does not spend requests on them."""
-    entry.add_to_hass(hass)
-    bhc = _k40_bhc()
-    coordinator = BoschComModuleCoordinatorIcom(
+HEAT_CURVE_MIN = {"value": 22.0, "writeable": 1, "minValue": 20.0, "maxValue": 50.0}
+HEAT_CURVE_MAX = {"value": 50.0, "writeable": 1, "minValue": 20.0, "maxValue": 60.0}
+
+
+def _icom_coordinator(hass, bhc, firmware, entry):
+    """An icom coordinator on the shared HC tune client mock."""
+    return BoschComModuleCoordinatorIcom(
         hass,
         bhc,
         {"deviceId": "102128202", "deviceType": "icom"},
@@ -739,10 +746,40 @@ async def test_icom_coordinator_skips_hc_tune(hass, entry, firmware):
         auth_provider=False,
     )
 
+
+@pytest.mark.asyncio
+async def test_icom_coordinator_fetches_only_heat_curve_and_suwi(hass, entry, firmware):
+    """ICOM reads its three settings and spends no requests on the K40 rest."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    bhc.async_get_hc_heat_curve_min = AsyncMock(return_value=HEAT_CURVE_MIN)
+    coordinator = _icom_coordinator(hass, bhc, firmware, entry)
+
     await coordinator._fetch_hc_tune()
 
-    bhc.async_get_hc_max_flow_temp.assert_not_awaited()
-    assert "hc1_max_flow_temp" not in coordinator.extra_data
+    for key in ICOM_HC_TUNE_KEYS:
+        getattr(bhc, HC_TUNE_ENDPOINTS[key][0]).assert_awaited_once_with(
+            "102128202", "hc1"
+        )
+    for key in set(K40_HC_TUNE_KEYS) - set(ICOM_HC_TUNE_KEYS):
+        getattr(bhc, HC_TUNE_ENDPOINTS[key][0]).assert_not_awaited()
+        assert key not in coordinator.extra_data
+    assert coordinator.extra_data["hc1_heat_curve_min"] == HEAT_CURVE_MIN
+
+
+@pytest.mark.asyncio
+async def test_icom_coordinator_set_heat_curve(hass, entry, firmware):
+    """A heat-curve write on ICOM goes through the typed library setter."""
+    entry.add_to_hass(hass)
+    bhc = _k40_bhc()
+    bhc.async_set_hc_heat_curve_min = AsyncMock()
+    coordinator = _icom_coordinator(hass, bhc, firmware, entry)
+    coordinator.async_request_refresh = AsyncMock()
+
+    await coordinator.async_set_hc_tune("hc1_heat_curve_min", 21.0)
+
+    bhc.async_set_hc_heat_curve_min.assert_awaited_once_with("102128202", "hc1", 21.0)
+    coordinator.async_request_refresh.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -813,6 +850,26 @@ def test_hc_tune_number_uses_device_limits():
     assert (max_flow.native_min_value, max_flow.native_max_value) == (25.0, 45.0)
     assert max_flow.native_value == 35.0
     assert numbers["hc1_eco"].native_step == 0.5
+
+
+def test_hc_tune_number_heat_curve():
+    """Heat-curve points become numbers with the device's range and a 1° step."""
+    coordinator = _mock_coordinator(
+        extra_data={
+            "hc1_heat_curve_min": HEAT_CURVE_MIN,
+            "hc1_heat_curve_max": HEAT_CURVE_MAX,
+        }
+    )
+
+    numbers = {n.translation_key: n for n in _build_k40_hc_tune_numbers(coordinator)}
+
+    assert set(numbers) == {"hc1_heat_curve_min", "hc1_heat_curve_max"}
+    base = numbers["hc1_heat_curve_min"]
+    assert base.unique_id == "102128202-hc1_heat_curve_min"
+    assert (base.native_min_value, base.native_max_value) == (20.0, 50.0)
+    assert base.native_step == 1.0
+    assert base.native_value == 22.0
+    assert numbers["hc1_heat_curve_max"].native_max_value == 60.0
 
 
 @pytest.mark.asyncio

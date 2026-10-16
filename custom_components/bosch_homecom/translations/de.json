@@ -619,6 +619,12 @@
       },
       "hc1_eco": {
         "name": "Heizkreis 1 Eco-Sollwert"
+      },
+      "hc1_heat_curve_min": {
+        "name": "Heizkreis 1 Heizkurve Fußpunkt"
+      },
+      "hc1_heat_curve_max": {
+        "name": "Heizkreis 1 Heizkurve Endpunkt"
       }
     },
     "button": {
