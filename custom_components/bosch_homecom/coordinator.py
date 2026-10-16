@@ -55,6 +55,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     MANUFACTURER,
+    MAX_CLOUD_FAILURES_HELD,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
 
@@ -98,6 +99,9 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
         self.entry = entry
         self.auth_provider = auth_provider
         self.firmware = firmware["value"]
+        # Consecutive failed refreshes served from the last good data, see
+        # _hold_last_data.
+        self._held_failures = 0
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -113,15 +117,40 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
 
         try:
             data = await self.bhc.async_update(self.unique_id)
+            built = self._build_device_data(data)
         except (
             ApiError,
             InvalidSensorDataError,
             RetryError,
             NotRespondingError,
+            UpdateFailed,
         ) as error:
-            raise UpdateFailed(error) from error
+            return self._hold_last_data(error)
 
-        return self._build_device_data(data)
+        self._held_failures = 0
+        return built
+
+    def _hold_last_data(self, error: Exception) -> T:
+        """Serve the last good data through a short run of failed refreshes.
+
+        A single timed-out ``/bulk`` call used to flip every entity of the
+        device to unavailable for one poll, about once an hour (#193). Up to
+        MAX_CLOUD_FAILURES_HELD consecutive failures are ridden out on the
+        previous data instead, logged so an outage stays visible. Past that,
+        and on the first refresh (nothing to serve yet), the failure is raised
+        and keeps being raised until a refresh succeeds.
+        """
+        if self.data is None or self._held_failures >= MAX_CLOUD_FAILURES_HELD:
+            raise UpdateFailed(error) from error
+        self._held_failures += 1
+        _LOGGER.info(
+            "Device_Id: %s, cloud update failed (%s/%s), keeping the last values: %s",
+            self.unique_id,
+            self._held_failures,
+            MAX_CLOUD_FAILURES_HELD,
+            error,
+        )
+        return self.data
 
     async def _async_refresh_tokens(self) -> None:
         """Refresh the cloud tokens and persist a rotation on the entry.

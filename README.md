@@ -69,6 +69,8 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Binary Sensor | -- | -- | -- | -- | Network connectivity |
 | Number | -- | Ventilation summer-bypass duration | Heat curve base/end point, summer/winter threshold (when the device reports them as writable) | -- | Electricity price |
 
+**Cloud hiccups:** the Bosch cloud occasionally times out a single poll. Up to 2 consecutive failed refreshes are ridden out on the last known values (logged at info level) before entities go unavailable, so a one-off timeout no longer takes the device down for a minute.
+
 ### Local network access (K 40 RF)
 
 A K 40 RF gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.

@@ -153,3 +153,12 @@ CONF_LOCAL_REMOVE: Final = "local_remove"
 # them to unavailable, then gives up so staleness stays bounded. Local-only
 # entities are unaffected — they keep updating from the LAN throughout.
 MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
+
+# How many consecutive failed cloud refreshes to ride out on the last good data
+# before the entities go unavailable, on every device type. The Bosch cloud
+# times out a single /bulk call roughly once an hour (#193), and each blip took
+# every entity of the device down for one poll. At the default 60 s interval
+# this bounds the staleness to ~2 minutes, then gives up so a real outage still
+# shows. The first refresh is never held: without data there is nothing to
+# serve, and setup must still fail with ConfigEntryNotReady.
+MAX_CLOUD_FAILURES_HELD: Final = 2

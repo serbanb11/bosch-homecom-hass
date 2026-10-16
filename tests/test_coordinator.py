@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -19,6 +20,7 @@ from homecom_alt import (
     BHCDeviceWddw2,
     InvalidSensorDataError,
     MqttNotAuthorizedError,
+    NotRespondingError,
 )
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -31,6 +33,7 @@ from custom_components.bosch_homecom.const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     MANUFACTURER,
+    MAX_CLOUD_FAILURES_HELD,
 )
 from custom_components.bosch_homecom.coordinator import (
     BACON_RECONNECT_MARGIN,
@@ -344,6 +347,103 @@ async def test_async_update_data_retry_error(hass, entry, bhc, device, firmware)
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+# ---------------------------------------------------------------------------
+# Issue #193: a single cloud timeout must not take every entity down for a poll
+# ---------------------------------------------------------------------------
+
+
+async def _refreshed_rac_coordinator(hass, entry, bhc, device, firmware):
+    """A RAC coordinator that has completed one successful refresh."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(
+        hass, bhc, device, firmware, entry, False
+    )
+    bhc.async_update = AsyncMock(return_value=_make_rac_data(device, firmware))
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success
+    return coordinator
+
+
+@pytest.mark.asyncio
+async def test_transient_failure_keeps_last_data_and_stays_available(
+    hass, entry, bhc, device, firmware, caplog
+):
+    """One timed-out /bulk after a good refresh serves the last data (#193)."""
+    coordinator = await _refreshed_rac_coordinator(hass, entry, bhc, device, firmware)
+    good = coordinator.data
+    bhc.async_update = AsyncMock(
+        side_effect=NotRespondingError("https://.../bulk is not responding")
+    )
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success
+    assert coordinator.data is good
+    assert "keeping the last values" in caplog.text
+    assert "bulk is not responding" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_hold_gives_up_after_max_failures_until_a_success(
+    hass, entry, bhc, device, firmware
+):
+    """Past MAX_CLOUD_FAILURES_HELD the failure is raised, and keeps being."""
+    coordinator = await _refreshed_rac_coordinator(hass, entry, bhc, device, firmware)
+    good = coordinator.data
+    bhc.async_update = AsyncMock(side_effect=ApiError("boom"))
+
+    for _ in range(MAX_CLOUD_FAILURES_HELD):
+        assert await coordinator._async_update_data() is good
+
+    for _ in range(2):
+        with pytest.raises(UpdateFailed, match="boom"):
+            await coordinator._async_update_data()
+
+    # A success resets the run, so the next blip is held again.
+    bhc.async_update = AsyncMock(return_value=_make_rac_data(device, firmware))
+    fresh = await coordinator._async_update_data()
+    coordinator.async_set_updated_data(fresh)
+    bhc.async_update = AsyncMock(side_effect=ApiError("boom"))
+    assert await coordinator._async_update_data() is fresh
+
+
+@pytest.mark.asyncio
+async def test_first_refresh_failure_is_never_held(hass, entry, bhc, device, firmware):
+    """Without data to serve the failure propagates, so setup can retry."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(
+        hass, bhc, device, firmware, entry, False
+    )
+    bhc.async_update = AsyncMock(side_effect=NotRespondingError("down"))
+
+    with pytest.raises(UpdateFailed, match="down"):
+        await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_wddw2_empty_circuits_at_runtime_is_held(
+    hass, entry, bhc, device, firmware
+):
+    """The wddw2 no-circuits guard is a failed refresh too, so it is held."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorWddw2(
+        hass, bhc, device, firmware, entry, False
+    )
+    good = replace(
+        _make_wddw2_data(device, firmware), dhw_circuits=[{"id": "/dhwCircuits/dhw1"}]
+    )
+    bhc.async_update = AsyncMock(return_value=good)
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success
+    held = coordinator.data
+
+    bhc.async_update = AsyncMock(return_value=_make_wddw2_data(device, firmware))
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success
+    assert coordinator.data is held
 
 
 @pytest.mark.asyncio

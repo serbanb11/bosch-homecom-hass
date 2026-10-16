@@ -39,7 +39,8 @@ All four coordinator classes (`Generic`, `Rac`, `K40`, `Wddw2`) in `coordinator.
 - Store `self.bhc` (API client), `self.unique_id`, `self.device`, `self.entry`, `self.auth_provider`
 - `_async_update_data()` refreshes tokens (if `auth_provider`), calls `self.bhc.async_update()`, returns typed data object
 - Token refresh persists to config entry via `hass.config_entries.async_update_entry()`
-- Catches `ApiError`, `InvalidSensorDataError`, `RetryError` -> `UpdateFailed`; `AuthFailedError` triggers reauth
+- Catches `ApiError`, `InvalidSensorDataError`, `RetryError`, `NotRespondingError` -> `UpdateFailed`; `AuthFailedError` triggers reauth
+- Up to `MAX_CLOUD_FAILURES_HELD` consecutive failed refreshes are served from the last good data (`_hold_last_data`) before entities go unavailable; never on the first refresh
 
 ### Entity Pattern
 
