@@ -659,6 +659,9 @@
       "plasmacluster": {
         "name": "Plasmacluster"
       },
+      "setback_mode": {
+        "name": "Frost protection"
+      },
       "dhw_safety_temperature": {
         "name": "Safety Temperature"
       },

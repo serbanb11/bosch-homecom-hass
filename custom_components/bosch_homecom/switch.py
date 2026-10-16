@@ -34,21 +34,22 @@ async def async_setup_entry(
     config_entry: config_entries.ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the BoschCom plasmacluster switches."""
+    """Set up the BoschCom switches."""
     coordinators = config_entry.runtime_data
-    entities = [
-        BoschComSwitchAirPurification(coordinator=coordinator, field="plasmacluster")
-        for coordinator in coordinators
-        if coordinator.data.device["deviceType"] == "rac"
-        if next(
-            (
-                ref
-                for ref in coordinator.data.advanced_functions
-                if "airPurificationMode" in ref["id"]
-            ),
-            None,
-        )
-    ]
+    entities: list[SwitchEntity] = []
+    for coordinator in coordinators:
+        if coordinator.data.device["deviceType"] != "rac":
+            continue
+        # Each RAC advanced function becomes a switch only when the unit
+        # lists it; models differ in what they offer.
+        if _rac_advanced_function(coordinator, "airPurificationMode"):
+            entities.append(
+                BoschComSwitchAirPurification(
+                    coordinator=coordinator, field="plasmacluster"
+                )
+            )
+        if _rac_advanced_function(coordinator, "setbackMode"):
+            entities.append(BoschComSwitchSetbackMode(coordinator=coordinator))
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] in ("k30", "k40"):
             for dev in coordinator.data.devices or []:
@@ -122,60 +123,96 @@ def _value(node: Any) -> Any:
     return None
 
 
-class BoschComSwitchAirPurification(CoordinatorEntity, SwitchEntity):
-    """Representation of a BoschCom plasmacluster switch."""
+def _rac_advanced_function(
+    coordinator: BoschComModuleCoordinatorRac, function_id: str
+) -> dict | None:
+    """Return the RAC advanced-function node whose id ends in ``function_id``."""
+    return next(
+        (
+            ref
+            for ref in (coordinator.data.advanced_functions or [])
+            if function_id in ref["id"]
+        ),
+        None,
+    )
+
+
+class _BoschComRacFunctionSwitch(CoordinatorEntity, SwitchEntity):
+    """An on/off RAC advanced function (/airConditioning/<function>).
+
+    Subclasses name the function, the homecom_alt setter that writes it and
+    the translation key. ``is_on`` follows the function's reported value.
+    """
 
     _attr_has_entity_name = True
+    _attr_should_poll = False
+    _function_id: str
+    _setter: str
 
     def __init__(
         self,
         coordinator: BoschComModuleCoordinatorRac,
         field: str,
     ) -> None:
-        """Initialize select entity."""
+        """Initialize the switch."""
         super().__init__(coordinator)
-        self._attr_translation_key = "plasmacluster"
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{field}"
         self._attr_suggested_object_id = field
         self._coordinator = coordinator
-        self._attr_should_poll = False
+
+    async def _async_write(self, on: bool) -> None:
+        await getattr(self._coordinator.bhc, self._setter)(
+            self._coordinator.data.device["deviceId"], on
+        )
+        await self._coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off plasmacluster."""
-        await self._coordinator.bhc.async_set_plasmacluster(
-            self._coordinator.data.device["deviceId"], False
-        )
-
-        await self._coordinator.async_request_refresh()
+        """Turn the function off."""
+        await self._async_write(False)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on plasmacluster."""
-        await self._coordinator.bhc.async_set_plasmacluster(
-            self._coordinator.data.device["deviceId"], True
-        )
-
-        await self._coordinator.async_request_refresh()
+        """Turn the function on."""
+        await self._async_write(True)
 
     @property
     def is_on(self) -> bool | None:
-        """Get air purification status."""
-        airPurificationMode = next(
-            (
-                ref
-                for ref in (self._coordinator.data.advanced_functions or [])
-                if "airPurificationMode" in ref["id"]
-            ),
-            None,
-        )
-        if airPurificationMode is None:
+        """Return the function's reported state."""
+        node = _rac_advanced_function(self._coordinator, self._function_id)
+        if node is None:
             return None
-        return airPurificationMode.get("value") == "on"
+        return node.get("value") == "on"
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.async_write_ha_state()
+
+
+class BoschComSwitchAirPurification(_BoschComRacFunctionSwitch):
+    """Representation of a BoschCom plasmacluster switch."""
+
+    _attr_translation_key = "plasmacluster"
+    _function_id = "airPurificationMode"
+    _setter = "async_set_plasmacluster"
+
+
+class BoschComSwitchSetbackMode(_BoschComRacFunctionSwitch):
+    """Frost-protection heating: the unit holds 10 °C (8 °C on Midea-built units).
+
+    The HomeCom app shows it among the advanced functions. The cloud reports
+    the setpoint as 10 while it is on and drops it again when the operation
+    mode is written, so it is a switch of its own rather than a preset (#196).
+    Requires homecom_alt>=1.8.3.
+    """
+
+    _attr_translation_key = "setback_mode"
+    _function_id = "setbackMode"
+    _setter = "async_set_setback_mode"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorRac) -> None:
+        """Initialize the setback switch."""
+        super().__init__(coordinator, field="setback_mode")
 
 
 class BoschComChildLockSwitch(CoordinatorEntity, SwitchEntity):

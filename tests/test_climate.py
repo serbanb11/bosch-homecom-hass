@@ -316,3 +316,70 @@ def test_icom_room_temperature_reaches_the_status_sensor_attribute():
     )
 
     assert sensor.extra_state_attributes["roomTemp"] == 21.2
+
+
+# ---------------------------------------------------------------------------
+# Issue #196: the RAC slider must follow the setpoint's minValue/maxValue
+# ---------------------------------------------------------------------------
+
+
+def _rac_setpoint(value, **bounds) -> dict:
+    return {"id": "/airConditioning/temperatureSetpoint", "value": value, **bounds}
+
+
+def test_rac_slider_bounds_follow_the_setpoint_range():
+    """minValue/maxValue bound the slider; they are not a heat/cool range."""
+    functions = [
+        _rac_ref("operationMode", "heat"),
+        _rac_setpoint(21.0, minValue=16.0, maxValue=30.0),
+    ]
+    climate = BoschComRacClimate(
+        coordinator=_make_rac_coordinator(functions), field="clima"
+    )
+
+    assert climate.min_temp == 16.0
+    assert climate.max_temp == 30.0
+    assert climate.target_temperature == 21.0
+    assert ClimateEntityFeature.TARGET_TEMPERATURE_RANGE not in (
+        climate.supported_features
+    )
+    assert ClimateEntityFeature.TARGET_TEMPERATURE in climate.supported_features
+
+
+def test_rac_slider_bounds_default_then_survive_setback():
+    """Without bounds the slider is 16-30; bounds seen once outlive setback mode.
+
+    While setback holds the unit at 10 °C the cloud sends the setpoint without
+    minValue/maxValue, so the last known bounds stay and the target shows 10.
+    """
+    coordinator = _make_rac_coordinator(
+        [_rac_ref("operationMode", "heat"), _rac_setpoint(22.0)]
+    )
+    climate = BoschComRacClimate(coordinator=coordinator, field="clima")
+    assert (climate.min_temp, climate.max_temp) == (16.0, 30.0)
+
+    coordinator.data.stardard_functions[:] = [
+        _rac_ref("operationMode", "heat"),
+        _rac_setpoint(22.0, minValue=18.0, maxValue=28.0),
+    ]
+    climate.set_attr()
+    assert (climate.min_temp, climate.max_temp) == (18.0, 28.0)
+
+    coordinator.data.stardard_functions[:] = [
+        _rac_ref("operationMode", "heat"),
+        _rac_setpoint(10.0),
+    ]
+    climate.set_attr()
+    assert (climate.min_temp, climate.max_temp) == (18.0, 28.0)
+    assert climate.target_temperature == 10.0
+
+
+def test_rac_without_setpoint_keeps_a_target_to_render():
+    """A payload with no temperatureSetpoint still renders a 22 °C target."""
+    climate = BoschComRacClimate(
+        coordinator=_make_rac_coordinator([_rac_ref("operationMode", "cool")]),
+        field="clima",
+    )
+
+    assert climate.target_temperature == 22
+    assert (climate.min_temp, climate.max_temp) == (16.0, 30.0)

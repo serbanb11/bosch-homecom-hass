@@ -395,10 +395,8 @@ async def async_setup_entry(
                 _LOGGER.debug("Failed to add DHW Heating Active binary sensor")
 
             if wddw2_pending:
-                config_entry.async_on_unload(
-                    coordinator.async_add_listener(
-                        _wddw2_late_sensor_listener(wddw2_pending, async_add_entities)
-                    )
+                _add_pending_sensors_later(
+                    coordinator, config_entry, wddw2_pending, async_add_entities
                 )
 
         # ---- Commodule (EV Charger) ----
@@ -3414,9 +3412,14 @@ class BoschComWddw2TotalsSensor(CoordinatorEntity, SensorEntity):
         return node.get("value")
 
 
-# A wddw2 sensor that is only created once its value is present: whether the
-# coordinator's current data carries it, and how to build it.
-_Wddw2Candidate = tuple[Callable[[], bool], Callable[[], "SensorEntity | None"]]
+# A sensor created only once its data is present: (has_data, build). Setup
+# builds the ones whose data is there and keeps the rest pending; a coordinator
+# listener adds those on the first update that carries their data, so a
+# transient gap at setup does not drop a sensor for good and a device that
+# never serves the data never gets one. Used by the wddw2 descriptor/totals
+# sensors (#192) and the K40/icom recording sensors (#178).
+_PendingSensor = tuple[Callable[[], bool], Callable[[], "SensorEntity | None"]]
+_Wddw2Candidate = _PendingSensor
 
 # The 5 priority WDDW2 totals sensors from issue #129, as keyword arguments to
 # BoschComWddw2TotalsSensor.
@@ -3544,36 +3547,38 @@ def _build_wddw2_descriptor_sensor(
 
 
 def _add_or_defer(
-    candidate: _Wddw2Candidate,
+    candidate: _PendingSensor,
     entities: list[SensorEntity],
-    pending: list[_Wddw2Candidate],
+    pending: list[_PendingSensor],
 ) -> None:
-    """Build a candidate whose value is present, otherwise keep it pending."""
-    has_value, build = candidate
-    if not has_value():
+    """Build a candidate whose data is present, otherwise keep it pending."""
+    has_data, build = candidate
+    if not has_data():
         pending.append(candidate)
         return
     if (sensor := build()) is not None:
         entities.append(sensor)
 
 
-def _wddw2_late_sensor_listener(
-    pending: list[_Wddw2Candidate],
+def _add_pending_sensors_later(
+    coordinator: DataUpdateCoordinator,
+    config_entry: config_entries.ConfigEntry,
+    pending: list[_PendingSensor],
     async_add_entities: AddEntitiesCallback,
-) -> Callable[[], None]:
-    """Return a coordinator listener that adds pending sensors once present."""
+) -> None:
+    """Add the pending sensors on the first update that carries their data."""
 
     @callback
     def _async_add_present() -> None:
-        entities: list[SensorEntity] = []
+        new: list[SensorEntity] = []
         for candidate in [c for c in pending if c[0]()]:
             pending.remove(candidate)
             if (sensor := candidate[1]()) is not None:
-                entities.append(sensor)
-        if entities:
-            async_add_entities(entities)
+                new.append(sensor)
+        if new:
+            async_add_entities(new)
 
-    return _async_add_present
+    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_present))
 
 
 # ===================================================================
@@ -3728,49 +3733,6 @@ class BoschComK40StartCountsSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data."""
         self.async_write_ha_state()
-
-
-# A sensor created only once its data is present: (has_data, build). Setup
-# builds the ones whose data is there and keeps the rest pending; a coordinator
-# listener adds those on the first update that carries their data, so a
-# transient gap at setup does not drop a sensor for good and a device that
-# never serves the data never gets one.
-_PendingSensor = tuple[Callable[[], bool], Callable[[], "SensorEntity | None"]]
-
-
-def _add_or_defer(
-    candidate: _PendingSensor,
-    entities: list[SensorEntity],
-    pending: list[_PendingSensor],
-) -> None:
-    """Build a candidate whose data is present, otherwise keep it pending."""
-    has_data, build = candidate
-    if not has_data():
-        pending.append(candidate)
-        return
-    if (sensor := build()) is not None:
-        entities.append(sensor)
-
-
-def _add_pending_sensors_later(
-    coordinator: DataUpdateCoordinator,
-    config_entry: config_entries.ConfigEntry,
-    pending: list[_PendingSensor],
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Add the pending sensors on the first update that carries their data."""
-
-    @callback
-    def _async_add_present() -> None:
-        new: list[SensorEntity] = []
-        for candidate in [c for c in pending if c[0]()]:
-            pending.remove(candidate)
-            if (sensor := candidate[1]()) is not None:
-                new.append(sensor)
-        if new:
-            async_add_entities(new)
-
-    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_present))
 
 
 def _recording_present(

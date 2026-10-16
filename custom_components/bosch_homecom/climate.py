@@ -111,6 +111,12 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
     # Only set from an operationMode/acControl entry; a payload without either
     # crashed the entity on its first state write (#180).
     _attr_hvac_mode: HVACMode | None = None
+    # Slider bounds, replaced by the setpoint's minValue/maxValue when the unit
+    # reports them. These used to land in target_temperature_low/high, which
+    # are the heat/cool range endpoints, so the slider kept HA's 7-35 defaults
+    # and a 11 °C request reached the cloud only to be refused with 400 (#196).
+    _attr_min_temp = 16.0
+    _attr_max_temp = 30.0
 
     @property
     def supported_features(self) -> ClimateEntityFeature:
@@ -123,7 +129,6 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
         present = self._present_function_ids()
         features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
-            | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
             | ClimateEntityFeature.PRESET_MODE
             | ClimateEntityFeature.TURN_OFF
             | ClimateEntityFeature.TURN_ON
@@ -277,6 +282,7 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
 
     def _set_standard_functions(self, standard_functions: list[dict]) -> None:
         """Populate standard functions."""
+        saw_setpoint = False
 
         for ref in standard_functions:
             normalized_id = ref["id"].split("/", 2)[-1]
@@ -321,9 +327,14 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
                     else:
                         self._attr_swing_mode = SWING_OFF
                 case "temperatureSetpoint":
+                    saw_setpoint = True
                     self._attr_target_temperature = ref["value"]
-                    self._attr_target_temperature_high = ref.get("maxValue", 30)
-                    self._attr_target_temperature_low = ref.get("minValue", 16)
+                    # Absent while setback mode holds the unit at 10 °C; the
+                    # last known bounds then stay in place.
+                    if ref.get("minValue") is not None:
+                        self._attr_min_temp = ref["minValue"]
+                    if ref.get("maxValue") is not None:
+                        self._attr_max_temp = ref["maxValue"]
                     self._attr_temperature_unit = _parse_temp_unit(
                         ref.get("unitOfMeasure")
                     )
@@ -332,10 +343,8 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
                 case _:
                     pass
 
-        if not hasattr(self, "_attr_target_temperature_high"):
+        if not saw_setpoint and self._attr_target_temperature is None:
             self._attr_target_temperature = 22
-            self._attr_target_temperature_high = 30
-            self._attr_target_temperature_low = 16
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""
