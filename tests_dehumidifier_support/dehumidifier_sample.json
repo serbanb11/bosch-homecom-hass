@@ -1,0 +1,64 @@
+{
+  "device": {
+    "deviceId": "TEST-DEHUMIDIFIER-001",
+    "deviceType": "bacon_rac"
+  },
+  "reported": {
+    "powerEnabled": true,
+    "opMode": "auto",
+    "humiditySetpoint": 40,
+    "childLockEnabled": true,
+    "displayEnabled": true
+  },
+  "desired": {},
+  "sensor": {
+    "timestamp": 1792154035,
+    "roomTemperature": 25.5,
+    "relHumidity": 42,
+    "waterTankFull": false,
+    "defrostingActive": false,
+    "condensatePumpRunning": false,
+    "idleState": false
+  },
+  "metadata": {
+    "shadows": {
+      "state": {
+        "powerEnabled": {
+          "type": "boolean",
+          "ro": false
+        },
+        "opMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "night",
+            "laundry"
+          ],
+          "ro": false
+        },
+        "humiditySetpoint": {
+          "type": "int",
+          "unit": "%",
+          "min": 40,
+          "max": 70,
+          "step": 5,
+          "ro": false
+        },
+        "childLockEnabled": {
+          "type": "boolean",
+          "ro": false
+        },
+        "displayEnabled": {
+          "type": "boolean",
+          "ro": false
+        }
+      }
+    }
+  },
+  "info": {
+    "online": true,
+    "appliance": {
+      "type": "dry_6000i_v2"
+    }
+  }
+}

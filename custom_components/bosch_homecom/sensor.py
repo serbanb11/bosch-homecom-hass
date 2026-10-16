@@ -41,6 +41,7 @@ from .coordinator import (
     BoschComModuleCoordinatorRrc2,
     BoschComModuleCoordinatorWddw2,
 )
+from .dehumidifier import BoschComDehumidifierHumidity, async_setup_dehumidifier_entities
 from .local_sensor import LOCAL_SENSORS, BoschComLocalSensor, BoschComLocalSourceSensor
 
 _LOGGER = logging.getLogger(__name__)
@@ -624,6 +625,13 @@ async def async_setup_entry(
 
     if entities:
         async_add_entities(entities)
+
+    async_setup_dehumidifier_entities(
+        hass,
+        config_entry,
+        async_add_entities,
+        lambda coordinator: [BoschComDehumidifierHumidity(coordinator)],
+    )
 
 
 class BoschComSensorBase(CoordinatorEntity, SensorEntity):

@@ -18,6 +18,7 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 | **WDDW2** | Hydronext 5700s water heaters |
 | **Commodule** | Wallbox 7000i EV chargers |
 | **bacon_rac** | Matter-commissioned ACs, including Midea-based units (Climate 3000i/5000i/6000i/7000i) |
+| **bacon_rac (dehumidifiers)** | Bosch 6000i and 8000i dehumidifiers |
 
 :exclamation: **Midea-based ACs commissioned over Matter are supported as `bacon_rac` devices. Air purifiers are still not supported. If you see no devices after setup, those devices are not supported.**
 
@@ -68,6 +69,28 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
 | Binary Sensor | -- | -- | -- | -- | Network connectivity |
 | Number | -- | Ventilation summer-bypass duration | -- | -- | Electricity price |
+
+### Dehumidifiers: 6000i and 8000i
+
+Both models use the existing Bosch cloud MQTT connection. The integration adds
+a native dehumidifier entity for power, target humidity and the `auto`, `night`
+and `laundry` modes. Humidity limits, step size and modes follow the device's
+capability metadata, with defaults of 40–70 % in steps of 5 %.
+
+Measured humidity is also a sensor. Tank-full, defrost, condensate-pump and idle
+status are binary sensors; temperature, connectivity and supported feature
+switches use the existing MQTT entities. Sensors may initially be unknown until
+the appliance pushes a reading.
+
+The implementation lives in `dehumidifier.py`; Home Assistant loads the control
+through its standard `humidifier.py` platform. Bosch's protocol identifiers such
+as `dry_6000i_v2` are used as supplied. Legacy `-dry-` unique IDs are migrated to
+`-dehumidifier-` without changing entity IDs or custom names.
+
+The 6000i mapping is based on an anonymised device capture. Automated coverage
+also exercises an 8000i identity using the shared capability schema; a live
+8000i capture and physical verification of commands are still outstanding.
+Run these tests with `pytest tests_dehumidifier_support`.
 
 ### Local network access (K 40 RF)
 

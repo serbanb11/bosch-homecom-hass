@@ -17,6 +17,7 @@ from .coordinator import (
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorK40,
 )
+from .dehumidifier import async_setup_dehumidifier_entities, dehumidifier_status_entities
 
 PARALLEL_UPDATES = 1
 
@@ -42,10 +43,12 @@ async def async_setup_entry(
                         )
                     )
         if coordinator.data.device["deviceType"] == "bacon_rac":
-            # Comfort features are switch entities (see switch.py); only the
-            # connectivity sensor lives here.
+            # Comfort features use switch entities; add connectivity here.
             entities.append(BoschComBaconOnlineSensor(coordinator=coordinator))
     async_add_entities(entities)
+    async_setup_dehumidifier_entities(
+        hass, config_entry, async_add_entities, dehumidifier_status_entities
+    )
 
 
 class BoschComCommoduleNetworkSensor(CoordinatorEntity, BinarySensorEntity):
