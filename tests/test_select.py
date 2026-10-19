@@ -14,6 +14,7 @@ from custom_components.bosch_homecom.select import (
     BoschComSelectHcHeatcoolMode,
     BoschComSelectHcOperationMode,
     BoschComSelectHcSuwiMode,
+    _build_rrc2_selects,
     async_setup_entry,
 )
 
@@ -412,3 +413,58 @@ async def test_suwi_select_ignores_a_read_only_setting():
     assert len(selects) == 1
     assert selects[0]._source == "currentSuWiMode"
     assert selects[0].current_option == "cooling"
+
+
+def _make_rrc2_coordinator(dhw_circuits):
+    """Create a mock RRC2 (CT200) coordinator with the given DHW circuits."""
+    coordinator = MagicMock()
+    coordinator.unique_id = "102012779"
+    coordinator.device_info = {"identifiers": {("bosch_homecom", "102012779")}}
+    coordinator.bhc = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.data = MagicMock()
+    coordinator.data.device = {"deviceId": "102012779", "deviceType": "rrc2"}
+    coordinator.data.heating_circuits = []
+    coordinator.data.dhw_circuits = dhw_circuits
+    return coordinator
+
+
+def test_rrc2_dhw_operation_mode_select_uses_device_vocabulary():
+    """The RRC2 DHW mode select offers the raw strings the CT200 accepts.
+
+    The cloud answers HTTP 400 to `Auto`/`High`; the device reports and accepts
+    `Off`, `high` and `ownprogram` (and `eco` on tank systems). A device in
+    `ownprogram` must therefore not render as `unknown`.
+    """
+    circuit = {
+        "id": "/dhwCircuits/dhw1",
+        "operationMode": {"value": "ownprogram", "writeable": 1},
+    }
+    coordinator = _make_rrc2_coordinator([circuit])
+
+    selects = _build_rrc2_selects(coordinator)
+
+    assert len(selects) == 1
+    select = selects[0]
+    assert select._attr_unique_id == "102012779-dhw1-operation-mode"
+    assert select._attr_options == ["Off", "high", "ownprogram", "eco"]
+    assert "Auto" not in select._attr_options
+    assert "High" not in select._attr_options
+    assert select.current_option == "ownprogram"
+
+
+async def test_rrc2_dhw_operation_mode_select_writes_raw_value():
+    """Selecting a mode PUTs the raw device string and requests a refresh."""
+    circuit = {
+        "id": "/dhwCircuits/dhw1",
+        "operationMode": {"value": "ownprogram", "writeable": 1},
+    }
+    coordinator = _make_rrc2_coordinator([circuit])
+    select = _build_rrc2_selects(coordinator)[0]
+
+    await select.async_select_option("high")
+
+    coordinator.bhc.async_put_dhw_operation_mode.assert_awaited_once_with(
+        "102012779", "dhw1", "high"
+    )
+    coordinator.async_request_refresh.assert_awaited_once()
