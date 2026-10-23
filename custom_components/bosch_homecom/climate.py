@@ -417,8 +417,14 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
             await self.coordinator.bhc.async_set_hc_cooling_room_temp_setpoint(
                 self.coordinator.unique_id, self.field, temperature
             )
-        elif isinstance(self.coordinator, BoschComModuleCoordinatorIcom):
-            # icom (non-cooling): use temporaryRoomSetpoint to match the Bosch app behaviour
+        elif (
+            isinstance(self.coordinator, BoschComModuleCoordinatorIcom)
+            and not self._is_manual()
+        ):
+            # icom in auto: a temporaryRoomSetpoint override preserves the
+            # schedule, matching the Bosch app. In manual there is no schedule
+            # to override and the endpoint returns 404 (#170, #205), so a
+            # manual circuit falls through to manualRoomSetpoint like a K40.
             await self.coordinator.async_set_temporary_room_setpoint(
                 self.field, temperature
             )
@@ -509,6 +515,17 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                 case "actualHumidity":
                     self._attr_current_humidity = heating_circuits[key]["value"]
 
+    def _circuit(self) -> dict:
+        """Return this circuit's entry in the coordinator data, or an empty dict."""
+        for entry in self.coordinator.data.heating_circuits or []:
+            if entry.get("id") == f"/heatingCircuits/{self.field}":
+                return entry
+        return {}
+
+    def _is_manual(self) -> bool:
+        """Return True when this circuit's operationMode is manual."""
+        return (self._circuit().get("operationMode") or {}).get("value") == "manual"
+
     def _is_cooling(self) -> bool:
         """Return True when this circuit is cooling.
 
@@ -517,12 +534,10 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         live season (currentSuWiMode) or the configured mode (heatCoolMode)
         also covers cooling season while the compressor is idle.
         """
-        for entry in self.coordinator.data.heating_circuits or []:
-            if entry.get("id") == f"/heatingCircuits/{self.field}":
-                suwi = (entry.get("currentSuWiMode") or {}).get("value")
-                heatcool = (entry.get("heatCoolMode") or {}).get("value")
-                return suwi == "cooling" or heatcool == "cooling"
-        return False
+        entry = self._circuit()
+        suwi = (entry.get("currentSuWiMode") or {}).get("value")
+        heatcool = (entry.get("heatCoolMode") or {}).get("value")
+        return suwi == "cooling" or heatcool == "cooling"
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""

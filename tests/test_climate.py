@@ -140,7 +140,7 @@ def _make_k40_coordinator(suwi=None, heatcool=None):
     return coordinator
 
 
-def _make_icom_coordinator(suwi=None):
+def _make_icom_coordinator(suwi=None, operation_mode="auto"):
     """Create a mock icom coordinator with a single hc1 circuit.
 
     Built on the real class (not MagicMock) so the isinstance check in
@@ -149,7 +149,7 @@ def _make_icom_coordinator(suwi=None):
     """
     hc1 = {
         "id": "/heatingCircuits/hc1",
-        "operationMode": {"value": "auto"},
+        "operationMode": {"value": operation_mode},
         "currentSuWiMode": {"value": suwi},
         "currentRoomSetpoint": {"value": 21, "unitOfMeasure": "C"},
     }
@@ -256,6 +256,54 @@ async def test_set_temperature_icom_heating_uses_temporary_setpoint():
         "icom123", "hc1", 21
     )
     coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_not_awaited()
+    coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
+
+
+async def test_set_temperature_icom_manual_uses_manual_setpoint():
+    """Icom in manual operation writes manualRoomSetpoint (#205).
+
+    In manual there is no schedule to override: temporaryRoomSetpoint is not
+    served (404, first noted in #170) while manualRoomSetpoint is writable.
+    """
+    coordinator = _make_icom_coordinator(suwi="forced", operation_mode="manual")
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_temperature(temperature=22)
+
+    coordinator.bhc.async_set_hc_manual_room_setpoint.assert_awaited_once_with(
+        "icom123", "hc1", 22
+    )
+    coordinator.bhc.async_set_hc_temporary_room_setpoint.assert_not_awaited()
+    coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_not_awaited()
+    assert climate._attr_target_temperature == 22
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_set_temperature_icom_manual_cooling_still_uses_cooling_setpoint():
+    """Cooling keeps priority over manual operation on an icom circuit."""
+    coordinator = _make_icom_coordinator(suwi="cooling", operation_mode="manual")
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_temperature(temperature=24)
+
+    coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_awaited_once_with(
+        "icom123", "hc1", 24
+    )
+    coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
+    coordinator.bhc.async_set_hc_temporary_room_setpoint.assert_not_awaited()
+
+
+async def test_set_temperature_icom_missing_operation_mode_uses_temporary():
+    """An icom circuit whose operationMode is nulled keeps the auto path."""
+    coordinator = _make_icom_coordinator(suwi="forced", operation_mode=None)
+    coordinator.data.heating_circuits[0]["operationMode"] = None
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_temperature(temperature=21)
+
+    coordinator.bhc.async_set_hc_temporary_room_setpoint.assert_awaited_once_with(
+        "icom123", "hc1", 21
+    )
     coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
 
 
