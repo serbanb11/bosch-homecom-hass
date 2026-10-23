@@ -124,6 +124,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if asyncio.iscoroutine(devices):
         devices = await devices
+    if not isinstance(devices, list):
+        # A refused or malformed gateway listing is no pointt devices, not a
+        # failed setup: an account with only Matter devices has none (#203).
+        devices = []
 
     # Matter/Bacon devices are not in the pointt gateway listing; re-discover
     # them here so previously-selected ones are set up on reload.

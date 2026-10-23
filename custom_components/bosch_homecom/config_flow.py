@@ -181,6 +181,10 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
 
             if asyncio.iscoroutine(devices):
                 devices = await devices
+            if not isinstance(devices, list):
+                # No pointt gateway on the account (Matter-only, #203): carry
+                # on so bacon discovery below can still find its devices.
+                devices = []
 
             # Also discover Matter/Bacon-commissioned devices, which are not
             # part of the pointt gateway listing. Degrade gracefully on failure.

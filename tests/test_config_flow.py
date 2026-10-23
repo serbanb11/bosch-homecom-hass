@@ -408,3 +408,45 @@ async def test_async_step_devices_aborts_for_duplicate_username(hass):
         await flow.async_step_browser(user_input={CONF_CODE: "valid_code"})
         with pytest.raises(AbortFlow, match="already_configured"):
             await flow.async_step_devices(user_input={"123_generic": True})
+
+
+@pytest.mark.asyncio
+async def test_async_step_browser_matter_only_account(hass):
+    """A refused pointt gateway listing still reaches bacon discovery (#203).
+
+    An account with only Matter-commissioned devices has no pointt gateway;
+    the listing used to crash before bacon discovery ran, so setup was
+    impossible. Older library builds return the bare {} here instead of [].
+    """
+    await setup.async_setup_component(hass, "persistent_notification", {})
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    with patch(
+        "custom_components.bosch_homecom.config_flow.async_get_clientsession",
+        return_value=AsyncMock(),
+    ), patch(
+        "custom_components.bosch_homecom.config_flow.HomeComAlt.create",
+        new_callable=AsyncMock,
+    ) as mock_create, patch(
+        "custom_components.bosch_homecom.config_flow.async_get_bacon_devices",
+        new=AsyncMock(
+            return_value=[{"deviceId": "86DM-577", "deviceType": "bacon_rac"}]
+        ),
+    ):
+        mock_bhc = AsyncMock()
+        mock_bhc.async_get_devices.return_value = {}
+        mock_bhc.refresh_token = "mock_refresh"
+        mock_bhc.token = "mock_token"
+        mock_create.return_value = mock_bhc
+
+        await flow.async_step_user(user_input={CONF_USERNAME: "test-user"})
+        result = await flow.async_step_browser(user_input={CONF_CODE: "valid_code"})
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "devices"
+    assert flow.data[CONF_DEVICES] == [
+        {"deviceId": "86DM-577", "deviceType": "bacon_rac"}
+    ]
