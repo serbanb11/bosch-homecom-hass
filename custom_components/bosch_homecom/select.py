@@ -1199,9 +1199,21 @@ class BoschComSelectVentilationSummerEnable(CoordinatorEntity, SelectEntity):
 
 # ---- RRC2 selects -----------------------------------------------------------
 #
-# RRC2 endpoints never return `allowedValues`, so option lists are hard-coded
-# from issue #78 response dumps. Values that the device rejects on PUT will
-# surface as a failed write rather than be filtered out client-side.
+# RRC2 endpoints never return `allowedValues`, so option lists are hard-coded.
+# Values that the device rejects on PUT surface as a failed write rather than
+# be filtered out client-side.
+#
+# DHW `operationMode` on a CT200/RRC2 takes the raw device strings `Off`,
+# `high` (app "On": keep the exchanger at the high level) and `ownprogram`
+# (app "Auto": follow the DHW time program); `eco` is reported by CT200
+# systems with a tank. The earlier `Auto`/`High` guesses taken from the
+# issue #78 dumps are rejected by the cloud with HTTP 400, and a device in
+# `high` or `ownprogram` rendered as `unknown` because its value was not in
+# the option list. Vocabulary confirmed on a live CT200 (Off / high /
+# ownprogram round-trips in both directions) and matched by two independent
+# sources: https://github.com/CaseyRo/ha_bosch (`_API_TO_OP`) and the
+# EasyControl definition `db/easycontrol/050200.json` of
+# bosch-thermostat-client.
 
 
 class BoschComRrc2CircuitSelect(CoordinatorEntity, SelectEntity):
@@ -1296,7 +1308,7 @@ def _build_rrc2_selects(
                     circuit_id=dhw_id,
                     field="operationMode",
                     setter="async_put_dhw_operation_mode",
-                    options=["Off", "Auto", "High"],
+                    options=["Off", "high", "ownprogram", "eco"],
                     name_suffix=f"{dhw_id}_operation_mode",
                     unique_suffix=f"{dhw_id}-operation-mode",
                 )

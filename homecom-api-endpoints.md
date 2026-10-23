@@ -708,7 +708,7 @@ Pairing/unpairing the RRC gateway itself uses `POST gateways/` and `DELETE gatew
 | GET/PUT | `/heatingCircuits/hc{N}/control` | Heating control strategy (control key) |
 | GET | `/dhwCircuits/dhw{N}/actualTemp` | DHW actual temp |
 | GET/PUT | `/dhwCircuits/dhw{N}/hotWaterSystem` | Hot water system |
-| GET/PUT | `/dhwCircuits/dhw{N}/operationMode` | **[4.0.0]** DHW operation mode |
+| GET/PUT | `/dhwCircuits/dhw{N}/operationMode` | **[4.0.0]** DHW operation mode — values `Off`, `high` (app "On"), `ownprogram` (app "Auto"); `eco` on tank systems. `Auto`/`High` are rejected with HTTP 400 |
 | GET | `/dhwCircuits/dhw{N}/programs/pg{N}/week` | **[4.0.0]** DHW weekly program |
 
 ### Heat sources **[4.0.0]**
