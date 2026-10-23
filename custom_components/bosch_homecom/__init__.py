@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import timedelta
 from typing import Any
 
@@ -17,9 +18,14 @@ from homeassistant.core import (
     SupportsResponse,
     callback,
 )
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    ServiceValidationError,
+)
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from homecom_alt import (
@@ -424,6 +430,55 @@ def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
     return None
 
 
+_DHW_CIRCUIT_RE = re.compile(r"dhw\d+")
+
+
+def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
+    """Return ``(coordinator, dhw_id)`` for a DHW-related entity.
+
+    Resolved through the registries, never from the entity id: the id is
+    whatever the user renamed the device or entity to, so splitting it on
+    underscores only ever worked for the auto-generated name (#200). The
+    device comes from the entity's device identifiers. The circuit is the
+    ``dhwN`` token of the unique id (wddw2 water heaters, DHW sensors); a K40
+    water heater has none, so its coordinator's single circuit is used, the
+    same way the entity itself writes.
+    """
+    registry_entry = er.async_get(hass).async_get(entity_id)
+    if registry_entry is None or registry_entry.platform != DOMAIN:
+        raise ServiceValidationError(f"{entity_id} is not a {DOMAIN} entity")
+
+    coordinator = None
+    device = (
+        dr.async_get(hass).async_get(registry_entry.device_id)
+        if registry_entry.device_id
+        else None
+    )
+    for domain, device_id in device.identifiers if device else ():
+        if domain == DOMAIN:
+            coordinator = _find_coordinator_by_device_id(hass, device_id)
+            if coordinator is not None:
+                break
+    if coordinator is None:
+        raise ServiceValidationError(
+            f"No Bosch HomeCom device is set up for {entity_id}"
+        )
+
+    for token in (registry_entry.unique_id or "").split("-"):
+        if _DHW_CIRCUIT_RE.fullmatch(token):
+            return coordinator, token
+    circuits = [
+        ref["id"].split("/")[-1]
+        for ref in getattr(coordinator.data, "dhw_circuits", None) or []
+        if isinstance(ref, dict) and isinstance(ref.get("id"), str)
+    ]
+    if len(circuits) == 1:
+        return coordinator, circuits[0]
+    raise ServiceValidationError(
+        f"Cannot tell which DHW circuit {entity_id} belongs to"
+    )
+
+
 def _find_bacon_client(hass: HomeAssistant) -> BaconMqttClient | None:
     """Return the shared bacon MQTT client, if any bacon device is set up.
 
@@ -444,15 +499,11 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def set_dhw_tempreture_service(call: ServiceCall) -> None:
         """Service to change temperature."""
-        for entity in call.data["entity_id"]:
-            device_id = entity.split("_")[2]
-            coordinator = _find_coordinator_by_device_id(hass, device_id)
-            if not coordinator:
-                _LOGGER.error("Coordinator not found for entity %s", entity)
-                return
+        for entity_id in cv.entity_ids(call.data["entity_id"]):
+            coordinator, dhw_id = _resolve_dhw_target(hass, entity_id)
             await coordinator.bhc.async_set_dhw_temp_level(
-                device_id,
-                entity.split("_")[3],
+                coordinator.unique_id,
+                dhw_id,
                 call.data.get("level"),
                 call.data.get("temperature"),
             )
@@ -465,21 +516,17 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def set_dhw_extrahot_water_service(call: ServiceCall) -> None:
         """Service to control extrahot water service."""
-        for entity in call.data["entity_id"]:
-            device_id = entity.split("_")[2]
-            coordinator = _find_coordinator_by_device_id(hass, device_id)
-            if not coordinator:
-                _LOGGER.error("Coordinator not found for entity %s", entity)
-                return
+        for entity_id in cv.entity_ids(call.data["entity_id"]):
+            coordinator, dhw_id = _resolve_dhw_target(hass, entity_id)
             if call.data.get("mode") == "start":
                 await coordinator.bhc.async_set_dhw_charge_duration(
-                    device_id,
-                    entity.split("_")[3],
+                    coordinator.unique_id,
+                    dhw_id,
                     call.data.get("duration"),
                 )
             await coordinator.bhc.async_set_dhw_charge(
-                device_id,
-                entity.split("_")[3],
+                coordinator.unique_id,
+                dhw_id,
                 call.data.get("mode"),
             )
             await coordinator.async_request_refresh()
