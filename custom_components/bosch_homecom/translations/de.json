@@ -131,6 +131,18 @@
             }
           }
         }
+      },
+      "bacon_air_purifier": {
+        "name": "Luftreiniger",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Auto",
+              "manual": "Manuell",
+              "silent": "Leise"
+            }
+          }
+        }
       }
     },
     "select": {
@@ -582,6 +594,30 @@
       },
       "local_data_source": {
         "name": "Datenquelle"
+      },
+      "bacon_air_quality": {
+        "name": "Luftqualität",
+        "state": {
+          "good": "Gut",
+          "ok": "OK",
+          "poor": "Mäßig",
+          "bad": "Schlecht"
+        }
+      },
+      "bacon_pm2_5": {
+        "name": "PM2,5"
+      },
+      "bacon_filter_capacity": {
+        "name": "Filterkapazität"
+      },
+      "bacon_humidity": {
+        "name": "Luftfeuchtigkeit (zuletzt gemeldet)"
+      },
+      "hc_actual_supply_temp": {
+        "name": "{circuit} Vorlauftemperatur"
+      },
+      "hc_supply_temp_setpoint": {
+        "name": "{circuit} Vorlauftemperatur-Sollwert"
       }
     },
     "binary_sensor": {
@@ -631,6 +667,12 @@
       },
       "hc1_heat_curve_max": {
         "name": "Heizkreis 1 Heizkurve Endpunkt"
+      },
+      "bacon_on_timer": {
+        "name": "Einschalten nach"
+      },
+      "bacon_off_timer": {
+        "name": "Ausschalten nach"
       }
     },
     "button": {
@@ -645,6 +687,9 @@
       },
       "dhw_extra_charge": {
         "name": "Extra Warmwasser"
+      },
+      "bacon_filter_reset": {
+        "name": "Filter zurücksetzen"
       }
     },
     "switch": {
@@ -695,6 +740,15 @@
       },
       "bacon_save_plus": {
         "name": "Save+"
+      },
+      "bacon_child_lock": {
+        "name": "Kindersicherung"
+      },
+      "bacon_light": {
+        "name": "Lichtring"
+      },
+      "bacon_display": {
+        "name": "Display"
       }
     },
     "water_heater": {

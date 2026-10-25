@@ -19,6 +19,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     PERCENTAGE,
     UnitOfEnergy,
     UnitOfPower,
@@ -36,7 +37,15 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .const import BOSCH_SENSOR_DESCRIPTORS, DOMAIN, WDDW2_NOTIFICATION_CODES
+from .bacon import BACON_AIR_QUALITY_OPTIONS, bacon_air_quality_level, bacon_pm25_level
+from .const import (
+    BACON_AP_TYPE,
+    BACON_DEVICE_TYPES,
+    BACON_RAC_TYPE,
+    BOSCH_SENSOR_DESCRIPTORS,
+    DOMAIN,
+    WDDW2_NOTIFICATION_CODES,
+)
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
@@ -104,22 +113,43 @@ async def async_setup_entry(
                     coordinator=coordinator, config_entry=config_entry
                 )
             )
-        elif device_type == "bacon_rac" and isinstance(
+        elif device_type in BACON_DEVICE_TYPES and isinstance(
             coordinator, BoschComModuleCoordinatorBaconRac
         ):
             # Created unconditionally: the topics/sensor and topics/info payloads
             # they read are push-only and may not have arrived yet, so gating on
             # presence would skip the entity for the first half hour.
-            entities.extend(
-                [
+            entities.append(
+                BoschComBaconSignalQuality(
+                    coordinator=coordinator, config_entry=config_entry
+                )
+            )
+            if device_type == BACON_RAC_TYPE:
+                entities.append(
                     BoschComBaconRoomTemperature(
                         coordinator=coordinator, config_entry=config_entry
-                    ),
-                    BoschComBaconSignalQuality(
-                        coordinator=coordinator, config_entry=config_entry
-                    ),
-                ]
-            )
+                    )
+                )
+            if device_type == BACON_AP_TYPE:
+                # The purifier's readings: whichever of the known fields this
+                # model publishes (an Air 4000i sends airQuality, pm2_5 and
+                # filterCapacity; the app's schema also knows humidity, room
+                # temperature and tvoc). topics/sensor is retained, so it is
+                # normally there at setup; a field that first shows up later is
+                # added by the pending mechanism.
+                ap_pending: list[_PendingSensor] = []
+                for description in BACON_AP_SENSORS:
+                    _add_or_defer(
+                        _bacon_ap_sensor_candidate(
+                            coordinator, config_entry, description
+                        ),
+                        entities,
+                        ap_pending,
+                    )
+                if ap_pending:
+                    _add_pending_sensors_later(
+                        coordinator, config_entry, ap_pending, async_add_entities
+                    )
         elif device_type == "wddw2":
             entities.append(
                 BoschComSensorNotificationsWddw2(
@@ -154,6 +184,20 @@ async def async_setup_entry(
                     BoschComSensorHc(
                         coordinator=coordinator, config_entry=config_entry, field=hc_id
                     )
+                )
+                # Per-circuit temperatures as real sensors (#207). Only for the
+                # fields this circuit serves: a mixed circuit without a flow
+                # sensor, or a setpoint the device does not publish, gets no
+                # entity rather than a permanent "unknown".
+                entities.extend(
+                    BoschComSensorHcTemperature(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        hc_id=hc_id,
+                        description=description,
+                    )
+                    for description in HC_TEMPERATURE_SENSORS
+                    if _hc_has_value(ref, description.field)
                 )
             # Solar thermal circuits (only present with a collector installed)
             for ref in getattr(coordinator.data, "solar_circuits", None) or []:
@@ -982,6 +1026,9 @@ class BoschComSensorHc(BoschComSensorBase):
                     "supplyTemperatureSetpoint": (
                         entry.get("supplyTemperatureSetpoint") or {}
                     ).get("value", "unknown"),
+                    "actualSupplyTemp": (entry.get("actualSupplyTemp") or {}).get(
+                        "value", "unknown"
+                    ),
                     "nightSwitchMode": (entry.get("nightSwitchMode") or {}).get(
                         "value", "unknown"
                     ),
@@ -1007,11 +1054,116 @@ class BoschComSensorHc(BoschComSensorBase):
             "heatCurveMax": "unknown",
             "heatCurveMin": "unknown",
             "supplyTemperatureSetpoint": "unknown",
+            "actualSupplyTemp": "unknown",
             "nightSwitchMode": "unknown",
             "control": "unknown",
             "nightThreshold": "unknown",
             "roomInfluence": "unknown",
         }
+
+
+@dataclass(frozen=True)
+class HcTemperatureSensorDescription:
+    """A per-heating-circuit temperature node exposed as its own sensor."""
+
+    field: str
+    translation_key: str
+    unique_suffix: str
+    icon: str | None = None
+
+
+HC_TEMPERATURE_SENSORS: tuple[HcTemperatureSensorDescription, ...] = (
+    # The circuit's actual flow temperature — on a mixed underfloor circuit
+    # distinct from the heat generator's supply temperature (#207).
+    HcTemperatureSensorDescription(
+        field="actualSupplyTemp",
+        translation_key="hc_actual_supply_temp",
+        unique_suffix="actual-supply-temp",
+        icon="mdi:thermometer-water",
+    ),
+    HcTemperatureSensorDescription(
+        field="supplyTemperatureSetpoint",
+        translation_key="hc_supply_temp_setpoint",
+        unique_suffix="supply-temp-setpoint",
+        icon="mdi:thermometer-auto",
+    ),
+)
+
+# Bosch unitOfMeasure strings -> Home Assistant units.
+_HC_TEMPERATURE_UNITS: dict[str, str] = {
+    "C": UnitOfTemperature.CELSIUS,
+    "°C": UnitOfTemperature.CELSIUS,
+    "F": UnitOfTemperature.FAHRENHEIT,
+    "°F": UnitOfTemperature.FAHRENHEIT,
+}
+
+
+def _hc_has_value(ref: dict, field: str) -> bool:
+    """Whether a heating-circuit reference serves ``field`` with a value."""
+    node = ref.get(field)
+    return isinstance(node, dict) and node.get("value") is not None
+
+
+class BoschComSensorHcTemperature(BoschComSensorBase):
+    """A temperature of one heating circuit, e.g. its actual flow temperature.
+
+    Reads one node of the circuit's reference in ``heating_circuits``; the unit
+    follows the node's ``unitOfMeasure`` so a Fahrenheit installation is not
+    mislabelled.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        hc_id: str,
+        description: HcTemperatureSensorDescription,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{hc_id}-{description.unique_suffix}",
+            icon=description.icon,
+        )
+        self._hc_id = hc_id
+        self._field = description.field
+        self._attr_translation_key = description.translation_key
+        self._attr_translation_placeholders = {"circuit": hc_id}
+        self._attr_suggested_object_id = (
+            f"{hc_id}_{description.unique_suffix.replace('-', '_')}"
+        )
+        self._attr_should_poll = False
+
+    def _node(self) -> dict:
+        for ref in self.coordinator.data.heating_circuits or []:
+            if ref.get("id") == "/heatingCircuits/" + self._hc_id:
+                node = ref.get(self._field)
+                return node if isinstance(node, dict) else {}
+        return {}
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the temperature, or None while the device does not serve it."""
+        value = self._node().get("value")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return value
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the unit the device reports, Celsius when it does not say."""
+        unit = self._node().get("unitOfMeasure")
+        return _HC_TEMPERATURE_UNITS.get(str(unit), UnitOfTemperature.CELSIUS)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
 
 
 class BoschComSensorVentilation(BoschComSensorBase):
@@ -3912,3 +4064,159 @@ class BoschComBaconSignalQuality(BoschComSensorBase):
         info = (getattr(data, "info", None) if data else None) or {}
         quality = (info.get("network") or {}).get("signalQuality")
         return quality if quality in self._attr_options else None
+
+
+@dataclass(frozen=True)
+class BaconApSensorDescription:
+    """A reading on an air purifier's push-only ``topics/sensor`` channel."""
+
+    field: str
+    translation_key: str
+    unique_suffix: str
+    icon: str | None = None
+    device_class: SensorDeviceClass | None = None
+    native_unit: str | None = None
+    state_class: SensorStateClass | None = None
+    options: list[str] | None = None
+    # Converts the raw reading into the state (e.g. airQuality 1..4 -> words).
+    value_fn: Callable[[Any], Any] | None = None
+    # Adds a derived attribute (e.g. the app's PM2.5 level) alongside the value.
+    level_fn: Callable[[Any], str | None] | None = None
+    entity_category: EntityCategory | None = None
+
+
+BACON_AP_SENSORS: tuple[BaconApSensorDescription, ...] = (
+    BaconApSensorDescription(
+        field="airQuality",
+        translation_key="bacon_air_quality",
+        unique_suffix="air-quality",
+        icon="mdi:leaf",
+        device_class=SensorDeviceClass.ENUM,
+        options=BACON_AIR_QUALITY_OPTIONS,
+        value_fn=bacon_air_quality_level,
+    ),
+    BaconApSensorDescription(
+        field="pm2_5",
+        translation_key="bacon_pm2_5",
+        unique_suffix="pm2-5",
+        device_class=SensorDeviceClass.PM25,
+        native_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        state_class=SensorStateClass.MEASUREMENT,
+        level_fn=bacon_pm25_level,
+    ),
+    BaconApSensorDescription(
+        field="filterCapacity",
+        translation_key="bacon_filter_capacity",
+        unique_suffix="filter-capacity",
+        icon="mdi:air-filter",
+        native_unit=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    BaconApSensorDescription(
+        field="relHumidity",
+        translation_key="bacon_humidity",
+        unique_suffix="humidity",
+        device_class=SensorDeviceClass.HUMIDITY,
+        native_unit=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    BaconApSensorDescription(
+        field="roomTemperature",
+        translation_key="bacon_room_temperature",
+        unique_suffix="room-temperature",
+        icon="mdi:home-thermometer",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+)
+
+
+def _bacon_ap_sensor_candidate(
+    coordinator: BoschComModuleCoordinatorBaconRac,
+    config_entry: config_entries.ConfigEntry,
+    description: BaconApSensorDescription,
+) -> _PendingSensor:
+    """Pair a purifier reading's presence check with its builder."""
+
+    def _has_data() -> bool:
+        data = coordinator.data
+        sensor = (getattr(data, "sensor", None) if data else None) or {}
+        return description.field in sensor
+
+    return (
+        _has_data,
+        lambda: BoschComBaconApSensor(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            description=description,
+        ),
+    )
+
+
+class BoschComBaconApSensor(BoschComSensorBase):
+    """One reading from an air purifier's ``topics/sensor`` item (#203).
+
+    ``measured_at`` carries the item's own timestamp: the channel is push-only
+    and the device publishes on its own cadence, so a reading's age matters as
+    much as its value. The ``airQuality`` level is the light-ring colour, mapped
+    the way the HomeCom app does (1 good, 2 ok, 3 poor, 4 bad); PM2.5 gets the
+    app's classification of the same scale as a ``level`` attribute.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorBaconRac,
+        config_entry: config_entries.ConfigEntry,
+        description: BaconApSensorDescription,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{description.unique_suffix}",
+            icon=description.icon,
+        )
+        self._description = description
+        self._attr_translation_key = description.translation_key
+        self._attr_should_poll = False
+        self._attr_device_class = description.device_class
+        self._attr_native_unit_of_measurement = description.native_unit
+        self._attr_state_class = description.state_class
+        self._attr_options = description.options
+        if description.entity_category is not None:
+            self._attr_entity_category = description.entity_category
+
+    @property
+    def _sensor(self) -> dict:
+        data = self.coordinator.data
+        return (getattr(data, "sensor", None) if data else None) or {}
+
+    @property
+    def native_value(self) -> Any:
+        """Return the reading, converted if the description says so."""
+        value = self._sensor.get(self._description.field)
+        if self._description.value_fn is not None:
+            return self._description.value_fn(value)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose when the reading was taken and, where known, its level."""
+        attrs: dict[str, Any] = {}
+        timestamp = self._sensor.get("timestamp")
+        if isinstance(timestamp, (int, float)) and not isinstance(timestamp, bool):
+            attrs["measured_at"] = datetime.fromtimestamp(
+                timestamp, timezone.utc
+            ).isoformat()
+        if self._description.level_fn is not None:
+            level = self._description.level_fn(
+                self._sensor.get(self._description.field)
+            )
+            if level is not None:
+                attrs["level"] = level
+        return attrs

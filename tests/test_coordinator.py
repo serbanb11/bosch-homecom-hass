@@ -1413,3 +1413,180 @@ async def test_wddw2_update_with_circuits_passes_through(
     result = await coordinator._async_update_data()
 
     assert result.dhw_circuits == circuits
+
+
+# ===================================================================
+# Bacon push-only topics: live refresh and meta freshness (#164)
+# ===================================================================
+
+
+def test_bacon_coordinator_registers_and_unregisters_topic_listener(
+    hass, entry, firmware
+):
+    """The per-device topic listener is registered and removed on unload."""
+    entry.add_to_hass(hass)
+    client = _make_bacon_client()
+
+    coordinator = _make_bacon_coordinator(hass, entry, firmware, client=client)
+
+    client.register_raw_listener.assert_called_once_with(coordinator._handle_topic)
+    client.remove_raw_listener.assert_not_called()
+    for hook in list(entry._on_unload):
+        hook()
+    client.remove_raw_listener.assert_called_once_with(coordinator._handle_topic)
+
+
+def test_bacon_topic_push_rebuilds_from_cached_topics(hass, entry, firmware):
+    """A topics/* publish for this device refreshes entities at once (#164).
+
+    topics/{meta,sensor,info} cannot be polled, and their payloads were only
+    sampled on the next shadow push or poll. Now a publish rebuilds the data
+    from the unchanged shadow, so the freshly cached payload reaches entities
+    without the up-to-a-minute wait.
+    """
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    coordinator.bhc.metadata = None
+    coordinator.bhc.sensor = None
+    coordinator.bhc.info = None
+    coordinator.data = coordinator._build(
+        {"reported": {"powerEnabled": True, "opMode": "cool", "tempSetpoint": 21}}
+    )
+    assert coordinator.data.metadata is None
+    listener = Mock()
+    coordinator.async_add_listener(listener)
+
+    # The library caches the payload before notifying raw listeners.
+    meta = {"shadows": {"state": {"fullPowerEnabled": {"type": "bool", "ro": False}}}}
+    coordinator.bhc.metadata = meta
+    coordinator._handle_topic("86DM-1", "topics/meta", meta)
+
+    assert coordinator.data.metadata == meta
+    # The shadow itself is untouched by a topics-only rebuild.
+    assert coordinator.data.reported == {
+        "powerEnabled": True,
+        "opMode": "cool",
+        "tempSetpoint": 21,
+    }
+    listener.assert_called_once()
+
+    sensor = {"timestamp": 1, "roomTemperature": 22.5}
+    coordinator.bhc.sensor = sensor
+    coordinator._handle_topic("86DM-1", "topics/sensor", {"items": [sensor]})
+    assert coordinator.data.sensor == sensor
+    assert listener.call_count == 2
+
+
+def test_bacon_topic_push_ignores_other_devices_and_channels(hass, entry, firmware):
+    """Only this serial's topics/* traffic triggers a rebuild."""
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    coordinator.bhc.metadata = None
+    coordinator.bhc.sensor = None
+    coordinator.bhc.info = None
+    coordinator.data = coordinator._build({"reported": {"powerEnabled": True}})
+    listener = Mock()
+    coordinator.async_add_listener(listener)
+
+    coordinator._handle_topic("86DM-OTHER", "topics/meta", {})
+    coordinator._handle_topic("86DM-1", "shadows/state/update/accepted", {})
+    coordinator._handle_topic(None, "commands/export", {})
+
+    listener.assert_not_called()
+
+
+def test_bacon_topic_push_before_first_refresh_is_harmless(hass, entry, firmware):
+    """A topic that lands before any shadow does not try to rebuild from nothing."""
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    assert coordinator.data is None
+
+    coordinator._handle_topic("86DM-1", "topics/meta", {})
+
+    assert coordinator.data is None
+
+
+def test_bacon_mode_change_marks_meta_stale_until_new_meta(hass, entry, firmware):
+    """Meta is distrusted after a mode change until the device republishes it.
+
+    The shadow delta announcing a new mode lands before the matching
+    topics/meta, so between the two the cached ``ro`` flags are for the mode
+    the unit just left (#164). Only powerEnabled/opMode moves count; any
+    topics/meta publish, and only that, clears the flag.
+    """
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    coordinator.bhc.metadata = None
+    coordinator.bhc.sensor = None
+    coordinator.bhc.info = None
+
+    # First shadow: nothing to compare against, meta is trusted.
+    coordinator.data = coordinator._build(
+        {"reported": {"powerEnabled": False, "opMode": "cool", "tempSetpoint": 21}}
+    )
+    assert coordinator.meta_stale is False
+
+    # A non-mode delta leaves the flag alone.
+    coordinator.data = coordinator._build({"reported": {"tempSetpoint": 22}})
+    assert coordinator.meta_stale is False
+
+    # Power on: the cached meta now describes the off state.
+    coordinator.data = coordinator._build({"reported": {"powerEnabled": True}})
+    assert coordinator.meta_stale is True
+
+    # A sensor publish is not a meta publish.
+    coordinator._handle_topic("86DM-1", "topics/sensor", {"items": []})
+    assert coordinator.meta_stale is True
+
+    coordinator._handle_topic("86DM-1", "topics/meta", {"shadows": {"state": {}}})
+    assert coordinator.meta_stale is False
+
+    # An opMode change counts too; a repeat of the same mode does not.
+    coordinator.data = coordinator._build({"reported": {"opMode": "heat"}})
+    assert coordinator.meta_stale is True
+    coordinator._handle_topic("86DM-1", "topics/meta", {})
+    coordinator.data = coordinator._build({"reported": {"opMode": "heat"}})
+    assert coordinator.meta_stale is False
+
+
+def test_bacon_coordinator_names_a_purifier_after_its_appliance_type(
+    hass, entry, firmware
+):
+    """A device without customTitle is named from topics/info (#203).
+
+    Air purifiers carry no customTitle in their shadow, so they used to show up
+    as Boschcom_bacon_rac_<serial>. The appliance type topics/info reports
+    (``air_4000i``) gives a readable name; a customTitle, if one ever arrives,
+    still wins and is persisted.
+    """
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    coordinator.bhc.info = {"appliance": {"type": "air_4000i"}}
+    coordinator.bhc.sensor = None
+    coordinator.bhc.metadata = None
+
+    coordinator._build({"reported": {"powerEnabled": True, "opMode": "auto"}})
+    assert coordinator.device_info["name"] == "Air 4000i"
+    # Nothing is persisted as a title: it is derived, not user-chosen.
+    assert CONF_BACON_TITLES not in entry.data
+
+    coordinator._build({"reported": {"customTitle": "Hallway%|$?*x"}})
+    assert coordinator.device_info["name"] == "Hallway"
+    assert entry.data[CONF_BACON_TITLES]["86DM-1"] == "Hallway"
+
+
+def test_bacon_coordinator_appliance_name_never_overrides_a_title(
+    hass, entry, firmware
+):
+    """A persisted or user-visible title is not replaced by the appliance type."""
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_BACON_TITLES: {"86DM-1": "Living Room AC"}}
+    )
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    coordinator.bhc.info = {"appliance": {"type": "rac_midea"}}
+    coordinator.bhc.sensor = None
+    coordinator.bhc.metadata = None
+
+    coordinator._build({"reported": {"powerEnabled": True}})
+    assert coordinator.device_info["name"] == "Living Room AC"

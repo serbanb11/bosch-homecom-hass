@@ -12,6 +12,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import BACON_DEVICE_TYPES
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
@@ -42,7 +43,10 @@ async def async_setup_entry(
                             coordinator=coordinator, dev_id=dev_id
                         )
                     )
-        if getattr(coordinator, "local_first", None) is not None:
+        if (
+            isinstance(coordinator, BoschComModuleCoordinatorK40)
+            and coordinator.local_first is not None
+        ):
             pending = set()
             resources = (
                 getattr(getattr(coordinator, "local_data", None), "resources", {}) or {}
@@ -57,7 +61,7 @@ async def async_setup_entry(
                     pending.add(circuit_id)
             if pending:
                 pending_pumps.append((coordinator, pending))
-        if coordinator.data.device["deviceType"] == "bacon_rac":
+        if coordinator.data.device["deviceType"] in BACON_DEVICE_TYPES:
             # Comfort features are switch entities (see switch.py); only the
             # connectivity sensor lives here.
             entities.append(BoschComBaconOnlineSensor(coordinator=coordinator))
@@ -239,7 +243,7 @@ class BoschComK40LocalPumpStatusSensor(CoordinatorEntity, BinarySensorEntity):
 
 
 class BoschComBaconOnlineSensor(CoordinatorEntity, BinarySensorEntity):
-    """Connectivity of a bacon RAC, from the topics/info payload."""
+    """Connectivity of a bacon device, from the topics/info payload."""
 
     _attr_has_entity_name = True
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY

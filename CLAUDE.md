@@ -16,6 +16,8 @@ Home Assistant custom component for Bosch HomeCom Easy-connected appliances. Clo
 | `icom` | Bosch Heat Pump | `BoschComModuleCoordinatorK40` | `HomeComK40` |
 | `rrc2` | Bosch Thermostat | `BoschComModuleCoordinatorK40` | `HomeComK40` |
 | `wddw2` | Bosch Water Heater | `BoschComModuleCoordinatorWddw2` | `HomeComWddw2` |
+| `bacon_rac` | Matter-commissioned AC (MQTT shadow) | `BoschComModuleCoordinatorBaconRac` | `HomeComBaconRac` |
+| `bacon_ap` | Matter-commissioned air purifier (Air 4000i) | `BoschComModuleCoordinatorBaconRac` | `HomeComBaconAp` |
 
 ## Architecture
 
@@ -51,6 +53,7 @@ All entities:
 - Use `_attr_translation_key` for names
 - Implement `_handle_coordinator_update()` -> `self.set_attr()` + `self.async_write_ha_state()`
 - Control methods call `self.coordinator.bhc.async_*()` then `self.coordinator.async_request_refresh()`
+- Bacon devices are discovered as bare serials typed `bacon_rac` (entry keys stay `{serial}_bacon_rac`); `__init__.py` resolves the real type after the MQTT connect via `async_classify_bacon_device` (topics/info appliance type → `$package` → state fields) and picks the facade. Shared helpers for bacon entities live in `bacon.py`
 - Sensors whose data may be absent at setup use the pending pattern in `sensor.py` (`_add_or_defer`, `_add_pending_sensors_later`): built when their data is present, otherwise added by a coordinator listener on the first update that carries it
 
 ### Services (registered in `async_setup`)

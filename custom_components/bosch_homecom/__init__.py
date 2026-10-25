@@ -34,6 +34,7 @@ from homecom_alt import (
     BaconMqttClient,
     ConnectionOptions,
     HomeComAlt,
+    HomeComBaconAp,
     HomeComBaconRac,
     HomeComCommodule,
     HomeComGeneric,
@@ -44,6 +45,7 @@ from homecom_alt import (
     HomeComRrc2,
     HomeComWddw2,
     NotRespondingError,
+    async_classify_bacon_device,
     async_get_bacon_devices,
     decode_jwt_sub,
     generate_client_id,
@@ -51,6 +53,9 @@ from homecom_alt import (
 from homecom_alt.const import BACON_DEFAULT_REGION
 
 from .const import (
+    BACON_AP_TYPE,
+    BACON_DEVICE_TYPES,
+    BACON_RAC_TYPE,
     CAPTURE_RAW_DEFAULT_SECONDS,
     CAPTURE_RAW_MAX_SECONDS,
     CONF_BACON_CLIENT_ID,
@@ -154,7 +159,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     is_first = True
     for device in filtered_devices:
-        if device["deviceType"] == "bacon_rac":
+        if device["deviceType"] in BACON_DEVICE_TYPES:
             # Matter/Bacon devices are set up below over MQTT, not pointt REST.
             continue
         device_id = device["deviceId"]
@@ -278,10 +283,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
             )
 
-    # Matter/Bacon-commissioned RAC devices: one shared MQTT device-shadow
-    # connection, one coordinator per device.
+    # Matter/Bacon-commissioned devices (ACs and air purifiers): one shared MQTT
+    # device-shadow connection, one coordinator per device.
     bacon_devices = [
-        device for device in filtered_devices if device["deviceType"] == "bacon_rac"
+        device
+        for device in filtered_devices
+        if device["deviceType"] in BACON_DEVICE_TYPES
     ]
     if bacon_devices:
         client_id = entry.data.get(CONF_BACON_CLIENT_ID)
@@ -308,10 +315,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # pointt coordinators, the first bacon coordinator owns the refresh.
         bacon_auth_provider = len(coordinators) == 0
         for device in bacon_devices:
+            # Discovery only returns serials (every bacon device is selected
+            # as "{serial}_bacon_rac"); whether this one is an AC or an air
+            # purifier is told from what it publishes after the connect (#203).
+            device = {
+                **device,
+                "deviceType": await _async_bacon_device_type(
+                    bacon_client, device["deviceId"]
+                ),
+            }
+            facade = (
+                HomeComBaconAp
+                if device["deviceType"] == BACON_AP_TYPE
+                else HomeComBaconRac
+            )
             coordinators.append(
                 BoschComModuleCoordinatorBaconRac(
                     hass,
-                    HomeComBaconRac(bacon_client, device["deviceId"]),
+                    facade(bacon_client, device["deviceId"]),
                     device,
                     {"value": "unknown"},
                     entry,
@@ -353,14 +374,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _async_reload_when_back(hass, entry, coordinator)
 
     device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
 
     # Create a new Device for each coorodinator to represent each module
     for c in coordinators:
         dev_name = c.device["deviceId"]
         # Bacon devices carry a friendly name (customTitle) in their shadow;
         # the coordinator stores it on device_info once the first state arrives.
-        if c.device["deviceType"] == "bacon_rac":
+        if c.device["deviceType"] in BACON_DEVICE_TYPES:
             dev_name = c.device_info.get("name") or dev_name
+        if c.device["deviceType"] == BACON_AP_TYPE:
+            _async_remove_misfiled_ap_entities(entity_registry, c)
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, c.device["deviceId"])},
@@ -479,6 +503,53 @@ def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
     )
 
 
+async def _async_bacon_device_type(client: BaconMqttClient, serial: str) -> str:
+    """Resolve a bacon serial to bacon_rac or bacon_ap, defaulting to bacon_rac.
+
+    Classification reads the retained ``topics/info`` and, failing that, the
+    ``$package`` and state shadows; a device that answers none of them is set up
+    as the AC it would have been before purifiers were supported, so a flaky
+    connect never turns a known device into an unknown one.
+    """
+    try:
+        return await async_classify_bacon_device(client, serial)
+    except (ApiError, TimeoutError) as err:
+        _LOGGER.warning(
+            "Could not tell whether bacon device %s is an AC or an air purifier, "
+            "assuming AC: %s",
+            serial,
+            err,
+        )
+        return BACON_RAC_TYPE
+
+
+# Entities an air purifier was given while every bacon device was set up as an
+# AC: a climate entity and the AC-only room temperature sensor, both of which
+# only ever showed "unknown" on a purifier (#203).
+_MISFILED_AP_ENTITIES: tuple[tuple[str, str], ...] = (
+    (Platform.CLIMATE, "climate"),
+    (Platform.SENSOR, "room-temperature"),
+)
+
+
+@callback
+def _async_remove_misfiled_ap_entities(
+    entity_registry: er.EntityRegistry, coordinator: BoschComModuleCoordinatorBaconRac
+) -> None:
+    """Drop the AC entities a purifier got before it was recognised as one."""
+    sensor = getattr(coordinator.data, "sensor", None) or {}
+    for platform, suffix in _MISFILED_AP_ENTITIES:
+        if suffix == "room-temperature" and "roomTemperature" in sensor:
+            # A purifier model that does report a room temperature keeps it.
+            continue
+        entity_id = entity_registry.async_get_entity_id(
+            platform, DOMAIN, f"{coordinator.unique_id}-{suffix}"
+        )
+        if entity_id is not None:
+            _LOGGER.debug("Removing %s: not applicable to an air purifier", entity_id)
+            entity_registry.async_remove(entity_id)
+
+
 def _find_bacon_client(hass: HomeAssistant) -> BaconMqttClient | None:
     """Return the shared bacon MQTT client, if any bacon device is set up.
 
@@ -590,7 +661,7 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     async def get_shadow_service(call: ServiceCall) -> ServiceResponse:
-        """Return the raw MQTT device shadow for a Matter/Bacon (bacon_rac) device.
+        """Return the raw MQTT device shadow for a Matter/Bacon device.
 
         Bacon devices are not pointt/REST devices, so get_custom_path_service
         cannot reach them. Their whole state lives in an MQTT device shadow,
@@ -602,8 +673,8 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if coordinator is None:
             _LOGGER.error("Coordinator not found for device %s", device_id)
             return {}
-        if coordinator.device.get("deviceType") != "bacon_rac":
-            _LOGGER.error("Device %s is not a bacon_rac device", device_id)
+        if coordinator.device.get("deviceType") not in BACON_DEVICE_TYPES:
+            _LOGGER.error("Device %s is not a Matter/bacon device", device_id)
             return {}
         data = coordinator.data
         return {

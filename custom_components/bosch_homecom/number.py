@@ -12,7 +12,10 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .bacon import bacon_meta_state
+from .const import BACON_AP_TYPE
 from .coordinator import (
+    BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
@@ -20,6 +23,14 @@ from .coordinator import (
 )
 
 PARALLEL_UPDATES = 1
+
+# Air purifier duration timers: shadow field -> (translation key, unique suffix).
+BACON_AP_TIMERS: dict[str, tuple[str, str]] = {
+    "onTimer": ("bacon_on_timer", "on-timer"),
+    "offTimer": ("bacon_off_timer", "off-timer"),
+}
+# Air 4000i bounds (minutes), used until topics/meta says otherwise.
+BACON_AP_TIMER_DEFAULTS: dict[str, int] = {"min": 0, "max": 720, "step": 60}
 
 
 async def async_setup_entry(
@@ -68,6 +79,13 @@ async def async_setup_entry(
             entities.extend(_build_rrc2_numbers(coordinator))
         if coordinator.data.device["deviceType"] == "icom":
             entities.extend(_build_icom_dhw_numbers(coordinator))
+        if coordinator.data.device["deviceType"] == BACON_AP_TYPE:
+            reported = getattr(coordinator.data, "reported", None) or {}
+            entities.extend(
+                BoschComBaconTimerNumber(coordinator=coordinator, field=field)
+                for field in BACON_AP_TIMERS
+                if field in reported
+            )
     # Extra K40/ICOM number entities
     for coordinator in coordinators:
         if isinstance(
@@ -832,4 +850,80 @@ class BoschComK40HcTuneNumber(CoordinatorEntity, NumberEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data."""
+        self.async_write_ha_state()
+
+
+# --- Bacon (Matter-commissioned) air purifier --------------------------------
+
+
+class BoschComBaconTimerNumber(
+    CoordinatorEntity[BoschComModuleCoordinatorBaconRac], NumberEntity
+):
+    """A purifier duration timer: turn on (``onTimer``) or off (``offTimer``) after.
+
+    Minutes, 0 cancels; bounds and step (0..720 by 60 on the Air 4000i) come
+    from topics/meta when it has arrived.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_mode = NumberMode.BOX
+    _attr_icon = "mdi:timer-outline"
+
+    def __init__(
+        self, coordinator: BoschComModuleCoordinatorBaconRac, field: str
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._field = field
+        key, suffix = BACON_AP_TIMERS[field]
+        self._attr_translation_key = key
+        self._attr_unique_id = f"{coordinator.unique_id}-{suffix}"
+        self._attr_device_info = coordinator.device_info
+
+    def _bound(self, name: str) -> float:
+        data = self.coordinator.data
+        meta = bacon_meta_state(getattr(data, "metadata", None) if data else None)
+        field_meta = meta.get(self._field)
+        value = field_meta.get(name) if isinstance(field_meta, dict) else None
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        return float(BACON_AP_TIMER_DEFAULTS[name])
+
+    @property
+    def native_min_value(self) -> float:
+        """Return the lower bound from topics/meta."""
+        return self._bound("min")
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the upper bound from topics/meta."""
+        return self._bound("max")
+
+    @property
+    def native_step(self) -> float:
+        """Return the step from topics/meta."""
+        return self._bound("step")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the remaining/armed duration in minutes."""
+        data = self.coordinator.data
+        value = ((getattr(data, "reported", None) if data else None) or {}).get(
+            self._field
+        )
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Arm (or with 0, cancel) the timer."""
+        await self.coordinator.bhc.async_set_timer(self._field, int(value))
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         self.async_write_ha_state()

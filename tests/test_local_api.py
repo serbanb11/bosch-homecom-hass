@@ -7,6 +7,7 @@ coordinator's local-first behaviour, and the local-only sensors.
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from homeassistant.const import CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -20,7 +21,6 @@ from homecom_alt import (
     ProximityRequiredError,
     TokenStoreFullError,
 )
-import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     MockEntityPlatform,
@@ -28,6 +28,8 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.bosch_homecom.binary_sensor import (
     BoschComK40LocalPumpStatusSensor,
+)
+from custom_components.bosch_homecom.binary_sensor import (
     async_setup_entry as binary_sensor_async_setup_entry,
 )
 from custom_components.bosch_homecom.const import (
@@ -60,7 +62,7 @@ from custom_components.bosch_homecom.local_sensor import (
 _FLOW_CLIENT = "custom_components.bosch_homecom.config_flow.HomeComK40Local"
 HOST = "192.0.2.10"
 GATEWAY = "102128202"
-LOCAL_TOKEN = "local-token"  # noqa: S105 - test fixture
+LOCAL_TOKEN = "local-token"
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +227,7 @@ async def test_local_multiple_gateways_asks_which(hass):
     assert result["step_id"] == "local"
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_LOCAL_GATEWAY: "555_k40".split("_")[0]}
+        result["flow_id"], {CONF_LOCAL_GATEWAY: "555"}
     )
     assert result["step_id"] == "local_credentials"
 

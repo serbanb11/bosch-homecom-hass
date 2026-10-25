@@ -11,12 +11,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .bacon import (
+    BACON_CONFIG_FIELDS,
     BACON_FEATURE_KEYS,
     bacon_feature_fields,
     bacon_meta_state,
     humanize_feature,
 )
-from .const import DOMAIN
+from .const import BACON_DEVICE_TYPES, DOMAIN
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
@@ -93,11 +94,14 @@ async def async_setup_entry(
                 entities.append(BoschComWddw2HolidayModeSwitch(coordinator=coordinator))
     entity_registry = er.async_get(hass)
     for coordinator in coordinators:
-        if coordinator.data.device["deviceType"] == "bacon_rac":
+        if coordinator.data.device["deviceType"] in BACON_DEVICE_TYPES:
             # Comfort-feature fields vary per device/firmware (see #162), so
             # enumerate whatever *Enabled flags the shadow actually reports.
+            # On an air purifier these are its settings: child lock, light
+            # ring and display (#203).
             reported = getattr(coordinator.data, "reported", None) or {}
             fields = set(bacon_feature_fields(reported))
+            _migrate_bacon_switch_unique_ids(entity_registry, coordinator.unique_id)
             # A v1-firmware unit deletes the mode-locked *Enabled fields from
             # its shadow while off, so a load-while-off would create no
             # switches and leave the previous session's entities permanently
@@ -113,7 +117,66 @@ async def async_setup_entry(
                 BoschComBaconFeatureSwitch(coordinator=coordinator, field=field)
                 for field in sorted(fields)
             )
+            _add_bacon_feature_switches_later(
+                coordinator, config_entry, fields, async_add_entities
+            )
     async_add_entities(entities)
+
+
+@callback
+def _migrate_bacon_switch_unique_ids(
+    entity_registry: er.EntityRegistry, device_unique_id: str
+) -> None:
+    """Rename switches registered under a raw field name to their known key.
+
+    A field this integration did not know yet got ``{serial}-{field}`` as its
+    unique id and a humanized name. Once the field is named after the app (as
+    the purifier's childLockEnabled/lightEnabled/displayEnabled were in #203)
+    the suffix becomes the translation key; rename the registry entry so the
+    entity, its history and the user's customisations are kept.
+    """
+    for field, key in BACON_FEATURE_KEYS.items():
+        old_id = entity_registry.async_get_entity_id(
+            "switch", DOMAIN, f"{device_unique_id}-{field}"
+        )
+        if old_id is None or entity_registry.async_get_entity_id(
+            "switch", DOMAIN, f"{device_unique_id}-{key}"
+        ):
+            continue
+        entity_registry.async_update_entity(
+            old_id, new_unique_id=f"{device_unique_id}-{key}"
+        )
+
+
+def _add_bacon_feature_switches_later(
+    coordinator: BoschComModuleCoordinatorBaconRac,
+    config_entry: config_entries.ConfigEntry,
+    known: set[str],
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Create a switch for each feature field that first appears in a later shadow.
+
+    A unit loaded while off that was never seen on reports no feature fields and
+    has nothing in the registry, so setup creates no switches at all and the
+    user had to reload once the unit was running (#164). Watch the shadow instead
+    and add the switch the first time a new ``*Enabled`` field shows up.
+    """
+
+    @callback
+    def _async_add_new() -> None:
+        reported = getattr(coordinator.data, "reported", None) or {}
+        new = [field for field in bacon_feature_fields(reported) if field not in known]
+        if not new:
+            return
+        known.update(new)
+        async_add_entities(
+            [
+                BoschComBaconFeatureSwitch(coordinator=coordinator, field=field)
+                for field in sorted(new)
+            ]
+        )
+
+    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_new))
 
 
 def _value(node: Any) -> Any:
@@ -707,12 +770,17 @@ class BoschComK40PoolEnabledSwitch(CoordinatorEntity, SwitchEntity):
 
 
 class BoschComBaconFeatureSwitch(CoordinatorEntity, SwitchEntity):
-    """A togglable comfort feature of a bacon RAC (e.g. Ionizer, Boost).
+    """A togglable ``*Enabled`` field of a bacon device.
+
+    Comfort features on a RAC (Ionizer, Boost …); settings on an air purifier
+    (child lock, light ring, display), which sit in the configuration section.
 
     Which features a unit accepts is mode-dependent: topics/meta marks each field
     ``ro`` (read-only) or not for the current mode (see #162). The switch stays
     available so its state is always visible; toggling it while the device has it
-    locked raises a clear error instead of silently doing nothing.
+    locked raises a clear error instead of silently doing nothing. That guard only
+    trusts a meta the device published since its last mode change: right after a
+    mode change the cached meta still describes the previous mode (#164).
     """
 
     _attr_has_entity_name = True
@@ -727,6 +795,8 @@ class BoschComBaconFeatureSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self._field = field
         key = BACON_FEATURE_KEYS.get(field)
+        if field in BACON_CONFIG_FIELDS:
+            self._attr_entity_category = BACON_CONFIG_FIELDS[field]
         if key is not None:
             self._attr_translation_key = key
             suffix = key
@@ -774,9 +844,10 @@ class BoschComBaconFeatureSwitch(CoordinatorEntity, SwitchEntity):
         await self._async_set(False)
 
     async def _async_set(self, enabled: bool) -> None:
-        # Only a confirmed read-only flag blocks the write; when meta has not
-        # arrived (None) we let the device decide.
-        if self._writable_now is False:
+        # Only a confirmed, current read-only flag blocks the write. When meta has
+        # not arrived (None), or predates the last mode change (stale), we let
+        # the device decide rather than refuse on the previous mode's flags.
+        if self._writable_now is False and not self.coordinator.meta_stale:
             raise HomeAssistantError(f"{self._field} is read-only in the current mode")
         await self.coordinator.bhc.async_set_feature(self._field, enabled)
         await self.coordinator.async_request_refresh()
