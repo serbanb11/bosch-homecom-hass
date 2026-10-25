@@ -7,7 +7,6 @@ coordinator's local-first behaviour, and the local-only sensors.
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
 from homeassistant.const import CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -21,6 +20,7 @@ from homecom_alt import (
     ProximityRequiredError,
     TokenStoreFullError,
 )
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     MockEntityPlatform,
@@ -28,8 +28,6 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.bosch_homecom.binary_sensor import (
     BoschComK40LocalPumpStatusSensor,
-)
-from custom_components.bosch_homecom.binary_sensor import (
     async_setup_entry as binary_sensor_async_setup_entry,
 )
 from custom_components.bosch_homecom.const import (
