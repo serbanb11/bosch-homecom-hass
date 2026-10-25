@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from homeassistant import config_entries, core
 from homeassistant.components.button import ButtonEntity
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_WB_LABEL, DEFAULT_WB_LABEL
+from .bacon import bacon_meta_state
+from .const import BACON_AP_TYPE, CONF_WB_LABEL, DEFAULT_WB_LABEL
 from .coordinator import (
+    BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
@@ -53,6 +56,12 @@ async def async_setup_entry(
             # DHW charge button — available if device has dhw_circuits
             if coordinator.data.dhw_circuits:
                 entities.append(BoschComK40DhwChargeButton(coordinator))
+    for coordinator in coordinators:
+        if coordinator.data.device["deviceType"] == BACON_AP_TYPE and (
+            "filterReset" in (getattr(coordinator.data, "reported", None) or {})
+            or "filterReset" in bacon_meta_state(coordinator.data.metadata)
+        ):
+            entities.append(BoschComBaconFilterResetButton(coordinator))
 
     async_add_entities(entities)
 
@@ -166,4 +175,46 @@ class BoschComK40DhwChargeButton(CoordinatorEntity, ButtonEntity):
         await self.coordinator.bhc.async_set_dhw_charge(
             self.coordinator.data.device["deviceId"], "dhw1", "start"
         )
+        await self.coordinator.async_request_refresh()
+
+
+# --- Bacon (Matter-commissioned) air purifier --------------------------------
+
+
+class BoschComBaconFilterResetButton(
+    CoordinatorEntity[BoschComModuleCoordinatorBaconRac], ButtonEntity
+):
+    """Write the purifier's ``filterReset`` flag after a filter change.
+
+    Disabled by default: the HomeCom app never writes this field (its filter
+    replacement screen is purely instructional), so whether the device resets
+    ``filterCapacity`` and clears the flag on its own is unverified (#203). The
+    shadow and meta both list it as writable, so it is offered for those who
+    want to try — the reported flag is exposed as an attribute to watch.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_translation_key = "bacon_filter_reset"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorBaconRac) -> None:
+        """Initialize the button entity."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.unique_id}-filter-reset"
+        self._attr_device_info = coordinator.device_info
+
+    @property
+    def extra_state_attributes(self) -> dict[str, bool]:
+        """Expose the reported flag so a press's effect can be seen."""
+        data = self.coordinator.data
+        value = ((getattr(data, "reported", None) if data else None) or {}).get(
+            "filterReset"
+        )
+        return {"filter_reset_reported": value} if isinstance(value, bool) else {}
+
+    async def async_press(self) -> None:
+        """Acknowledge a filter change."""
+        await self.coordinator.bhc.async_reset_filter()
         await self.coordinator.async_request_refresh()

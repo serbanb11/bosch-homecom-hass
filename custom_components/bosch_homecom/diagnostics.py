@@ -9,7 +9,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_CODE, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_LOCAL_HOST, CONF_LOCAL_TOKEN, CONF_REFRESH
+from .const import (
+    BACON_DEVICE_TYPES,
+    CONF_BACON_TITLES,
+    CONF_DEVICES,
+    CONF_LOCAL_HOST,
+    CONF_LOCAL_TOKEN,
+    CONF_REFRESH,
+)
 
 # The local-API token never expires and is valid for anyone on the LAN, and the
 # host identifies the home network; both sit nested under entry.data["local"].
@@ -35,6 +42,7 @@ TO_REDACT_RAW = {
     "serialNumber",
     "sgtin",
     "ssid",
+    "userId",
     CONF_CODE,
     CONF_TOKEN,
     CONF_REFRESH,
@@ -50,6 +58,38 @@ def _mask_serial(serial: str) -> str:
     if len(serial) <= _SERIAL_PREFIX_KEPT:
         return "***"
     return f"{serial[:_SERIAL_PREFIX_KEPT]}***"
+
+
+def _mask_device_keys(info: dict[str, Any]) -> dict[str, Any]:
+    """Mask the device ids used as keys in the entry data.
+
+    ``devices`` is ``{"{deviceId}_{deviceType}": bool}`` and ``bacon_titles`` is
+    ``{"{serial}": title}``; a bacon serial is the device's identity on Bosch's
+    backend, so only its prefix is kept (the same as in the raw capture).
+    """
+    masked = dict(info)
+    devices = masked.get(CONF_DEVICES)
+    if isinstance(devices, dict):
+        masked[CONF_DEVICES] = {
+            _mask_device_key(key): value for key, value in devices.items()
+        }
+    titles = masked.get(CONF_BACON_TITLES)
+    if isinstance(titles, dict):
+        masked[CONF_BACON_TITLES] = {
+            _mask_serial(str(key)): value for key, value in titles.items()
+        }
+    # Legacy entries also carry each "{deviceId}_{deviceType}" flag at top level.
+    for key in list(masked):
+        if isinstance(devices, dict) and key in devices:
+            masked[_mask_device_key(key)] = masked.pop(key)
+    return masked
+
+
+def _mask_device_key(key: str) -> str:
+    """Mask the id in a ``{deviceId}_{deviceType}`` key, keeping the type."""
+    # Ids never contain "_" but a type can (bacon_rac), so split on the first.
+    device_id, sep, device_type = key.partition("_")
+    return f"{_mask_serial(device_id)}{sep}{device_type}"
 
 
 def _redact_raw_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -111,19 +151,28 @@ async def async_get_config_entry_diagnostics(
     for coordinator in config_entry.runtime_data:
         data = coordinator.data
         device = getattr(data, "device", {}) or {}
-        if device.get("deviceType") == "bacon_rac":
+        if device.get("deviceType") in BACON_DEVICE_TYPES:
             # Matter/Bacon devices have no pointt function lists; their whole state
             # lives in the MQTT shadow (reported/desired) and the push-only topics
             # channel (sensor/metadata/info). Skip the empty pointt fields.
+            # topics/info carries the Matter pairing secrets and the home network
+            # identity, and the serial is the device's identity on Bosch's
+            # backend: redact them the same way as the raw capture (#203).
             data_out.append(
-                {
-                    "devices": device,
-                    "reported": getattr(data, "reported", None),
-                    "desired": getattr(data, "desired", None),
-                    "sensor": getattr(data, "sensor", None),
-                    "metadata": getattr(data, "metadata", None),
-                    "info": getattr(data, "info", None),
-                }
+                async_redact_data(
+                    {
+                        "devices": {
+                            **device,
+                            "deviceId": _mask_serial(str(device.get("deviceId", ""))),
+                        },
+                        "reported": getattr(data, "reported", None),
+                        "desired": getattr(data, "desired", None),
+                        "sensor": getattr(data, "sensor", None),
+                        "metadata": getattr(data, "metadata", None),
+                        "info": getattr(data, "info", None),
+                    },
+                    TO_REDACT_RAW,
+                )
             )
         else:
             entry = {
@@ -147,7 +196,7 @@ async def async_get_config_entry_diagnostics(
 
     coordinators = config_entry.runtime_data
     return {
-        "info": async_redact_data(config_entry.data, TO_REDACT),
+        "info": _mask_device_keys(async_redact_data(config_entry.data, TO_REDACT)),
         "data": data_out,
         # Everything seen on the bacon wildcard subscription, so a report is
         # actionable without another round trip asking the user to run a service.

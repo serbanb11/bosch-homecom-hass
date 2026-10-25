@@ -130,6 +130,18 @@
             }
           }
         }
+      },
+      "bacon_air_purifier": {
+        "name": "Air purifier",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Auto",
+              "manual": "Manual",
+              "silent": "Silent"
+            }
+          }
+        }
       }
     },
     "select": {
@@ -581,6 +593,30 @@
       },
       "local_data_source": {
         "name": "Data source"
+      },
+      "bacon_air_quality": {
+        "name": "Air quality",
+        "state": {
+          "good": "Good",
+          "ok": "OK",
+          "poor": "Poor",
+          "bad": "Bad"
+        }
+      },
+      "bacon_pm2_5": {
+        "name": "PM2.5"
+      },
+      "bacon_filter_capacity": {
+        "name": "Filter capacity"
+      },
+      "bacon_humidity": {
+        "name": "Humidity (last reported)"
+      },
+      "hc_actual_supply_temp": {
+        "name": "{circuit} supply temperature"
+      },
+      "hc_supply_temp_setpoint": {
+        "name": "{circuit} supply temperature setpoint"
       }
     },
     "binary_sensor": {
@@ -627,6 +663,12 @@
       },
       "hc1_heat_curve_max": {
         "name": "HC1 heat curve end point"
+      },
+      "bacon_on_timer": {
+        "name": "Turn on after"
+      },
+      "bacon_off_timer": {
+        "name": "Turn off after"
       }
     },
     "button": {
@@ -641,6 +683,9 @@
       },
       "dhw_extra_charge": {
         "name": "Extra hot water"
+      },
+      "bacon_filter_reset": {
+        "name": "Filter reset"
       }
     },
     "switch": {
@@ -691,6 +736,15 @@
       },
       "bacon_save_plus": {
         "name": "Save+"
+      },
+      "bacon_child_lock": {
+        "name": "Child lock"
+      },
+      "bacon_light": {
+        "name": "Light ring"
+      },
+      "bacon_display": {
+        "name": "Display"
       }
     },
     "water_heater": {

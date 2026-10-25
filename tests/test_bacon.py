@@ -93,6 +93,8 @@ def _coordinator(
     coordinator.bhc.async_set_swing = AsyncMock()
     coordinator.bhc.async_set_feature = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
+    # Meta is trusted unless a test marks it stale (see coordinator.meta_stale).
+    coordinator.meta_stale = False
     return coordinator
 
 
@@ -483,3 +485,69 @@ async def test_switch_setup_unions_reported_and_registry(hass):
     fields = await _run_switch_setup(hass, coordinator)
 
     assert fields == {"ionizerEnabled", "sleepEnabled", "ecoEnabled"}
+
+
+async def test_feature_switch_toggle_allowed_when_meta_is_stale():
+    """A read-only flag from before the last mode change does not block (#164).
+
+    After a mode change the shadow delta lands before the device republishes
+    topics/meta, so the cached ``ro`` flags describe the mode the unit just
+    left. Refusing on them is what forced users to wait up to a minute before a
+    toggle would go through; the device decides instead.
+    """
+    coordinator = _coordinator(
+        reported={"sleepEnabled": False}, metadata=SAMPLE_META
+    )  # sleepEnabled ro=True
+    coordinator.meta_stale = True
+    switch = BoschComBaconFeatureSwitch(coordinator=coordinator, field="sleepEnabled")
+
+    # The attribute still mirrors what the device last published...
+    assert switch.extra_state_attributes == {"writable_now": False}
+
+    # ...but the write is attempted rather than refused.
+    await switch.async_turn_on()
+    coordinator.bhc.async_set_feature.assert_awaited_once_with("sleepEnabled", True)
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_switch_setup_adds_feature_switches_that_appear_later(hass):
+    """A first load while off creates the switches when the fields appear (#164).
+
+    With nothing in reported and nothing in the registry, setup used to create
+    no switches at all until the user reloaded with the unit running. The
+    platform now listens to the coordinator and adds each feature the first
+    time its field shows up, exactly once.
+    """
+    coordinator = _coordinator(
+        reported={"powerEnabled": False, "opMode": "auto", "tempSetpoint": 21}
+    )
+    config_entry = MagicMock()
+    config_entry.runtime_data = [coordinator]
+    added: list = []
+
+    def _add(new_entities):
+        added.extend(new_entities)
+
+    await switch_async_setup_entry(hass, config_entry, _add)
+    assert not [e for e in added if isinstance(e, BoschComBaconFeatureSwitch)]
+
+    listener = coordinator.async_add_listener.call_args.args[0]
+    # The listener's unsubscribe handle is tied to the entry's unload.
+    config_entry.async_on_unload.assert_called_with(
+        coordinator.async_add_listener.return_value
+    )
+
+    # The unit turns on: its shadow now carries the mode-locked feature fields.
+    coordinator.data.reported = {
+        "powerEnabled": True,
+        "opMode": "cool",
+        "ionizerEnabled": False,
+        "fullPowerEnabled": False,
+    }
+    listener()
+    fields = {e._field for e in added if isinstance(e, BoschComBaconFeatureSwitch)}
+    assert fields == {"ionizerEnabled", "fullPowerEnabled"}
+
+    # The same fields on a later update are not added twice.
+    listener()
+    assert len(added) == 2

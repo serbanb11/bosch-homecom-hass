@@ -1,110 +1,142 @@
 {
     "entity": {
-      "climate": {
-        "ac": {
-          "default": "mdi:air-conditioner"
+        "climate": {
+            "ac": {
+                "default": "mdi:air-conditioner"
+            }
+        },
+        "binary_sensor": {
+            "wb_network": {
+                "default": "mdi:ethernet"
+            }
+        },
+        "number": {
+            "wb_price": {
+                "default": "mdi:currency-eur"
+            },
+            "ventilation_summer_duration": {
+                "default": "mdi:timer-outline"
+            },
+            "bacon_on_timer": {
+                "default": "mdi:timer-play-outline"
+            },
+            "bacon_off_timer": {
+                "default": "mdi:timer-stop-outline"
+            }
+        },
+        "sensor": {
+            "dhw_heating_active": {
+                "default": "mdi:heating-coil"
+            },
+            "dhw_operation_mode": {
+                "default": "mdi:shower-head"
+            },
+            "dhw_water_flow": {
+                "default": "mdi:waves"
+            },
+            "dhw_heat_source_starts": {
+                "default": "mdi:counter"
+            },
+            "hs_operation_hours": {
+                "default": "mdi:timer-sand"
+            },
+            "hs_power_percentage": {
+                "default": "mdi:gauge"
+            },
+            "wb_state": {
+                "default": "mdi:ev-station"
+            },
+            "wb_power": {
+                "default": "mdi:flash"
+            },
+            "wb_energy_total": {
+                "default": "mdi:lightning-bolt"
+            },
+            "wb_temperature": {
+                "default": "mdi:thermometer"
+            },
+            "wb_phases": {
+                "default": "mdi:sine-wave"
+            },
+            "wb_phase_sensor": {
+                "default": "mdi:sine-wave"
+            },
+            "wb_chargelog": {
+                "default": "mdi:history"
+            }
+        },
+        "button": {
+            "wb_start_charging": {
+                "default": "mdi:play"
+            },
+            "wb_pause_charging": {
+                "default": "mdi:pause"
+            },
+            "bacon_filter_reset": {
+                "default": "mdi:air-filter"
+            }
+        },
+        "switch": {
+            "plasmacluster": {
+                "default": "mdi:air-purifier"
+            },
+            "wb_locked": {
+                "default": "mdi:lock"
+            },
+            "wb_auth": {
+                "default": "mdi:shield-key"
+            },
+            "wb_rfid_secure": {
+                "default": "mdi:card-account-details"
+            },
+            "dhw_safety_temperature": {
+                "default": "mdi:thermometer-alert"
+            },
+            "dhw_holiday_mode": {
+                "default": "mdi:palm-tree"
+            },
+            "bacon_child_lock": {
+                "default": "mdi:lock",
+                "state": {
+                    "off": "mdi:lock-open-variant"
+                }
+            },
+            "bacon_light": {
+                "default": "mdi:lightbulb-outline",
+                "state": {
+                    "on": "mdi:lightbulb-on"
+                }
+            },
+            "bacon_display": {
+                "default": "mdi:monitor",
+                "state": {
+                    "off": "mdi:monitor-off"
+                }
+            }
+        },
+        "text": {
+            "notifications": {
+                "default": "mdi:bell"
+            }
+        },
+        "select": {
+            "program": {
+                "default": "mdi:fan-clock"
+            },
+            "airflow_vertical": {
+                "default": "mdi:pan-vertical"
+            },
+            "airflow_horizontal": {
+                "default": "mdi:pan-horizontal"
+            },
+            "ventilation_summer_enable": {
+                "default": "mdi:weather-sunny"
+            }
+        },
+        "fan": {
+            "bacon_air_purifier": {
+                "default": "mdi:air-purifier"
+            }
         }
-      },
-      "binary_sensor": {
-        "wb_network": {
-          "default": "mdi:ethernet"
-        }
-      },
-      "number": {
-        "wb_price": {
-          "default": "mdi:currency-eur"
-        },
-        "ventilation_summer_duration": {
-          "default": "mdi:timer-outline"
-        }
-      },
-      "sensor": {
-        "dhw_heating_active": {
-          "default": "mdi:heating-coil"
-        },
-        "dhw_operation_mode": {
-          "default": "mdi:shower-head"
-        },
-        "dhw_water_flow": {
-          "default": "mdi:waves"
-        },
-        "dhw_heat_source_starts": {
-          "default": "mdi:counter"
-        },
-        "hs_operation_hours": {
-          "default": "mdi:timer-sand"
-        },
-        "hs_power_percentage": {
-          "default": "mdi:gauge"
-        },
-        "wb_state": {
-          "default": "mdi:ev-station"
-        },
-        "wb_power": {
-          "default": "mdi:flash"
-        },
-        "wb_energy_total": {
-          "default": "mdi:lightning-bolt"
-        },
-        "wb_temperature": {
-          "default": "mdi:thermometer"
-        },
-        "wb_phases": {
-          "default": "mdi:sine-wave"
-        },
-        "wb_phase_sensor": {
-          "default": "mdi:sine-wave"
-        },
-        "wb_chargelog": {
-          "default": "mdi:history"
-        }
-      },
-      "button": {
-        "wb_start_charging": {
-          "default": "mdi:play"
-        },
-        "wb_pause_charging": {
-          "default": "mdi:pause"
-        }
-      },
-      "switch": {
-        "plasmacluster": {
-          "default": "mdi:air-purifier"
-        },
-        "wb_locked": {
-          "default": "mdi:lock"
-        },
-        "wb_auth": {
-          "default": "mdi:shield-key"
-        },
-        "wb_rfid_secure": {
-          "default": "mdi:card-account-details"
-        },
-        "dhw_safety_temperature": {
-          "default": "mdi:thermometer-alert"
-        },
-        "dhw_holiday_mode": {
-          "default": "mdi:palm-tree"
-        }
-      },
-      "text": {
-        "notifications": {
-          "default": "mdi:bell"
-        }
-      },
-      "select": {
-        "program": {
-          "default": "mdi:fan-clock"
-        },
-        "airflow_vertical": {
-          "default": "mdi:pan-vertical"
-        },
-        "airflow_horizontal": {
-          "default": "mdi:pan-horizontal"
-        },
-        "ventilation_summer_enable": {
-          "default": "mdi:weather-sunny"
-        }
-      }
     }
-  }
+}

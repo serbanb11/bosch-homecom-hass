@@ -18,8 +18,9 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 | **WDDW2** | Hydronext 5700s water heaters |
 | **Commodule** | Wallbox 7000i EV chargers |
 | **bacon_rac** | Matter-commissioned ACs, including Midea-based units (Climate 3000i/5000i/6000i/7000i) |
+| **bacon_ap** | Matter-commissioned air purifiers (Air 4000i) |
 
-:exclamation: **Midea-based ACs commissioned over Matter are supported as `bacon_rac` devices. Air purifiers are still not supported. If you see no devices after setup, those devices are not supported.**
+:exclamation: **Midea-based ACs commissioned over Matter are supported as `bacon_rac` devices and Air 4000i air purifiers as `bacon_ap`. Both show up in the device list as `bacon_rac` — the type is only known once the integration connects — so select the purifier as you would an AC. If you see no devices after setup, those devices are not supported.**
 
 ## Installation
 
@@ -63,11 +64,13 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Climate | HVAC modes, fan, swing, presets | Heating circuits with away mode | Heating circuits with temporary setpoint | -- | -- |
 | Water Heater | -- | Operation mode | Operation mode | Operation mode + target temp | -- |
 | Select | Airflow, programs | DHW/HC modes, away, holiday, ventilation summer bypass | DHW/HC modes, away | -- | Charging strategy |
-| Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp, solar thermal circuits, daily energy recordings, [local-only readings](#local-network-access-k-40-rf) (K40 only) | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp, daily energy recordings | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
+| Sensor | Notifications | Notifications, DHW, HC status + per-circuit supply temperature and setpoint, heat source, outdoor temp, solar thermal circuits, daily energy recordings, [local-only readings](#local-network-access-k-40-rf) (K40 only) | Notifications, DHW temp + setpoint, HC status + per-circuit supply temperature, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp, daily energy recordings | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
 | Switch | Plasmacluster, frost protection (setback mode) | -- | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
 | Binary Sensor | -- | -- | -- | -- | Network connectivity |
 | Number | -- | Ventilation summer-bypass duration | Heat curve base/end point, summer/winter threshold (when the device reports them as writable) | -- | Electricity price |
+
+**Matter-commissioned devices (`bacon_rac`, `bacon_ap`):** an AC gets a climate entity (modes, fan, swing, target temperature with the bounds the unit advertises), one switch per comfort feature the unit reports (Boost, Ionizer, Sleep, Eco, 8 °C heating, …), the last reported room temperature with its own timestamp, connectivity and signal quality. An Air 4000i air purifier gets a fan entity (auto/manual/silent as presets, the manual speed as percentage — in auto and silent the device picks the speed itself, so none is shown, as in the app), child lock / light ring / display switches, turn-on and turn-off timers, and air quality (good/OK/poor/bad, as the light ring), PM2.5 and filter capacity sensors, each with a `measured_at` attribute because the device publishes readings on its own schedule. A filter-reset button exists but is disabled by default: the HomeCom app never writes that field, so its effect is unverified.
 
 **Cloud hiccups:** the Bosch cloud occasionally times out a single poll. Up to 2 consecutive failed refreshes are ridden out on the last known values (logged at info level) before entities go unavailable, so a one-off timeout no longer takes the device down for a minute.
 

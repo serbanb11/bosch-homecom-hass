@@ -32,7 +32,15 @@ MODEL = {
     "rrc2": "Bosch Thermostat",
     "commodule": "Bosch EV Charger",
     "bacon_rac": "Residential Air Conditioning (Matter)",
+    "bacon_ap": "Air purifier (Matter)",
 }
+
+# Matter/Bacon device types. Discovery types every bacon serial as bacon_rac (the
+# claiming endpoint only returns serials), so entry keys are always
+# "{serial}_bacon_rac"; the real type is resolved after the MQTT connect.
+BACON_RAC_TYPE: Final = "bacon_rac"
+BACON_AP_TYPE: Final = "bacon_ap"
+BACON_DEVICE_TYPES: Final = (BACON_RAC_TYPE, BACON_AP_TYPE)
 
 ATTR_NOTIFICATIONS = "notifications"
 ATTR_FIRMWARE = "fw"

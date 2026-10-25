@@ -7,7 +7,7 @@ import asyncio
 import dataclasses
 from datetime import datetime, timedelta
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
 from homeassistant.const import CONF_TOKEN
@@ -28,7 +28,7 @@ from homecom_alt import (
     ApiError,
     AuthFailedError,
     BaconMqttClient,
-    BHCDeviceBaconRac,
+    BHCDeviceBacon,
     BHCDeviceCommodule,
     BHCDeviceGeneric,
     BHCDeviceIcom,
@@ -37,7 +37,7 @@ from homecom_alt import (
     BHCDeviceRrc2,
     BHCDeviceWddw2,
     HomeComAlt,
-    HomeComBaconRac,
+    HomeComBaconDevice,
     HomeComK40Local,
     HomeComK40LocalFirst,
     HomeComRac,
@@ -49,6 +49,7 @@ from homecom_alt import (
 )
 from tenacity import RetryError
 
+from .bacon import humanize_appliance_type
 from .const import (
     CONF_BACON_TITLES,
     CONF_REFRESH,
@@ -888,9 +889,21 @@ BACON_RECONNECT_MARGIN = timedelta(minutes=10)
 # expiring token cannot spin up a tight reconnect loop.
 BACON_RECONNECT_MIN_DELAY = timedelta(minutes=1)
 
+# Shadow fields whose change makes the cached topics/meta describe the wrong
+# mode: the device republishes meta with new ``ro`` flags after either moves.
+BACON_MODE_FIELDS: tuple[str, ...] = ("powerEnabled", "opMode")
 
-class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]):
-    """Coordinator for a Matter/Bacon-commissioned RAC device (MQTT shadow).
+# The push-only channel; its payloads are never polled, only pushed (#164).
+_BACON_TOPICS_PREFIX = "topics/"
+_BACON_TOPIC_META = "topics/meta"
+
+
+class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
+    """Coordinator for a Matter/Bacon-commissioned device (MQTT shadow).
+
+    Serves both bacon families — RAC air conditioners (``bacon_rac``) and air
+    purifiers (``bacon_ap``): the shadow, the push-only topics and the token
+    handling are identical, only ``bhc`` and the entities differ.
 
     Unlike the pointt (REST) coordinators these devices push their state over an
     MQTT device-shadow. A single :class:`BaconMqttClient` is shared across all
@@ -908,7 +921,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
     def __init__(
         self,
         hass: HomeAssistant,
-        bhc: HomeComBaconRac,
+        bhc: HomeComBaconDevice,
         device: dict,
         firmware: dict,
         entry: ConfigEntry,
@@ -941,23 +954,55 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
         # reload whose first shadow lacks customTitle keeps the friendly name
         # instead of falling back to Boschcom_bacon_rac_<serial>.
         persisted_title = (entry.data.get(CONF_BACON_TITLES) or {}).get(self.unique_id)
+        self._default_name = (
+            "Boschcom_" + device["deviceType"] + "_" + device["deviceId"]
+        )
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
             identifiers={(DOMAIN, self.unique_id)},
-            name=persisted_title
-            or "Boschcom_" + device["deviceType"] + "_" + device["deviceId"],
+            name=persisted_title or self._default_name,
             sw_version=self.firmware,
             manufacturer=MANUFACTURER,
         )
 
+        # Whether the cached topics/meta predates the last mode change seen in
+        # the shadow. The device republishes meta with different ``ro`` flags
+        # after a mode change, but the shadow delta announcing the change lands
+        # first, so until the new meta arrives the cached one describes the mode
+        # the unit just left. Entities must not block a write on it (#164).
+        self.meta_stale = False
+
         client.register_listener(self.unique_id, self._handle_push)
+        client.register_raw_listener(self._handle_topic)
+        entry.async_on_unload(lambda: client.remove_raw_listener(self._handle_topic))
 
     @callback
     def _handle_push(self, state: dict) -> None:
         """Push a live shadow update from MQTT into the coordinator."""
         self.async_set_updated_data(self._build(state))
 
-    def _build(self, state: dict) -> BHCDeviceBaconRac:
+    @callback
+    def _handle_topic(self, serial: str | None, path: str, payload: Any) -> None:
+        """Refresh entities when this device publishes on its topics channel.
+
+        topics/{meta,sensor,info} have no request verb, so nothing polls them.
+        Without this hook their payloads were only sampled on the next shadow
+        push or the next 60 s poll, which left a feature switch read-only, the
+        fan control hidden and the room temperature stale for up to a minute
+        after a mode change (#164). The library has already cached the payload
+        when this runs, so a rebuild from the unchanged shadow picks it up.
+        """
+        if serial != self.unique_id or not path.startswith(_BACON_TOPICS_PREFIX):
+            return
+        if path == _BACON_TOPIC_META:
+            self.meta_stale = False
+        if self.data is None:
+            # Before the first refresh there is no shadow to rebuild from; the
+            # first _build reads the cached topics itself.
+            return
+        self.async_set_updated_data(self._build({}))
+
+    def _build(self, state: dict) -> BHCDeviceBacon:
         # Shadow update/accepted messages can be partial deltas (or carry only
         # the desired branch). Merge onto the last known state so a partial
         # message never wipes fields such as tempSetpoint or customTitle.
@@ -966,21 +1011,39 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
         # which flipped every feature switch to unknown a few minutes after
         # setup (#164). Keep the last known value instead.
         prev = self.data
+        prev_reported = prev.reported if prev and prev.reported else {}
         reported = {
-            **(prev.reported if prev and prev.reported else {}),
+            **prev_reported,
             **{k: v for k, v in (state.get("reported") or {}).items() if v is not None},
         }
+        if prev is not None and any(
+            reported.get(key) != prev_reported.get(key) for key in BACON_MODE_FIELDS
+        ):
+            # The cached meta now describes the previous mode; a fresh
+            # topics/meta publish (_handle_topic) clears this.
+            self.meta_stale = True
         desired = {
             **(prev.desired if prev and prev.desired else {}),
             **{k: v for k, v in (state.get("desired") or {}).items() if v is not None},
         }
+        info = self.bhc.info
         title = reported.get("customTitle")
         if title:
             clean = title.split("%|")[0].strip()
             if clean:
                 self.device_info["name"] = clean
                 self._persist_title(clean)
-        return BHCDeviceBaconRac(
+        elif self.device_info.get("name") == self._default_name:
+            # Air purifiers carry no customTitle; name them after the appliance
+            # type topics/info reports (``air_4000i`` -> "Air 4000i") rather
+            # than Boschcom_bacon_ap_<serial>. A later customTitle still wins.
+            appliance = (info or {}).get("appliance")
+            appliance_name = humanize_appliance_type(
+                appliance.get("type") if isinstance(appliance, dict) else None
+            )
+            if appliance_name:
+                self.device_info["name"] = appliance_name
+        return BHCDeviceBacon(
             device=self.device,
             firmware=self.firmware,
             reported=reported,
@@ -990,7 +1053,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
             # roomTemperature, which the shadow does not have at all.
             sensor=self.bhc.sensor,
             metadata=self.bhc.metadata,
-            info=self.bhc.info,
+            info=info,
         )
 
     def _persist_title(self, title: str) -> None:
@@ -1169,7 +1232,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBaconRac]
                         "Bacon MQTT rejected the refreshed access token"
                     ) from retry_err
 
-    async def _async_update_data(self) -> BHCDeviceBaconRac:
+    async def _async_update_data(self) -> BHCDeviceBacon:
         """Refresh via a shadow get (also reconnects if the session dropped)."""
         try:
             await self._ensure_connected()

@@ -129,6 +129,18 @@
             }
           }
         }
+      },
+      "bacon_air_purifier": {
+        "name": "Luchtreiniger",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "auto": "Automatisch",
+              "manual": "Handmatig",
+              "silent": "Stil"
+            }
+          }
+        }
       }
     },
     "select": {
@@ -580,6 +592,30 @@
       },
       "local_data_source": {
         "name": "Gegevensbron"
+      },
+      "bacon_air_quality": {
+        "name": "Luchtkwaliteit",
+        "state": {
+          "good": "Goed",
+          "ok": "OK",
+          "poor": "Matig",
+          "bad": "Slecht"
+        }
+      },
+      "bacon_pm2_5": {
+        "name": "PM2,5"
+      },
+      "bacon_filter_capacity": {
+        "name": "Filtercapaciteit"
+      },
+      "bacon_humidity": {
+        "name": "Luchtvochtigheid (laatst gemeld)"
+      },
+      "hc_actual_supply_temp": {
+        "name": "{circuit} aanvoertemperatuur"
+      },
+      "hc_supply_temp_setpoint": {
+        "name": "{circuit} aanvoertemperatuur instelpunt"
       }
     },
     "binary_sensor": {
@@ -626,6 +662,12 @@
       },
       "hc1_heat_curve_max": {
         "name": "Circuit 1 stooklijn eindpunt"
+      },
+      "bacon_on_timer": {
+        "name": "Inschakelen na"
+      },
+      "bacon_off_timer": {
+        "name": "Uitschakelen na"
       }
     },
     "button": {
@@ -640,6 +682,9 @@
       },
       "dhw_extra_charge": {
         "name": "Extra warm water"
+      },
+      "bacon_filter_reset": {
+        "name": "Filter resetten"
       }
     },
     "switch": {
@@ -690,6 +735,15 @@
       },
       "bacon_save_plus": {
         "name": "Save+"
+      },
+      "bacon_child_lock": {
+        "name": "Kinderslot"
+      },
+      "bacon_light": {
+        "name": "Lichtring"
+      },
+      "bacon_display": {
+        "name": "Display"
       }
     },
     "water_heater": {
