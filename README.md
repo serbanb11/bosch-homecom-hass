@@ -66,7 +66,7 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 | Sensor | Notifications | Notifications, DHW, HC, heat source, outdoor temp, solar thermal circuits, daily energy recordings, [local-only readings](#local-network-access-k-40-rf) (K40 only) | Notifications, DHW temp + setpoint, HC, heat source, supply temp, modulation, system pressure, heat demand, working time, outdoor temp, daily energy recordings | Notifications, temperatures, flow | State, power, energy, temperature, phases, charge log |
 | Switch | Plasmacluster, frost protection (setback mode) | -- | -- | -- | Lock, auth, RFID secure |
 | Fan | -- | Ventilation zones | Ventilation zones | -- | -- |
-| Binary Sensor | -- | -- | -- | -- | Network connectivity |
+| Binary Sensor | -- | Thermostat RF connectivity; heating-circuit pump status (K40 local only) | -- | -- | Network connectivity |
 | Number | -- | Ventilation summer-bypass duration | Heat curve base/end point, summer/winter threshold (when the device reports them as writable) | -- | Electricity price |
 
 **Cloud hiccups:** the Bosch cloud occasionally times out a single poll. Up to 2 consecutive failed refreshes are ridden out on the last known values (logged at info level) before entities go unavailable, so a one-off timeout no longer takes the device down for a minute.
@@ -94,6 +94,7 @@ It has been verified on a Bosch Connect-Key K 40 RF; reports from the other bran
 The integration reloads and adds:
 
 - **Local-only sensors** the cloud does not offer: compressor and electric heater power (W), the refrigerant circuit (hot gas, suction gas, compressor, high/low pressure and condenser supply temperatures), compressor and outdoor fan speed, pump flow, and heating / hot water start and runtime counters. The less commonly useful ones are disabled by default
+- **Heating-circuit pump status** binary sensors (`on` / `off`) for circuits whose status the gateway serves. These indicate the pump's reported operating state, not measured water flow; a missing resource creates no entity, and a local outage makes an existing entity unavailable
 - A **Data source** diagnostic sensor (`both` / `local` / `cloud`), so a cloud outage can be told apart from a LAN problem
 - **Outage tolerance:** while the cloud fails but the gateway answers locally, cloud-backed entities keep their last values for up to 5 refreshes instead of going unavailable
 
