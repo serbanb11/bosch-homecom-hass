@@ -97,6 +97,29 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
+def _local_only_devices(entry: ConfigEntry) -> list[dict[str, str]]:
+    """Return the selected gateways that can be read without the cloud.
+
+    The device list normally comes from the cloud. Without it, the K40 gateways
+    with local access configured can still be set up from what the entry
+    stores: the selected ``{deviceId}_{deviceType}`` keys and the local host and
+    token.
+    """
+    local = entry.data.get(CONF_LOCAL) or {}
+    devices = []
+    for key, selected in (entry.data.get(CONF_DEVICES) or {}).items():
+        device_id, _, device_type = key.rpartition("_")
+        conf = local.get(device_id) or {}
+        if (
+            selected
+            and device_type in ("k40", "k30")
+            and conf.get(CONF_LOCAL_HOST)
+            and conf.get(CONF_LOCAL_TOKEN)
+        ):
+            devices.append({"deviceId": device_id, "deviceType": device_type})
+    return devices
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up platform from a ConfigEntry."""
     coordinators: list[any] = []
@@ -117,12 +140,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     bhc = await HomeComAlt.create(websession, options, True)
 
+    cloud_ok = True
     try:
         devices = await bhc.async_get_devices()
-    except (ApiError, ClientError, ClientConnectorError, TimeoutError) as err:
-        raise ConfigEntryNotReady from err
+    except (
+        ApiError,
+        ClientError,
+        ClientConnectorError,
+        NotRespondingError,
+        TimeoutError,
+    ) as err:
+        devices = _local_only_devices(entry)
+        if not devices:
+            raise ConfigEntryNotReady from err
+        cloud_ok = False
+        _LOGGER.warning(
+            "Bosch cloud unreachable (%s); setting up the gateways with local "
+            "access from the LAN until it is back",
+            err,
+        )
     except AuthFailedError as err:
-        raise ConfigEntryAuthFailed from err
+        devices = _local_only_devices(entry)
+        if not devices:
+            raise ConfigEntryAuthFailed from err
+        cloud_ok = False
+        entry.async_start_reauth(hass)
+        _LOGGER.warning(
+            "SingleKey login expired; setting up the gateways with local access "
+            "from the LAN until you re-authenticate"
+        )
 
     coordinator_options = ConnectionOptions(
         token=bhc.token, refresh_token=bhc.refresh_token, brand=brand
@@ -143,12 +189,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Matter/Bacon devices are not in the pointt gateway listing; re-discover
     # them here so previously-selected ones are set up on reload.
     bacon_region = entry.data.get(CONF_BACON_REGION) or BACON_DEFAULT_REGION
-    try:
-        devices = list(devices) + await async_get_bacon_devices(
-            websession, bhc.token, bacon_region
-        )
-    except Exception:  # noqa: BLE001 - never block pointt setup
-        _LOGGER.warning("Could not fetch Bacon devices at setup", exc_info=True)
+    if cloud_ok:
+        try:
+            devices = list(devices) + await async_get_bacon_devices(
+                websession, bhc.token, bacon_region
+            )
+        except Exception:  # noqa: BLE001 - never block pointt setup
+            _LOGGER.warning("Could not fetch Bacon devices at setup", exc_info=True)
 
     config_devices: dict | None = entry.data.get(CONF_DEVICES)
     filtered_devices = [
@@ -163,10 +210,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Matter/Bacon devices are set up below over MQTT, not pointt REST.
             continue
         device_id = device["deviceId"]
-        try:
-            firmware = await bhc.async_get_firmware(device_id)
-        except (ApiError, NotRespondingError, TimeoutError):
-            firmware = None
+        firmware = None
+        if cloud_ok:
+            try:
+                firmware = await bhc.async_get_firmware(device_id)
+            except (ApiError, NotRespondingError, TimeoutError):
+                firmware = None
         if not firmware or "value" not in firmware:
             firmware = {"value": "unknown"}
         auth_provider = False
@@ -217,6 +266,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     local_client,
                 )
             )
+            coordinators[-1].cloud_setup_pending = not cloud_ok
         elif device["deviceType"] == "icom":
             coordinators.append(
                 BoschComModuleCoordinatorIcom(

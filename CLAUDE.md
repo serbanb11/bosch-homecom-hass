@@ -43,6 +43,7 @@ All four coordinator classes (`Generic`, `Rac`, `K40`, `Wddw2`) in `coordinator.
 - Token refresh persists to config entry via `hass.config_entries.async_update_entry()`
 - Catches `ApiError`, `InvalidSensorDataError`, `RetryError`, `NotRespondingError` -> `UpdateFailed`; `AuthFailedError` triggers reauth
 - Up to `MAX_CLOUD_FAILURES_HELD` consecutive failed refreshes are served from the last good data (`_hold_last_data`) before entities go unavailable; never on the first refresh
+- K40 with local access: a failed token refresh starts the reauth but still reads the gateway (`_overlay_local` merges its payloads over the cloud data); cloud-only values are held for `MAX_CLOUD_FAILURES_WITH_LOCAL` polls. Without the cloud at startup, `_local_only_devices` builds the gateways from the entry
 
 ### Entity Pattern
 

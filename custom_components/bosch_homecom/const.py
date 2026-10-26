@@ -156,10 +156,10 @@ CONF_LOCAL_GATEWAY: Final = "local_gateway"
 CONF_LOCAL_REMOVE: Final = "local_remove"
 
 # How many consecutive cloud failures to ride out while the local transport is
-# proving the appliance is reachable. At the default 60 s interval this holds the
-# cloud-backed entities at their last value for ~5 minutes instead of dropping
-# them to unavailable, then gives up so staleness stays bounded. Local-only
-# entities are unaffected — they keep updating from the LAN throughout.
+# proving the appliance is reachable. At the default 60 s interval the values
+# only the cloud has keep their last state for ~5 minutes, then go empty so
+# staleness stays bounded. Values the gateway also serves keep updating
+# throughout, in the same entities.
 MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 
 # How many consecutive failed cloud refreshes to ride out on the last good data
