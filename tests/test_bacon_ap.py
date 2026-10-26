@@ -542,6 +542,8 @@ async def test_sensor_platform_creates_readings_present_in_topics_sensor(hass):
     assert pm.unique_id == f"{SERIAL}-pm2-5"
     assert pm.device_class is SensorDeviceClass.PM25
     assert pm.native_value == 1
+    # UnitOfDensity on current cores, the literal on older ones (#203).
+    assert pm.native_unit_of_measurement == "µg/m³"
     assert pm.extra_state_attributes["level"] == "good"
 
     capacity = readings["filterCapacity"]
