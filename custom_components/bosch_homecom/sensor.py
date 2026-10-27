@@ -2452,8 +2452,22 @@ class BoschComThermostatSetpointSensor(_ThermostatDeviceSensorBase):
         return None
 
 
+# /devices/{id}/battery is a stringValue, not a percentage.
+THERMOSTAT_BATTERY_STATES: dict[str, str] = {
+    "BAT_NORMAL": "normal",
+    "BAT_LOW": "low",
+    "BAT_TOO_LOW": "too_low",
+    "BAT_FOTA_FORBIDDEN": "fota_forbidden",
+    "NO_BAT": "no_battery",
+}
+
+
 class BoschComThermostatBatterySensor(_ThermostatDeviceSensorBase):
-    """Thermostat battery sensor."""
+    """Thermostat battery state.
+
+    The gateway reports a battery state (``BAT_NORMAL``, ``BAT_LOW``, ...), not
+    a level. Read as a percentage, the sensor stayed unknown on every device.
+    """
 
     def __init__(self, coordinator, config_entry, dev_id) -> None:
         """Initialize battery sensor."""
@@ -2466,20 +2480,14 @@ class BoschComThermostatBatterySensor(_ThermostatDeviceSensorBase):
         )
         self._attr_translation_key = "thermostat_battery"
         self._attr_suggested_object_id = f"{dev_id}_battery"
-        self._attr_device_class = SensorDeviceClass.BATTERY
-        self._attr_native_unit_of_measurement = "%"
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = list(THERMOSTAT_BATTERY_STATES.values())
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
-    def native_value(self):
-        """Return battery level."""
-        val = self._get_property("battery")
-        if val is not None:
-            try:
-                return float(val)
-            except (TypeError, ValueError):
-                return None
-        return None
+    def native_value(self) -> str | None:
+        """Return the battery state, or None for a value we do not know."""
+        return THERMOSTAT_BATTERY_STATES.get(self._get_property("battery"))
 
 
 class BoschComThermostatSignalSensor(_ThermostatDeviceSensorBase):

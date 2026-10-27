@@ -360,7 +360,14 @@
         "name": "Kamer Instelpunt"
       },
       "thermostat_battery": {
-        "name": "Batterij"
+        "name": "Batterij",
+        "state": {
+          "normal": "Normaal",
+          "low": "Laag",
+          "too_low": "Te laag",
+          "fota_forbidden": "Te laag voor firmware-update",
+          "no_battery": "Geen batterij"
+        }
       },
       "thermostat_signal": {
         "name": "Signaalsterkte"
