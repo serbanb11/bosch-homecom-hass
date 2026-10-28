@@ -183,6 +183,14 @@ async def async_setup_entry(
                         field=zone_id,
                     )
                 )
+                if (ref.get("filterRemainingTime") or {}).get("value") is not None:
+                    entities.append(
+                        BoschComSensorVentilationFilter(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            zone_id=zone_id,
+                        )
+                    )
             # Heating circuits
             for ref in coordinator.data.heating_circuits or []:
                 hc_id = ref["id"].split("/")[-1]
@@ -1284,6 +1292,55 @@ class BoschComSensorVentilation(BoschComSensorBase):
                 }
         # See BoschComSensorDhw.extra_state_attributes — must return a mapping.
         return {}
+
+
+class BoschComSensorVentilationFilter(BoschComSensorBase):
+    """Time left until the ventilation unit's filter needs changing.
+
+    Read from /ventilation/{zone}/filter/remainingTime, which the gateway
+    reports in minutes. Created only for zones that serve it.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_suggested_unit_of_measurement = UnitOfTime.DAYS
+    _attr_suggested_display_precision = 0
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        zone_id: str,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{zone_id}-filter_remaining_time",
+            icon="mdi:air-filter",
+        )
+        self._zone_id = zone_id
+        self._attr_translation_key = "ventilation_filter_remaining_time"
+        self._attr_translation_placeholders = {"zone": zone_id}
+        self._attr_suggested_object_id = f"{zone_id}_filter_remaining_time"
+        self._attr_should_poll = False
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the remaining filter time in minutes."""
+        for entry in self.coordinator.data.ventilation or []:
+            if entry.get("id") == "/ventilation/" + self._zone_id:
+                value = (entry.get("filterRemainingTime") or {}).get("value")
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    return None
+                return value
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
 
 
 # heat_sources node -> translation key. Read from

@@ -361,6 +361,9 @@
       "thermostat_setpoint": {
         "name": "Raumsollwert"
       },
+      "ventilation_filter_remaining_time": {
+        "name": "Lüftung {zone} Filter-Restlaufzeit"
+      },
       "thermostat_battery": {
         "name": "Batterie"
       },
