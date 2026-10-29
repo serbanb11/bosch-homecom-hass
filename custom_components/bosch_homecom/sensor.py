@@ -366,6 +366,7 @@ async def async_setup_entry(
 
             entities.append(BoschComWddw2HealthStatusSensor(coordinator))
             entities.append(BoschComWddw2WaterTodaySensor(coordinator))
+            entities.append(BoschComWddw2HeatingActivePowerSensor(coordinator))
 
             # Issue #129: surface heat-source + water totals (top-level paths).
             for candidate in _wddw2_totals_candidates(coordinator):
@@ -3504,6 +3505,50 @@ def _build_icom_extra_sensors(
             )
 
     return entities
+
+
+class BoschComWddw2HeatingActivePowerSensor(CoordinatorEntity, SensorEntity):
+    """Power percentage sampled only while heating is explicitly active."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:fire"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorWddw2) -> None:
+        """Initialize the conditional power sensor."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-heating-active-power"
+        self._attr_name = "Heating Active Power"
+        self._attr_suggested_object_id = "heating_active_power"
+
+    @property
+    def native_value(self) -> float | None:
+        """Exclude off, unknown and unavailable heating states from statistics."""
+        registry = er.async_get(self.hass)
+        heating_entity_id = registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{self.coordinator.unique_id}-dhw1-heating_active"
+        ) or registry.async_get_entity_id(
+            "binary_sensor", DOMAIN, f"{self.coordinator.unique_id}-dhw1-heating_active"
+        )
+        heating_state = (
+            self.hass.states.get(heating_entity_id) if heating_entity_id else None
+        )
+        if heating_state is None or heating_state.state != "on":
+            return None
+
+        heat_sources = getattr(self.coordinator.data, "heat_sources", None) or {}
+        power_node = heat_sources.get("powerPercentage")
+        if not isinstance(power_node, dict):
+            return None
+        value = power_node.get("value")
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
 
 
 class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
