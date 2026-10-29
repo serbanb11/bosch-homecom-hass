@@ -363,6 +363,8 @@ async def async_setup_entry(
             # their value; one the device really lacks simply never is.
             wddw2_pending: list[_Wddw2Candidate] = []
 
+            entities.append(BoschComWddw2HealthStatusSensor(coordinator))
+
             # Issue #129: surface heat-source + water totals (top-level paths).
             for candidate in _wddw2_totals_candidates(coordinator):
                 _add_or_defer(candidate, entities, wddw2_pending)
@@ -3500,6 +3502,28 @@ def _build_icom_extra_sensors(
             )
 
     return entities
+
+
+class BoschComWddw2HealthStatusSensor(CoordinatorEntity, SensorEntity):
+    """Read-only diagnostic health status reported by the Bosch API."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:heart-pulse"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorWddw2) -> None:
+        """Initialize the health status sensor."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-system-health-status"
+        self._attr_name = "System Health Status"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return None if the endpoint has not provided a health state."""
+        node = getattr(self.coordinator, "health_status_node", None)
+        return str(node["value"]) if isinstance(node, dict) and node.get("value") is not None else None
 
 
 # ---- WDDW2 heat-source + water totals (issue #129) -------------------------
