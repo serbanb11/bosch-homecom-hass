@@ -415,6 +415,19 @@
           "frost": "Frostschutz"
         }
       },
+      "compressor_status": {
+        "name": "Kompressorstatus",
+        "state": {
+          "off": "Aus",
+          "heating": "Heizen",
+          "cooling": "Kühlen",
+          "dhw": "Warmwasser",
+          "pool": "Pool",
+          "pool_heat": "Poolheizung",
+          "defrost": "Abtauen",
+          "alarm": "Störung"
+        }
+      },
       "compressor_starts": {
         "name": "Kompressor Starts"
       },

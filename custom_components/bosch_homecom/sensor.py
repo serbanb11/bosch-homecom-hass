@@ -600,6 +600,8 @@ async def async_setup_entry(
                 )
             if hs.get("actualHeatDemand"):
                 entities.append(BoschComK40HeatDemandSensor(coordinator))
+            if hs.get("compressorStatus"):
+                entities.append(BoschComK40CompressorStatusSensor(coordinator))
             if hs.get("starts"):
                 entities.append(BoschComK40StartCountsSensor(coordinator))
 
@@ -3844,6 +3846,53 @@ class BoschComK40HeatDemandSensor(CoordinatorEntity, SensorEntity):
             self._attr_native_value = active[0] if active else "idle"
         else:
             self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+# allowedValues of /heatSources/compressor/status, as the cloud reports them.
+COMPRESSOR_STATUS_OPTIONS = [
+    "off",
+    "heating",
+    "cooling",
+    "dhw",
+    "pool",
+    "pool_heat",
+    "defrost",
+    "alarm",
+]
+
+
+class BoschComK40CompressorStatusSensor(CoordinatorEntity, SensorEntity):
+    """What the compressor is doing, including defrost.
+
+    Unlike actualHeatDemand, which is the demand, this is the compressor's
+    operating state from /heatSources/compressor/status (cloud only).
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = COMPRESSOR_STATUS_OPTIONS
+    _attr_icon = "mdi:heat-pump"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize compressor status sensor."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "compressor_status"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-compressor_status"
+        self._attr_suggested_object_id = "compressor_status"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the compressor state, or None for a value we do not know."""
+        hs = self.coordinator.data.heat_sources or {}
+        value = (hs.get("compressorStatus") or {}).get("value")
+        return value if value in COMPRESSOR_STATUS_OPTIONS else None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
         self.async_write_ha_state()
 
 

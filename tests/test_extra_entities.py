@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -31,6 +32,8 @@ from custom_components.bosch_homecom.select import (
     _build_k40_hc_control_type_select,
 )
 from custom_components.bosch_homecom.sensor import (
+    COMPRESSOR_STATUS_OPTIONS,
+    BoschComK40CompressorStatusSensor,
     BoschComK40ExtraSensor,
     BoschComK40HeatDemandSensor,
     BoschComK40RecordingSensor,
@@ -663,6 +666,61 @@ def test_heat_demand_sensor_idle():
     coordinator = _mock_coordinator(heat_sources=hs)
     sensor = BoschComK40HeatDemandSensor(coordinator)
     assert sensor.native_value == "idle"
+
+
+@pytest.mark.parametrize("value", COMPRESSOR_STATUS_OPTIONS)
+def test_compressor_status_sensor_states(value):
+    """Every value the cloud lists in allowedValues is a valid enum state."""
+    coordinator = _mock_coordinator(
+        heat_sources={
+            "compressorStatus": {
+                "id": "/heatSources/compressor/status",
+                "type": "stringValue",
+                "value": value,
+                "allowedValues": COMPRESSOR_STATUS_OPTIONS,
+            }
+        }
+    )
+    sensor = BoschComK40CompressorStatusSensor(coordinator)
+    assert sensor.native_value == value
+    assert sensor.unique_id == "102128202-compressor_status"
+
+
+@pytest.mark.parametrize(
+    "heat_sources",
+    [{}, {"compressorStatus": {}}, {"compressorStatus": {"value": "standby"}}],
+)
+def test_compressor_status_sensor_unknown(heat_sources):
+    """A missing or unlisted value is None, not an invalid enum state."""
+    coordinator = _mock_coordinator(heat_sources=heat_sources)
+    assert BoschComK40CompressorStatusSensor(coordinator).native_value is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("heat_sources", "created"),
+    [({"compressorStatus": {"value": "defrost"}}, True), ({}, False)],
+)
+async def test_compressor_status_sensor_only_when_served(
+    hass, entry, device, firmware, heat_sources, created
+):
+    """The sensor is created only when the cloud serves the resource."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorK40(
+        hass, MagicMock(), device, firmware, entry, auth_provider=False
+    )
+    coordinator.async_set_updated_data(
+        coordinator._build_device_data(
+            replace(_make_k40_data(), heat_sources=heat_sources)
+        )
+    )
+    entry.runtime_data = [coordinator]
+    entities: list = []
+    await sensor_async_setup_entry(hass, entry, entities.extend)
+
+    sensors = [e for e in entities if isinstance(e, BoschComK40CompressorStatusSensor)]
+    assert len(sensors) == (1 if created else 0)
+    await coordinator.async_shutdown()
 
 
 def test_start_counts_sensor():
