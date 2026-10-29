@@ -770,11 +770,11 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
     """A coordinator to manage the fetching of BoschCom data."""
 
     async def _async_update_data(self) -> BHCDeviceWddw2:
-        """Refresh WDDW2 data and the optional system health resource."""
+        """Refresh device values and optional diagnostic/consumption resources."""
         data = await super()._async_update_data()
         now = dt_util.utcnow()
-        last = getattr(self, "_health_fetched_at", None)
-        if last is None or now - last >= timedelta(minutes=5):
+        last_health = getattr(self, "_health_fetched_at", None)
+        if last_health is None or now - last_health >= timedelta(minutes=5):
             try:
                 response = await self.bhc.async_request_bulk(
                     self.unique_id, ["/system/healthStatus"]
@@ -784,9 +784,38 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
                     self.health_status_node = node
                 self._health_fetched_at = now
             except (ApiError, InvalidSensorDataError, NotRespondingError, RetryError, TimeoutError):
-                _LOGGER.debug(
-                    "Device %s: health status read failed", self.unique_id
-                )
+                _LOGGER.debug("Device %s: health status read failed", self.unique_id)
+
+        today = dt_util.now().date().isoformat()
+        last_water = getattr(self, "_water_fetched_at", None)
+        if (
+            getattr(self, "_water_day", None) != today
+            or last_water is None
+            or now - last_water >= timedelta(minutes=5)
+        ):
+            path = f"/recordings/dhwCircuits/dhw1/sensor/water?interval={today}"
+            try:
+                response = await self.bhc.async_request_bulk(self.unique_id, [path])
+                node = (response or {}).get(path)
+                samples = node.get("recording") if isinstance(node, dict) else None
+                if isinstance(samples, list) and samples:
+                    # yRecording.y contains liters for the hourly bucket.
+                    # c is an observation count, not a volume multiplier.
+                    liters = sum(
+                        float(sample["y"])
+                        for sample in samples
+                        if isinstance(sample, dict)
+                        and isinstance(sample.get("y"), (int, float))
+                    )
+                    self.water_today_liters = round(liters, 2)
+                    self._water_day = today
+                else:
+                    self.water_today_liters = None
+                self._water_fetched_at = now
+            except (ApiError, InvalidSensorDataError, NotRespondingError, RetryError, TimeoutError):
+                _LOGGER.debug("Device %s: water history read failed", self.unique_id)
+                if getattr(self, "_water_day", None) != today:
+                    self.water_today_liters = None
         return data
 
     def _build_device_data(self, data: BHCDeviceWddw2) -> BHCDeviceWddw2:
