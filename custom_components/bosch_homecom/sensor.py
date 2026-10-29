@@ -3522,6 +3522,7 @@ class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-dhw-water-today"
         self._attr_name = "DHW Water Consumption Today"
+        self._attr_suggested_object_id = "dhw_water_consumption_today"
 
     @property
     def native_value(self) -> float | None:
@@ -3545,6 +3546,7 @@ class BoschComWddw2HealthStatusSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-system-health-status"
         self._attr_name = "System Health Status"
+        self._attr_suggested_object_id = "system_health_status"
 
     @property
     def native_value(self) -> str | None:
