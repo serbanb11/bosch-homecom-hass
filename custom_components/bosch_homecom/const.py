@@ -73,6 +73,16 @@ DEFAULT_WB_LABEL: Final = "Wallbox"
 BOSCH_SENSOR_DESCRIPTORS = {
     "wddw2": [
         {
+            "key": "fan_speed",
+            "translation_key": "dhw_fan_speed",
+            "path": ["dhw_circuits", "dhw1", "fanSpeed"],
+            "name": "Fan Speed",
+            "device_class": None,
+            "unit": "rpm",
+            "state_class": "measurement",
+            "entity_category": "diagnostic",
+        },
+        {
             "key": "operation_mode",
             "translation_key": "dhw_operation_mode",
             "path": ["dhw_circuits", "dhw1", "operationMode"],
