@@ -688,7 +688,12 @@ def test_compressor_status_sensor_states(value):
 
 @pytest.mark.parametrize(
     "heat_sources",
-    [{}, {"compressorStatus": {}}, {"compressorStatus": {"value": "standby"}}],
+    [
+        {},
+        {"compressorStatus": {}},
+        {"compressorStatus": {"value": "standby"}},
+        {"compressorStatus": ["off"]},
+    ],
 )
 def test_compressor_status_sensor_unknown(heat_sources):
     """A missing or unlisted value is None, not an invalid enum state."""

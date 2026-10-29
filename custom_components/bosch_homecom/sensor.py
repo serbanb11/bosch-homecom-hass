@@ -3887,7 +3887,8 @@ class BoschComK40CompressorStatusSensor(CoordinatorEntity, SensorEntity):
     def native_value(self) -> str | None:
         """Return the compressor state, or None for a value we do not know."""
         hs = self.coordinator.data.heat_sources or {}
-        value = (hs.get("compressorStatus") or {}).get("value")
+        data = hs.get("compressorStatus")
+        value = data.get("value") if isinstance(data, dict) else None
         return value if value in COMPRESSOR_STATUS_OPTIONS else None
 
     @callback
