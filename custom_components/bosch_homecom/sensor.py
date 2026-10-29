@@ -364,6 +364,7 @@ async def async_setup_entry(
             wddw2_pending: list[_Wddw2Candidate] = []
 
             entities.append(BoschComWddw2HealthStatusSensor(coordinator))
+            entities.append(BoschComWddw2WaterTodaySensor(coordinator))
 
             # Issue #129: surface heat-source + water totals (top-level paths).
             for candidate in _wddw2_totals_candidates(coordinator):
@@ -3502,6 +3503,31 @@ def _build_icom_extra_sensors(
             )
 
     return entities
+
+
+class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
+    """Today's Bosch-reported DHW water consumption, in liters."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.WATER
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = UnitOfVolume.LITERS
+    _attr_icon = "mdi:water"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorWddw2) -> None:
+        """Initialize the daily consumption sensor."""
+        super().__init__(coordinator)
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-dhw-water-today"
+        self._attr_name = "DHW Water Consumption Today"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return today's value only, never yesterday's stale value."""
+        if getattr(self.coordinator, "_water_day", None) != dt_util.now().date().isoformat():
+            return None
+        return getattr(self.coordinator, "water_today_liters", None)
 
 
 class BoschComWddw2HealthStatusSensor(CoordinatorEntity, SensorEntity):
