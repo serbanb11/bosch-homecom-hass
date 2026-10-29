@@ -769,6 +769,26 @@ class BoschComModuleCoordinatorK40(
 class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw2]):
     """A coordinator to manage the fetching of BoschCom data."""
 
+    async def _async_update_data(self) -> BHCDeviceWddw2:
+        """Refresh WDDW2 data and the optional system health resource."""
+        data = await super()._async_update_data()
+        now = dt_util.utcnow()
+        last = getattr(self, "_health_fetched_at", None)
+        if last is None or now - last >= timedelta(minutes=5):
+            try:
+                response = await self.bhc.async_request_bulk(
+                    self.unique_id, ["/system/healthStatus"]
+                )
+                node = (response or {}).get("/system/healthStatus")
+                if isinstance(node, dict) and node.get("value") is not None:
+                    self.health_status_node = node
+                self._health_fetched_at = now
+            except (ApiError, InvalidSensorDataError, NotRespondingError, RetryError, TimeoutError):
+                _LOGGER.debug(
+                    "Device %s: health status read failed", self.unique_id
+                )
+        return data
+
     def _build_device_data(self, data: BHCDeviceWddw2) -> BHCDeviceWddw2:
         """Build WDDW2 device data."""
         # A wddw2 is a standalone water heater, so an update without DHW
