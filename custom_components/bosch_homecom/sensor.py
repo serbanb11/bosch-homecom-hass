@@ -3527,28 +3527,51 @@ class BoschComWddw2HeatingActivePowerSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Exclude off, unknown and unavailable heating states from statistics."""
-        registry = er.async_get(self.hass)
-        heating_entity_id = registry.async_get_entity_id(
-            "sensor", DOMAIN, f"{self.coordinator.unique_id}-dhw1-heating_active"
-        ) or registry.async_get_entity_id(
-            "binary_sensor", DOMAIN, f"{self.coordinator.unique_id}-dhw1-heating_active"
-        )
-        heating_state = (
-            self.hass.states.get(heating_entity_id) if heating_entity_id else None
-        )
-        if heating_state is None or heating_state.state != "on":
+        """Use one coordinator snapshot to confirm heating and positive power."""
+        data = self.coordinator.data
+        if data is None:
             return None
 
-        heat_sources = getattr(self.coordinator.data, "heat_sources", None) or {}
-        power_node = heat_sources.get("powerPercentage")
-        if not isinstance(power_node, dict):
+        dhw = next(
+            (
+                circuit
+                for circuit in (data.dhw_circuits or [])
+                if isinstance(circuit, dict)
+                and circuit.get("id") == "/dhwCircuits/dhw1"
+            ),
+            None,
+        )
+        if dhw is None:
             return None
-        value = power_node.get("value")
+
+        def value_of(field: str) -> float | None:
+            node = dhw.get(field)
+            raw = node.get("value") if isinstance(node, dict) else node
+            try:
+                return float(raw) if raw is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        flow = value_of("waterFlow")
+        inlet = value_of("inletTemperature")
+        outlet = value_of("outletTemperature")
+        # Match the existing Heating Active heuristic without reading its
+        # entity state, which may still reflect the previous coordinator poll.
+        if (
+            flow is None or flow <= 0
+            or inlet is None or outlet is None
+            or outlet - inlet < 3.0
+        ):
+            return None
+
+        heat_sources = data.heat_sources or {}
+        power_node = heat_sources.get("powerPercentage")
+        power = power_node.get("value") if isinstance(power_node, dict) else None
         try:
-            return float(value) if value is not None else None
+            percentage = float(power)
         except (TypeError, ValueError):
             return None
+        return percentage if 0 < percentage <= 100 else None
 
 
 class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
