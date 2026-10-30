@@ -425,7 +425,10 @@
           "high": "High (Comfort)",
           "eco": "Eco+",
           "manual": "Manual",
-          "bath": "Safety Temperature",
+          "hand_wash": "Hand wash",
+          "shower": "Shower",
+          "bath": "Bath",
+          "dish_wash": "Dishwashing",
           "ownprogram": "Own program"
         }
       },
@@ -771,7 +774,10 @@
           "high": "High (Comfort)",
           "eco": "Eco+",
           "manual": "Manual",
-          "bath": "Safety Temperature",
+          "hand_wash": "Hand wash",
+          "shower": "Shower",
+          "bath": "Bath",
+          "dish_wash": "Dishwashing",
           "ownprogram": "Own program"
         }
       }

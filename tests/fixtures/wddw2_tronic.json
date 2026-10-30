@@ -1,0 +1,291 @@
+{
+  "_comment": "dhw_circuits as homecom_alt returns them for one Tronic water heater (wddw2), recorded 2026-10-30: with its original TR4001 control panel, then with a TR7001 (HMI MPP) control panel clipped in, safety temperature on and off.",
+  "tr4001": [
+    {
+      "id": "/dhwCircuits/dhw1",
+      "operationMode": {
+        "id": "/dhwCircuits/dhw1/operationMode",
+        "type": "stringValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": "bath"
+      },
+      "airBoxTemperature": null,
+      "fanSpeed": null,
+      "inletTemperature": {
+        "id": "/dhwCircuits/dhw1/inletTemperature",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 13.7,
+        "unitOfMeasure": "C"
+      },
+      "outletTemperature": {
+        "id": "/dhwCircuits/dhw1/outletTemperature",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 14.2,
+        "unitOfMeasure": "C"
+      },
+      "waterFlow": {
+        "id": "/dhwCircuits/dhw1/sensor/waterFlow",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 0.0,
+        "unitOfMeasure": "l/min"
+      },
+      "nbStarts": {
+        "id": "/heatSources/hs1/numberOfStarts",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 780
+      },
+      "safetyTemperature": {
+        "id": "/dhwCircuits/dhw1/safetyTemperature",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "on",
+        "allowedValues": [
+          "off",
+          "on"
+        ]
+      },
+      "tempLevel": {
+        "manual": {
+          "id": "/dhwCircuits/dhw1/manualsetpoint",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 42,
+          "unitOfMeasure": "C"
+        },
+        "bath": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/bath",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 42,
+          "unitOfMeasure": "C"
+        }
+      }
+    },
+    {
+      "id": "/dhwCircuits/waterTotalConsumption"
+    }
+  ],
+  "tr7001_safety_on": [
+    {
+      "id": "/dhwCircuits/dhw1",
+      "operationMode": {
+        "id": "/dhwCircuits/dhw1/operationMode",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "bath",
+        "allowedValues": [
+          "manual",
+          "handWash",
+          "shower",
+          "bath"
+        ]
+      },
+      "airBoxTemperature": null,
+      "fanSpeed": null,
+      "inletTemperature": {
+        "id": "/dhwCircuits/dhw1/inletTemperature",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 13.4,
+        "unitOfMeasure": "C"
+      },
+      "outletTemperature": {
+        "id": "/dhwCircuits/dhw1/outletTemperature",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 13.8,
+        "unitOfMeasure": "C"
+      },
+      "waterFlow": {
+        "id": "/dhwCircuits/dhw1/sensor/waterFlow",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 0.0,
+        "unitOfMeasure": "l/min"
+      },
+      "nbStarts": {
+        "id": "/heatSources/hs1/numberOfStarts",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 780
+      },
+      "safetyTemperature": {
+        "id": "/dhwCircuits/dhw1/safetyTemperature",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "on",
+        "allowedValues": [
+          "off",
+          "on"
+        ]
+      },
+      "tempLevel": {
+        "manual": {
+          "id": "/dhwCircuits/dhw1/manualsetpoint",
+          "type": "floatValue",
+          "writeable": 1,
+          "recordable": 0,
+          "value": 42,
+          "unitOfMeasure": "C",
+          "minValue": 20,
+          "maxValue": 42
+        },
+        "handWash": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/handWash",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 35,
+          "unitOfMeasure": "C"
+        },
+        "shower": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/shower",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 38,
+          "unitOfMeasure": "C"
+        },
+        "bath": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/bath",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 42,
+          "unitOfMeasure": "C"
+        }
+      }
+    },
+    {
+      "id": "/dhwCircuits/waterTotalConsumption"
+    }
+  ],
+  "tr7001_safety_off": [
+    {
+      "id": "/dhwCircuits/dhw1",
+      "operationMode": {
+        "id": "/dhwCircuits/dhw1/operationMode",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "manual",
+        "allowedValues": [
+          "manual",
+          "handWash",
+          "shower",
+          "bath",
+          "dishWash"
+        ]
+      },
+      "airBoxTemperature": null,
+      "fanSpeed": null,
+      "inletTemperature": {
+        "id": "/dhwCircuits/dhw1/inletTemperature",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 15.0,
+        "unitOfMeasure": "C"
+      },
+      "outletTemperature": {
+        "id": "/dhwCircuits/dhw1/outletTemperature",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 30.0,
+        "unitOfMeasure": "C"
+      },
+      "waterFlow": {
+        "id": "/dhwCircuits/dhw1/sensor/waterFlow",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 0.0,
+        "unitOfMeasure": "l/min"
+      },
+      "nbStarts": {
+        "id": "/heatSources/hs1/numberOfStarts",
+        "type": "floatValue",
+        "writeable": 0,
+        "recordable": 0,
+        "value": 786
+      },
+      "safetyTemperature": {
+        "id": "/dhwCircuits/dhw1/safetyTemperature",
+        "type": "stringValue",
+        "writeable": 1,
+        "recordable": 0,
+        "value": "off",
+        "allowedValues": [
+          "off",
+          "on"
+        ]
+      },
+      "tempLevel": {
+        "manual": {
+          "id": "/dhwCircuits/dhw1/manualsetpoint",
+          "type": "floatValue",
+          "writeable": 1,
+          "recordable": 0,
+          "value": 41,
+          "unitOfMeasure": "C",
+          "minValue": 20,
+          "maxValue": 60
+        },
+        "handWash": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/handWash",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 35,
+          "unitOfMeasure": "C"
+        },
+        "shower": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/shower",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 38,
+          "unitOfMeasure": "C"
+        },
+        "bath": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/bath",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 42,
+          "unitOfMeasure": "C"
+        },
+        "dishWash": {
+          "id": "/dhwCircuits/dhw1/temperatureLevels/dishWash",
+          "type": "floatValue",
+          "writeable": 0,
+          "recordable": 0,
+          "value": 48,
+          "unitOfMeasure": "C"
+        }
+      }
+    },
+    {
+      "id": "/dhwCircuits/waterTotalConsumption"
+    }
+  ]
+}

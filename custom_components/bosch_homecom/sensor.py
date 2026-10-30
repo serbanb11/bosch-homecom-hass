@@ -51,6 +51,7 @@ from .const import (
     BOSCH_SENSOR_DESCRIPTORS,
     DOMAIN,
     WDDW2_NOTIFICATION_CODES,
+    api_value_to_state_key,
 )
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
@@ -1878,9 +1879,11 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
         state_class: Optional[str],
         translation_key: Optional[str] = None,
         entity_category: Optional[str] = None,
+        state_key: bool = False,
     ):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
+        self._state_key = state_key
         if translation_key:
             self._attr_translation_key = translation_key
         else:
@@ -1922,7 +1925,10 @@ class BoschComGenericSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> Any:
-        return self._resolver.get(self._coordinator_data_as_dict())
+        value = self._resolver.get(self._coordinator_data_as_dict())
+        if self._state_key and isinstance(value, str):
+            return api_value_to_state_key(value)
+        return value
 
 
 class BoschComDerivedDeltaTSensor(CoordinatorEntity, SensorEntity):
@@ -3698,6 +3704,7 @@ def _build_wddw2_descriptor_sensor(
             state_class=desc.get("state_class"),
             translation_key=desc.get("translation_key"),
             entity_category=desc.get("entity_category"),
+            state_key=desc.get("state_key", False),
         )
     except Exception:  # keep onboarding even if one fails
         _LOGGER.debug("Failed to add generic sensor %s", unique_suffix)
