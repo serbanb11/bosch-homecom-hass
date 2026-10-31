@@ -626,6 +626,9 @@
       "thermostat_rf_status": {
         "name": "RF Connection"
       },
+      "local_hc_pump_status": {
+        "name": "{circuit} heating circuit pump"
+      },
       "bacon_online": {
         "name": "Connectivity"
       }

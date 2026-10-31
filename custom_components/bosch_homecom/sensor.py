@@ -19,7 +19,6 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
-    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     PERCENTAGE,
     UnitOfEnergy,
     UnitOfPower,
@@ -38,6 +37,13 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .bacon import BACON_AIR_QUALITY_OPTIONS, bacon_air_quality_level, bacon_pm25_level
+
+try:
+    from homeassistant.const import UnitOfDensity
+
+    MICROGRAMS_PER_CUBIC_METER: str = UnitOfDensity.MICROGRAMS_PER_CUBIC_METER
+except ImportError:  # Home Assistant cores before UnitOfDensity existed (#203)
+    MICROGRAMS_PER_CUBIC_METER = "µg/m³"
 from .const import (
     BACON_AP_TYPE,
     BACON_DEVICE_TYPES,
@@ -4100,7 +4106,7 @@ BACON_AP_SENSORS: tuple[BaconApSensorDescription, ...] = (
         translation_key="bacon_pm2_5",
         unique_suffix="pm2-5",
         device_class=SensorDeviceClass.PM25,
-        native_unit=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        native_unit=MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         level_fn=bacon_pm25_level,
     ),

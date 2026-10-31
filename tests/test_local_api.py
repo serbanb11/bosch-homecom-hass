@@ -5,6 +5,7 @@ coordinator's local-first behaviour, and the local-only sensors.
 """
 
 import dataclasses
+from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -28,6 +29,10 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.bosch_homecom import _local_only_devices
+from custom_components.bosch_homecom.binary_sensor import (
+    BoschComK40LocalPumpStatusSensor,
+    async_setup_entry as binary_sensor_async_setup_entry,
+)
 from custom_components.bosch_homecom.const import (
     CONF_DEVICES,
     CONF_LOCAL,
@@ -60,7 +65,7 @@ from custom_components.bosch_homecom.local_sensor import (
 _FLOW_CLIENT = "custom_components.bosch_homecom.config_flow.HomeComK40Local"
 HOST = "192.0.2.10"
 GATEWAY = "102128202"
-LOCAL_TOKEN = "local-token"  # noqa: S105 - test fixture
+LOCAL_TOKEN = "local-token"
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +230,7 @@ async def test_local_multiple_gateways_asks_which(hass):
     assert result["step_id"] == "local"
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_LOCAL_GATEWAY: "555_k40".split("_")[0]}
+        result["flow_id"], {CONF_LOCAL_GATEWAY: "555"}
     )
     assert result["step_id"] == "local_credentials"
 
@@ -917,6 +922,107 @@ async def test_transient_cloud_401_does_not_trigger_reauth(
 # ---------------------------------------------------------------------------
 # Local-only sensors
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_local_circuit_pump_status_distinguishes_off_from_missing(
+    hass, entry, device, firmware
+):
+    """A stopped pump is off; a missing local resource is unavailable."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={
+            "/heatingCircuits/hc1/pumpStatus": {"value": "on"},
+            "/heatingCircuits/hc2/pumpStatus": {"value": "off"},
+        }
+    )
+    coordinator.local_healthy = True
+    hc1 = BoschComK40LocalPumpStatusSensor(coordinator, "hc1")
+    hc2 = BoschComK40LocalPumpStatusSensor(coordinator, "hc2")
+    hc3 = BoschComK40LocalPumpStatusSensor(coordinator, "hc3")
+
+    assert hc1.is_on is True and hc1.available
+    assert hc2.is_on is False and hc2.available
+    assert hc3.is_on is None and not hc3.available
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": 1}}
+    )
+    hc1 = BoschComK40LocalPumpStatusSensor(coordinator, "hc1")
+    assert hc1.is_on is None and not hc1.available
+    coordinator.local_healthy = False
+    assert not hc1.available
+
+
+@pytest.mark.asyncio
+async def test_local_pump_entities_wait_for_served_circuit(
+    hass, entry, device, firmware
+):
+    """Unsupported circuits stay absent; a later local read can add one."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.async_set_updated_data(
+        replace(
+            _cloud_device(),
+            heating_circuits=[
+                {"id": f"/heatingCircuits/hc{number}"} for number in range(1, 4)
+            ],
+        )
+    )
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": "on"}}
+    )
+    coordinator.local_healthy = True
+    entry.runtime_data = [coordinator]
+    entities = []
+
+    await binary_sensor_async_setup_entry(hass, entry, entities.extend)
+    assert [e._resource for e in entities] == ["/heatingCircuits/hc1/pumpStatus"]
+
+    coordinator.local_data = _local_device(
+        resources={
+            "/heatingCircuits/hc1/pumpStatus": {"value": "on"},
+            "/heatingCircuits/hc2/pumpStatus": {"value": "off"},
+        }
+    )
+    coordinator.async_update_listeners()
+    coordinator.async_update_listeners()
+    assert [e._resource for e in entities] == [
+        "/heatingCircuits/hc1/pumpStatus",
+        "/heatingCircuits/hc2/pumpStatus",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_local_circuit_pump_status_adds_to_platform(
+    hass, entry, device, firmware, caplog
+):
+    """A live local status becomes a running binary sensor in HA."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": "on"}}
+    )
+    coordinator.local_healthy = True
+    pump = BoschComK40LocalPumpStatusSensor(coordinator, "hc1")
+
+    platform = MockEntityPlatform(hass, domain="binary_sensor", platform_name=DOMAIN)
+    await platform.async_add_entities([pump])
+
+    assert "Error adding entity" not in caplog.text
+    state = hass.states.get(pump.entity_id)
+    assert state.state == "on"
+    assert state.attributes["device_class"] == "running"
+
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": "off"}}
+    )
+    coordinator.async_update_listeners()
+    assert hass.states.get(pump.entity_id).state == "off"
+
+    coordinator.local_healthy = False
+    coordinator.async_update_listeners()
+    assert hass.states.get(pump.entity_id).state == "unavailable"
 
 
 def test_emon_field_extraction() -> None:

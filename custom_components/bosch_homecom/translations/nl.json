@@ -625,6 +625,9 @@
       "thermostat_rf_status": {
         "name": "RF Verbinding"
       },
+      "local_hc_pump_status": {
+        "name": "{circuit} cv-pomp"
+      },
       "bacon_online": {
         "name": "Verbinding"
       }
