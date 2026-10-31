@@ -51,6 +51,7 @@ from homecom_alt import (
     generate_client_id,
 )
 from homecom_alt.const import BACON_DEFAULT_REGION
+import voluptuous as vol
 
 from .const import (
     BACON_AP_TYPE,
@@ -95,6 +96,27 @@ PLATFORMS: list[Platform] = [
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+# The DHW actions used to be registered without a schema, so a call with a
+# missing or misspelt field wrote ``null`` to the device and reported success
+# (#219). ``entity_id`` comes from the action's target; other target keys
+# (device, area, label) are not resolved here and are left alone.
+SET_DHW_TEMPERATURE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_ids,
+        vol.Required("level"): cv.string,
+        vol.Required("temperature"): vol.Coerce(float),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+SET_DHW_EXTRAHOT_WATER_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_ids,
+        vol.Required("mode"): vol.In(["start", "stop"]),
+        vol.Optional("duration"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    },
+    extra=vol.ALLOW_EXTRA,
+)
 
 
 def _local_only_devices(entry: ConfigEntry) -> list[dict[str, str]]:
@@ -620,41 +642,49 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def set_dhw_tempreture_service(call: ServiceCall) -> None:
         """Service to change temperature."""
-        for entity_id in cv.entity_ids(call.data["entity_id"]):
+        for entity_id in call.data["entity_id"]:
             coordinator, dhw_id = _resolve_dhw_target(hass, entity_id)
             await coordinator.bhc.async_set_dhw_temp_level(
                 coordinator.unique_id,
                 dhw_id,
-                call.data.get("level"),
-                call.data.get("temperature"),
+                call.data["level"],
+                call.data["temperature"],
             )
             await coordinator.async_request_refresh()
 
     # Register our service with Home Assistant.
     hass.services.async_register(
-        DOMAIN, "set_dhw_tempreture", set_dhw_tempreture_service
+        DOMAIN,
+        "set_dhw_tempreture",
+        set_dhw_tempreture_service,
+        schema=SET_DHW_TEMPERATURE_SCHEMA,
     )
 
     async def set_dhw_extrahot_water_service(call: ServiceCall) -> None:
         """Service to control extrahot water service."""
-        for entity_id in cv.entity_ids(call.data["entity_id"]):
+        for entity_id in call.data["entity_id"]:
             coordinator, dhw_id = _resolve_dhw_target(hass, entity_id)
-            if call.data.get("mode") == "start":
+            # The duration is only meaningful for a start, and only when
+            # given: writing a null duration is not what anyone asked for.
+            if call.data["mode"] == "start" and "duration" in call.data:
                 await coordinator.bhc.async_set_dhw_charge_duration(
                     coordinator.unique_id,
                     dhw_id,
-                    call.data.get("duration"),
+                    call.data["duration"],
                 )
             await coordinator.bhc.async_set_dhw_charge(
                 coordinator.unique_id,
                 dhw_id,
-                call.data.get("mode"),
+                call.data["mode"],
             )
             await coordinator.async_request_refresh()
 
     # Register our service with Home Assistant.
     hass.services.async_register(
-        DOMAIN, "set_dhw_extrahot_water", set_dhw_extrahot_water_service
+        DOMAIN,
+        "set_dhw_extrahot_water",
+        set_dhw_extrahot_water_service,
+        schema=SET_DHW_EXTRAHOT_WATER_SCHEMA,
     )
 
     async def get_custom_path_service(call: ServiceCall) -> ServiceResponse:

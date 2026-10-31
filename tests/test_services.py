@@ -14,6 +14,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+import voluptuous as vol
 
 from custom_components.bosch_homecom.const import DOMAIN
 
@@ -168,3 +169,100 @@ async def test_dhw_service_rejects_ambiguous_circuit(hass):
         )
 
     coordinator.bhc.async_set_dhw_charge.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"mode": "halt"},
+        {"mode": None},
+        {},
+        {"mode": "start", "duration": 0},
+        {"mode": "start", "duration": "an hour"},
+    ],
+)
+async def test_extrahot_water_rejects_bad_input_before_writing(hass, data):
+    """A missing or wrong field is an error, not a null write to the device (#219)."""
+    coordinator = _coordinator("123", "k40", ["dhw1"])
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register(
+        hass, entry, "123", "123-waterheater", "boschcom_k40_123_waterheater"
+    )
+
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_dhw_extrahot_water",
+            {"entity_id": entity_id, **data},
+            blocking=True,
+        )
+
+    coordinator.bhc.async_set_dhw_charge.assert_not_awaited()
+    coordinator.bhc.async_set_dhw_charge_duration.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_extrahot_water_start_without_duration_keeps_the_device_setting(hass):
+    """A start without a duration writes only the charge, not a null duration."""
+    coordinator = _coordinator("123", "k40", ["dhw1"])
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register(
+        hass, entry, "123", "123-waterheater", "boschcom_k40_123_waterheater"
+    )
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_dhw_extrahot_water",
+        {"entity_id": entity_id, "mode": "start"},
+        blocking=True,
+    )
+
+    coordinator.bhc.async_set_dhw_charge_duration.assert_not_awaited()
+    coordinator.bhc.async_set_dhw_charge.assert_awaited_once_with(
+        "123", "dhw1", "start"
+    )
+
+
+@pytest.mark.asyncio
+async def test_extrahot_water_duration_is_coerced_to_an_integer(hass):
+    """The UI sends the number as a string or float; the device gets minutes."""
+    coordinator = _coordinator("123", "k40", ["dhw1"])
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register(
+        hass, entry, "123", "123-waterheater", "boschcom_k40_123_waterheater"
+    )
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_dhw_extrahot_water",
+        {"entity_id": entity_id, "mode": "start", "duration": "90"},
+        blocking=True,
+    )
+
+    coordinator.bhc.async_set_dhw_charge_duration.assert_awaited_once_with(
+        "123", "dhw1", 90
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data",
+    [{"level": "high"}, {"temperature": 50}, {"level": "high", "temperature": "warm"}],
+)
+async def test_dhw_temperature_rejects_bad_input_before_writing(hass, data):
+    coordinator = _coordinator("123", "k40", ["dhw1"])
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register(
+        hass, entry, "123", "123-waterheater", "boschcom_k40_123_waterheater"
+    )
+
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_dhw_tempreture",
+            {"entity_id": entity_id, **data},
+            blocking=True,
+        )
+
+    coordinator.bhc.async_set_dhw_temp_level.assert_not_awaited()
