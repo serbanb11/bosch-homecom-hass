@@ -818,7 +818,13 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
                 else:
                     self.water_today_liters = None
                 self._water_fetched_at = now
-            except (ApiError, InvalidSensorDataError, NotRespondingError, RetryError, TimeoutError):
+            except (
+                ApiError,
+                InvalidSensorDataError,
+                NotRespondingError,
+                RetryError,
+                TimeoutError,
+            ):
                 _LOGGER.debug("Device %s: water history read failed", self.unique_id)
                 if getattr(self, "_water_day", None) != today:
                     self.water_today_liters = None

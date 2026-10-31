@@ -3597,7 +3597,10 @@ class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return today's value only, never yesterday's stale value."""
-        if getattr(self.coordinator, "_water_day", None) != dt_util.now().date().isoformat():
+        if (
+            getattr(self.coordinator, "_water_day", None)
+            != dt_util.now().date().isoformat()
+        ):
             return None
         return getattr(self.coordinator, "water_today_liters", None)
 
