@@ -56,6 +56,7 @@ import voluptuous as vol
 from .const import (
     BACON_AP_TYPE,
     BACON_DEVICE_TYPES,
+    BACON_PRESENCE_HEARTBEAT,
     BACON_RAC_TYPE,
     CAPTURE_RAW_DEFAULT_SECONDS,
     CAPTURE_RAW_MAX_SECONDS,
@@ -71,6 +72,7 @@ from .const import (
     DOMAIN,
     MODEL,
 )
+from .bacon_heartbeat import async_start_bacon_heartbeat
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
@@ -381,6 +383,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except (ApiError, ClientError, ClientConnectorError, TimeoutError) as err:
             raise ConfigEntryNotReady from err
         entry.async_on_unload(bacon_client.async_disconnect)
+        if BACON_PRESENCE_HEARTBEAT:
+            # Experiment for #203, see bacon_heartbeat.py.
+            async_start_bacon_heartbeat(
+                hass, entry, websession, bhc, bacon_client, bacon_region
+            )
 
         bacon_lock = asyncio.Lock()
         # A single token owner (refresh tokens are single-use). If there are no
