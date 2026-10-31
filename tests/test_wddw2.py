@@ -311,6 +311,7 @@ def _dhw1_circuit(**overrides):
         "outletTemperature": {"value": 48},
         "waterFlow": {"value": 6},
         "nbStarts": {"value": 1234},
+        "fanSpeed": {"value": 0},
     }
     circuit.update(overrides)
     return {key: value for key, value in circuit.items() if value is not None}
