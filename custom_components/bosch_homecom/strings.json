@@ -321,6 +321,19 @@
           "frost": "Frost protection"
         }
       },
+      "compressor_status": {
+        "name": "Compressor status",
+        "state": {
+          "off": "Off",
+          "heating": "Heating",
+          "cooling": "Cooling",
+          "dhw": "Hot water",
+          "pool": "Pool",
+          "pool_heat": "Pool heating",
+          "defrost": "Defrost",
+          "alarm": "Alarm"
+        }
+      },
       "compressor_starts": {
         "name": "Compressor starts"
       },

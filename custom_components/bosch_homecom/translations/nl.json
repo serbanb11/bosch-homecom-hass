@@ -423,6 +423,19 @@
           "frost": "Vorstbeveiliging"
         }
       },
+      "compressor_status": {
+        "name": "Compressorstatus",
+        "state": {
+          "off": "Uit",
+          "heating": "Verwarmen",
+          "cooling": "Koelen",
+          "dhw": "Warm water",
+          "pool": "Zwembad",
+          "pool_heat": "Zwembadverwarming",
+          "defrost": "Ontdooien",
+          "alarm": "Alarm"
+        }
+      },
       "compressor_starts": {
         "name": "Compressor starts"
       },
