@@ -3558,8 +3558,10 @@ class BoschComWddw2HeatingActivePowerSensor(CoordinatorEntity, SensorEntity):
         # Match the existing Heating Active heuristic without reading its
         # entity state, which may still reflect the previous coordinator poll.
         if (
-            flow is None or flow <= 0
-            or inlet is None or outlet is None
+            flow is None
+            or flow <= 0
+            or inlet is None
+            or outlet is None
             or outlet - inlet < 3.0
         ):
             return None
@@ -3620,7 +3622,11 @@ class BoschComWddw2HealthStatusSensor(CoordinatorEntity, SensorEntity):
     def native_value(self) -> str | None:
         """Return None if the endpoint has not provided a health state."""
         node = getattr(self.coordinator, "health_status_node", None)
-        return str(node["value"]) if isinstance(node, dict) and node.get("value") is not None else None
+        return (
+            str(node["value"])
+            if isinstance(node, dict) and node.get("value") is not None
+            else None
+        )
 
 
 # ---- WDDW2 heat-source + water totals (issue #129) -------------------------
