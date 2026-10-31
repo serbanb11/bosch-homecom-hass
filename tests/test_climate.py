@@ -2,14 +2,18 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from homeassistant.components.climate import ClimateEntityFeature
-from homecom_alt import BHCDeviceIcom, BHCDeviceK40, BHCDeviceRac
+from homeassistant.components.climate import ClimateEntityFeature, HVACMode
+from homecom_alt import BHCDeviceIcom, BHCDeviceK40, BHCDeviceRac, BHCDeviceRrc2
 
 from custom_components.bosch_homecom.climate import (
     BoschComK40Climate,
     BoschComRacClimate,
+    BoschComRrc2ZoneClimate,
 )
-from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorIcom
+from custom_components.bosch_homecom.coordinator import (
+    BoschComModuleCoordinatorIcom,
+    BoschComModuleCoordinatorRrc2,
+)
 from custom_components.bosch_homecom.sensor import BoschComSensorHc
 
 
@@ -431,3 +435,133 @@ def test_rac_without_setpoint_keeps_a_target_to_render():
 
     assert climate.target_temperature == 22
     assert (climate.min_temp, climate.max_temp) == (16.0, 30.0)
+
+
+# ---------------------------------------------------------------------------
+# RRC2 zones: clock-mode setpoint changes go to the clock override (#88)
+# ---------------------------------------------------------------------------
+
+
+def _make_rrc2_coordinator(user_mode="clock", override=0.0, away="false"):
+    """A CT200-style zone as the #88 dumps show it, plus the clock override."""
+    zone = {
+        "id": "/zones/zn1",
+        "temperatureActual": {"value": 19.5, "unitOfMeasure": "C"},
+        "temperatureHeatingSetpoint": {
+            "value": 15.0,
+            "minValue": 5.0,
+            "maxValue": 30.0,
+        },
+        "manualTemperatureHeating": {
+            "value": 21.5,
+            "minValue": 5.0,
+            "maxValue": 30.0,
+            "stepSize": 0.5,
+        },
+        "clockOverrideTemperatureHeating": (
+            {"value": override} if override is not None else None
+        ),
+        "userMode": {"value": user_mode},
+    }
+    coordinator = object.__new__(BoschComModuleCoordinatorRrc2)
+    coordinator.unique_id = "rrc2123"
+    coordinator.device_info = {"identifiers": {("bosch_homecom", "rrc2123")}}
+    coordinator.bhc = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.device = {"deviceId": "rrc2123", "deviceType": "rrc2"}
+    coordinator.data = BHCDeviceRrc2(
+        device="rrc2123",
+        firmware=[],
+        notifications=[],
+        zones=[zone],
+        heating_circuits=None,
+        dhw_circuits=None,
+        heat_sources=None,
+        away_mode={"value": away},
+        outdoor_temp=None,
+        indoor_humidity=None,
+        devices=None,
+        gateway_info=None,
+        system_location=None,
+    )
+    return coordinator
+
+
+def _make_zone_climate(coordinator):
+    climate = BoschComRrc2ZoneClimate(coordinator=coordinator, field="zn1")
+    climate.async_write_ha_state = MagicMock()
+    return climate
+
+
+async def test_rrc2_clock_mode_setpoint_writes_the_clock_override():
+    """In AUTO the device follows its program; only the override changes it."""
+    coordinator = _make_rrc2_coordinator(user_mode="clock")
+    climate = _make_zone_climate(coordinator)
+
+    await climate.async_set_temperature(temperature=22)
+
+    coordinator.bhc.async_set_zone_clock_override_temp_heating.assert_awaited_once_with(
+        "rrc2123", "zn1", 22
+    )
+    coordinator.bhc.async_set_zone_manual_temp_heating.assert_not_awaited()
+    assert climate._attr_target_temperature == 22
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_rrc2_manual_mode_setpoint_writes_the_manual_temperature():
+    coordinator = _make_rrc2_coordinator(user_mode="manual")
+    climate = _make_zone_climate(coordinator)
+
+    await climate.async_set_temperature(temperature=20.5)
+
+    coordinator.bhc.async_set_zone_manual_temp_heating.assert_awaited_once_with(
+        "rrc2123", "zn1", 20.5
+    )
+    coordinator.bhc.async_set_zone_clock_override_temp_heating.assert_not_awaited()
+
+
+def test_rrc2_clock_mode_target_is_the_program_setpoint_without_override():
+    """0 means no override: the program's setpoint is the target, as before."""
+    climate = _make_zone_climate(_make_rrc2_coordinator(user_mode="clock"))
+
+    assert climate.hvac_mode == HVACMode.AUTO
+    assert climate.target_temperature == 15.0
+    assert climate.extra_state_attributes == {
+        "scheduled_temperature": 15.0,
+        "clock_override_active": False,
+        "clock_override_temperature": None,
+    }
+
+
+def test_rrc2_clock_mode_target_is_the_override_while_active():
+    """An override the user set shows as the target until the next switch point."""
+    climate = _make_zone_climate(
+        _make_rrc2_coordinator(user_mode="clock", override=22.0)
+    )
+
+    assert climate.target_temperature == 22.0
+    assert climate.extra_state_attributes == {
+        "scheduled_temperature": 15.0,
+        "clock_override_active": True,
+        "clock_override_temperature": 22.0,
+    }
+
+
+def test_rrc2_manual_mode_ignores_a_stale_override():
+    """In manual mode the manual setpoint is the target whatever the override says."""
+    climate = _make_zone_climate(
+        _make_rrc2_coordinator(user_mode="manual", override=22.0)
+    )
+
+    assert climate.hvac_mode == HVACMode.HEAT
+    assert climate.target_temperature == 21.5
+
+
+def test_rrc2_gateway_without_the_override_resource_behaves_as_before():
+    """A firmware that 404s the override (None in the payload) changes nothing."""
+    climate = _make_zone_climate(
+        _make_rrc2_coordinator(user_mode="clock", override=None)
+    )
+
+    assert climate.target_temperature == 15.0
+    assert climate.extra_state_attributes["clock_override_active"] is False

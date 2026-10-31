@@ -702,6 +702,7 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         self.field = field
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None
+        self._clock_override: float | None = None
         self._attr_suggested_object_id = field
         self.set_attr()
 
@@ -719,9 +720,19 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         self._attr_target_temperature = temperature
         self.async_write_ha_state()
 
-        await self.coordinator.bhc.async_set_zone_manual_temp_heating(
-            self.coordinator.unique_id, self.field, temperature
-        )
+        # The device keeps two setpoints. In clock mode it follows the
+        # program and only clockOverride/temperatureHeating changes it until
+        # the next switch point; manualTemperatureHeating is inert there,
+        # which is why a change in AUTO never reached the thermostat (#88).
+        # The app branches the same way on userMode.
+        if self._get_hvac_mode_from_zone() == HVACMode.AUTO:
+            await self.coordinator.bhc.async_set_zone_clock_override_temp_heating(
+                self.coordinator.unique_id, self.field, temperature
+            )
+        else:
+            await self.coordinator.bhc.async_set_zone_manual_temp_heating(
+                self.coordinator.unique_id, self.field, temperature
+            )
         await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -780,10 +791,20 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
 
             manual = entry.get("manualTemperatureHeating") or {}
             clock = entry.get("temperatureHeatingSetpoint") or {}
+            override = entry.get("clockOverrideTemperatureHeating") or {}
             if manual.get("value") is not None:
                 self._manual_temp = manual["value"]
             if clock.get("value") is not None:
                 self._clock_temp = clock["value"]
+            # 0 means no override, as the app reads it (isPositive).
+            override_value = override.get("value")
+            self._clock_override = (
+                override_value
+                if isinstance(override_value, (int, float))
+                and not isinstance(override_value, bool)
+                and override_value > 0
+                else None
+            )
 
             target_node = self._get_temperature_data(entry)
             if target_node.get("value") is not None:
@@ -807,11 +828,26 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         return HVACMode.HEAT
 
     def _get_temperature_data(self, entry: dict) -> dict:
-        """Return the correct temperature object based on user mode."""
+        """Return the correct temperature object based on user mode.
+
+        In clock mode an active override is the setpoint the user asked for,
+        so it wins over the program's value until the next switch point.
+        """
         user_mode = (entry.get("userMode") or {}).get("value")
         if user_mode == "manual":
             return entry.get("manualTemperatureHeating") or {}
+        if self._clock_override is not None:
+            return entry.get("clockOverrideTemperatureHeating") or {}
         return entry.get("temperatureHeatingSetpoint") or {}
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the program setpoint and the clock override, as the app does."""
+        return {
+            "scheduled_temperature": self._clock_temp,
+            "clock_override_active": self._clock_override is not None,
+            "clock_override_temperature": self._clock_override,
+        }
 
 
 # --- Bacon (Matter-commissioned) RAC over MQTT device-shadow -----------------
