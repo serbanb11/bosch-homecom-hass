@@ -644,6 +644,18 @@
       },
       "hc_supply_temp_setpoint": {
         "name": "{circuit} Vorlauftemperatur-Sollwert"
+      },
+      "dhw_fan_speed": {
+        "name": "Lüfterdrehzahl"
+      },
+      "dhw_water_consumption_today": {
+        "name": "Warmwasserverbrauch heute"
+      },
+      "system_health_status": {
+        "name": "Systemstatus"
+      },
+      "heating_active_power": {
+        "name": "Heizleistung bei Aktivität"
       }
     },
     "binary_sensor": {

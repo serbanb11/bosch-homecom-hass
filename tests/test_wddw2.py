@@ -1,17 +1,31 @@
 """Tests for wddw2 (Tronic TR4001) switches, water heater and notifications."""
 
 from dataclasses import replace
+from datetime import datetime, timezone
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
 from homeassistant.helpers import entity_registry as er
-from homecom_alt import BHCDeviceWddw2
+from homecom_alt import ApiError, BHCDeviceWddw2
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.bosch_homecom.const import BOSCH_SENSOR_DESCRIPTORS, DOMAIN
+from custom_components.bosch_homecom.const import (
+    BOSCH_SENSOR_DESCRIPTORS,
+    CONF_DEVICES,
+    DOMAIN,
+)
+from custom_components.bosch_homecom.coordinator import (
+    WDDW2_WATER_TODAY_KEY,
+    BoschComModuleCoordinatorWddw2,
+)
 from custom_components.bosch_homecom.sensor import (
+    BoschComHeatingActiveBinarySensor,
     BoschComSensorNotificationsWddw2,
+    BoschComWddw2HealthStatusSensor,
+    BoschComWddw2HeatingActivePowerSensor,
+    BoschComWddw2WaterTodaySensor,
     _build_wddw2_descriptor_sensor,
     async_setup_entry as sensor_async_setup_entry,
 )
@@ -75,6 +89,8 @@ def _coordinator(dhw_circuits=None, notifications=None, holiday_mode=None):
     coord.unique_id = "102051881"
     coord.device_info = Mock()
     coord.data = _make_data(dhw_circuits, notifications, holiday_mode)
+    coord.recordings = {}
+    coord.health_status = None
     coord.async_request_refresh = AsyncMock()
     coord.bhc = Mock()
     coord.bhc.async_put_dhw_safety_temperature = AsyncMock()
@@ -416,6 +432,7 @@ def _dhw1_circuit(**overrides):
         "outletTemperature": {"value": 48},
         "waterFlow": {"value": 6},
         "nbStarts": {"value": 1234},
+        "fanSpeed": {"value": 0},
     }
     circuit.update(overrides)
     return {key: value for key, value in circuit.items() if value is not None}
@@ -640,6 +657,8 @@ async def test_totals_sensor_missing_at_setup_is_added_later(hass):
 async def test_no_listener_when_every_sensor_is_present(hass):
     """A device reporting everything at setup registers no late listener."""
     coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    coord.recordings = {WDDW2_WATER_TODAY_KEY: 94.5}
+    coord.health_status = {"value": "no_error"}
     coord.data = replace(
         coord.data,
         heat_sources={
@@ -700,3 +719,205 @@ def test_tronic_tr7001_panel_without_safety_temperature():
     assert (entity.min_temp, entity.max_temp) == (20, 60)
     assert entity.current_operation == "manual"
     assert entity.target_temperature == 41
+
+
+# ---------------------------------------------------------------------------
+# Optional sensors (#220): today's water, health status, power while heating
+# ---------------------------------------------------------------------------
+
+_HEALTH_PATH = "/system/healthStatus"
+_WATER_PATH = "/recordings/dhwCircuits/dhw1/sensor/water?interval={day}"
+_OPTIONAL_IDS = (
+    "102051881-dhw-water-today",
+    "102051881-system-health-status",
+    "102051881-heating-active-power",
+)
+
+
+def _bulk_answers(day, water=None, health="no_error"):
+    """Answer each bulk request by its path, as the cloud does."""
+    answers = {}
+    if health is not None:
+        answers[_HEALTH_PATH] = {"id": _HEALTH_PATH, "value": health}
+    if water is not None:
+        answers[_WATER_PATH.format(day=day)] = {"recording": water}
+
+    async def _bulk(_device_id, paths):
+        return {path: answers[path] for path in paths if path in answers}
+
+    return AsyncMock(side_effect=_bulk)
+
+
+def _real_coordinator(hass, bulk):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test-user",
+        unique_id="test-user",
+        data={CONF_DEVICES: {"102051881_wddw2": True}},
+    )
+    entry.add_to_hass(hass)
+    bhc = Mock()
+    bhc.async_update = AsyncMock(
+        return_value=_make_data(dhw_circuits=[{"id": "/dhwCircuits/dhw1"}])
+    )
+    bhc.async_request_bulk = bulk
+    return BoschComModuleCoordinatorWddw2(
+        hass,
+        bhc,
+        {"deviceId": "102051881", "deviceType": "wddw2"},
+        {"value": "1.0"},
+        entry,
+        auth_provider=False,
+    )
+
+
+def _today():
+    return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")
+
+
+async def test_recordings_fetch_fills_water_today_and_health(hass):
+    """One update reads both optional resources; the next one is rate-limited."""
+    bulk = _bulk_answers(_today(), water=[{"y": 40, "c": 1}, {"y": 54.5, "c": 1}])
+    coord = _real_coordinator(hass, bulk)
+
+    await coord._async_update_data()
+
+    assert coord.recordings == {WDDW2_WATER_TODAY_KEY: 94.5}
+    assert coord.health_status["value"] == "no_error"
+    assert bulk.await_count == 2
+
+    await coord._async_update_data()
+    assert bulk.await_count == 2, "re-read within the poll interval"
+
+
+async def test_recordings_fetch_failure_keeps_last_values_and_retries(hass):
+    """A transport error keeps the last values and does not arm the rate limit."""
+    coord = _real_coordinator(hass, _bulk_answers(_today(), water=[{"y": 12, "c": 1}]))
+    await coord._async_update_data()
+    coord._last_recordings_fetch = None
+
+    coord.bhc.async_request_bulk = AsyncMock(side_effect=ApiError("504"))
+    await coord._async_update_data()
+
+    assert coord.recordings == {WDDW2_WATER_TODAY_KEY: 12.0}
+    assert coord.health_status["value"] == "no_error"
+    assert coord._last_recordings_fetch is None
+
+
+async def test_unsupported_recordings_leave_the_caches_empty(hass):
+    """A device without these resources never fills the caches."""
+    coord = _real_coordinator(hass, AsyncMock(return_value={}))
+
+    await coord._async_update_data()
+
+    assert coord.recordings == {}
+    assert coord.health_status is None
+
+
+async def test_water_today_is_dropped_on_a_new_day(hass):
+    """Yesterday's litres must not show as today's before today's first read."""
+    day1 = datetime(2026, 10, 30, 23, 50, tzinfo=timezone.utc)
+    day2 = datetime(2026, 10, 31, 0, 5, tzinfo=timezone.utc)
+    coord = _real_coordinator(
+        hass, _bulk_answers("2026-10-30", water=[{"y": 94.5, "c": 1}])
+    )
+    with patch(
+        "custom_components.bosch_homecom.coordinator.dt_util.now", return_value=day1
+    ):
+        await coord._async_update_data()
+    assert coord.recordings[WDDW2_WATER_TODAY_KEY] == 94.5
+
+    # Midnight: the new day's recording has no buckets yet.
+    coord.bhc.async_request_bulk = _bulk_answers("2026-10-31", water=[])
+    with patch(
+        "custom_components.bosch_homecom.coordinator.dt_util.now", return_value=day2
+    ):
+        await coord._async_update_data()
+
+    assert WDDW2_WATER_TODAY_KEY not in coord.recordings
+    assert coord.bhc.async_request_bulk.await_count == 2, "read despite rate limit"
+
+
+async def test_optional_sensors_wait_for_their_data(hass):
+    """Nothing at setup, all three once the coordinator serves their data."""
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    coord.data = replace(coord.data, heat_sources={"powerPercentage": {}})
+    entities, listener = await _setup_recording(hass, coord)
+    assert not set(_OPTIONAL_IDS) & set(_ids(entities))
+
+    coord.recordings[WDDW2_WATER_TODAY_KEY] = 94.5
+    coord.health_status = {"value": "no_error"}
+    coord.data = replace(coord.data, heat_sources={"powerPercentage": {"value": 35}})
+    listener()
+
+    for unique_id in _OPTIONAL_IDS:
+        assert _ids(entities).count(unique_id) == 1
+    count = len(entities)
+    listener()
+    assert len(entities) == count
+
+
+async def test_power_sensor_absent_on_a_device_without_power_percentage(hass):
+    """A Tronic gas heater reports no power percentage and gets no sensor."""
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    coord.recordings[WDDW2_WATER_TODAY_KEY] = 10.0
+    coord.health_status = {"value": "no_error"}
+    entities, listener = await _setup_recording(hass, coord)
+
+    for _ in range(3):
+        listener()
+
+    ids = _ids(entities)
+    assert "102051881-dhw-water-today" in ids
+    assert "102051881-system-health-status" in ids
+    assert "102051881-heating-active-power" not in ids
+
+
+def test_water_today_and_health_sensors_read_the_caches():
+    coord = _coordinator(dhw_circuits=[_dhw1_circuit()])
+    water = BoschComWddw2WaterTodaySensor(coord)
+    health = BoschComWddw2HealthStatusSensor(coord)
+    assert water.native_value is None
+    assert health.native_value is None
+
+    coord.recordings[WDDW2_WATER_TODAY_KEY] = 94.5
+    coord.health_status = {"value": "no_error"}
+    assert water.native_value == 94.5
+    assert water.unique_id == "102051881-dhw-water-today"
+    assert health.native_value == "no_error"
+    assert health.unique_id == "102051881-system-health-status"
+
+
+def test_power_sensor_follows_the_heating_heuristic():
+    """Power only while water flows and warms by 3 K, as the binary sensor."""
+    heating = _dhw1_circuit(
+        waterFlow={"value": 6},
+        inletTemperature={"value": 12},
+        outletTemperature={"value": 48},
+    )
+    coord = _coordinator(dhw_circuits=[heating])
+    coord.data = replace(coord.data, heat_sources={"powerPercentage": {"value": 35}})
+    power = BoschComWddw2HeatingActivePowerSensor(coord)
+    active = BoschComHeatingActiveBinarySensor(
+        coord, unique_suffix="dhw1-heating_active"
+    )
+    assert active.is_on is True
+    assert power.native_value == 35.0
+
+    for idle in (
+        _dhw1_circuit(waterFlow={"value": 0}),
+        _dhw1_circuit(inletTemperature={"value": 46}, outletTemperature={"value": 48}),
+        _dhw1_circuit(waterFlow=None),
+    ):
+        coord.data = replace(coord.data, dhw_circuits=[idle])
+        assert active.is_on is False
+        assert power.native_value is None
+
+    coord.data = replace(
+        coord.data,
+        dhw_circuits=[heating],
+        heat_sources={"powerPercentage": {"value": 0}},
+    )
+    assert power.native_value is None
+    coord.data = replace(coord.data, heat_sources={"powerPercentage": {"value": "n/a"}})
+    assert power.native_value is None

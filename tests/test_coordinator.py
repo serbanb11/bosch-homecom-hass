@@ -435,6 +435,7 @@ async def test_wddw2_empty_circuits_at_runtime_is_held(
         _make_wddw2_data(device, firmware), dhw_circuits=[{"id": "/dhwCircuits/dhw1"}]
     )
     bhc.async_update = AsyncMock(return_value=good)
+    bhc.async_request_bulk = AsyncMock(return_value={})
     await coordinator.async_refresh()
     assert coordinator.last_update_success
     held = coordinator.data
@@ -1401,6 +1402,7 @@ async def test_wddw2_update_with_circuits_passes_through(
         hass, bhc, device, firmware, entry, auth_provider=False
     )
     circuits = [{"id": "/dhwCircuits/dhw1"}]
+    bhc.async_request_bulk = AsyncMock(return_value={})
     bhc.async_update = AsyncMock(
         return_value=BHCDeviceWddw2(
             device=device,
