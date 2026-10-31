@@ -783,7 +783,13 @@ class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw
                 if isinstance(node, dict) and node.get("value") is not None:
                     self.health_status_node = node
                 self._health_fetched_at = now
-            except (ApiError, InvalidSensorDataError, NotRespondingError, RetryError, TimeoutError):
+            except (
+                ApiError,
+                InvalidSensorDataError,
+                NotRespondingError,
+                RetryError,
+                TimeoutError,
+            ):
                 _LOGGER.debug("Device %s: health status read failed", self.unique_id)
 
         today = dt_util.now().date().isoformat()
