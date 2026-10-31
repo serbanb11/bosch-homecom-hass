@@ -74,6 +74,7 @@ BOSCH_SENSOR_DESCRIPTORS = {
     "wddw2": [
         {
             "key": "fan_speed",
+            "translation_key": "dhw_fan_speed",
             "path": ["dhw_circuits", "dhw1", "fanSpeed"],
             "name": "Fan Speed",
             "device_class": None,
