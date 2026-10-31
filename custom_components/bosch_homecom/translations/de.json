@@ -436,7 +436,10 @@
           "high": "Hoch (Komfort)",
           "eco": "Eco+",
           "manual": "Manuell",
-          "bath": "Sicherheitstemperatur",
+          "hand_wash": "Händewaschen",
+          "shower": "Dusche",
+          "bath": "Bad",
+          "dish_wash": "Geschirrspülen",
           "ownprogram": "Eigenes Programm"
         }
       },
@@ -785,7 +788,10 @@
           "high": "Hoch (Komfort)",
           "eco": "Eco+",
           "manual": "Manuell",
-          "bath": "Sicherheitstemperatur",
+          "hand_wash": "Händewaschen",
+          "shower": "Dusche",
+          "bath": "Bad",
+          "dish_wash": "Geschirrspülen",
           "ownprogram": "Eigenes Programm"
         }
       }

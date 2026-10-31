@@ -434,7 +434,10 @@
           "high": "Hoog (Comfort)",
           "eco": "Eco+",
           "manual": "Handmatig",
-          "bath": "Veiligheidstemperatuur",
+          "hand_wash": "Handen wassen",
+          "shower": "Douche",
+          "bath": "Bad",
+          "dish_wash": "Afwassen",
           "ownprogram": "Eigen programma"
         }
       },
@@ -783,7 +786,10 @@
           "high": "Hoog (Comfort)",
           "eco": "Eco+",
           "manual": "Handmatig",
-          "bath": "Veiligheidstemperatuur",
+          "hand_wash": "Handen wassen",
+          "shower": "Douche",
+          "bath": "Bad",
+          "dish_wash": "Afwassen",
           "ownprogram": "Eigen programma"
         }
       }

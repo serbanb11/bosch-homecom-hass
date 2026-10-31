@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import re
 from typing import Final
 
 from homeassistant.components.sensor import SensorDeviceClass
@@ -70,6 +71,16 @@ CONF_BACON_REGION: Final = "bacon_region"
 CONF_BACON_TITLES: Final = "bacon_titles"
 DEFAULT_WB_LABEL: Final = "Wallbox"
 
+
+def api_value_to_state_key(value: str) -> str:
+    """Turn a camelCase API value into a translatable state key.
+
+    hassfest only accepts lowercase slugs as state translation keys, so
+    wddw2 operation modes such as ``handWash`` are exposed as ``hand_wash``.
+    """
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", value).lower()
+
+
 BOSCH_SENSOR_DESCRIPTORS = {
     "wddw2": [
         {
@@ -77,6 +88,7 @@ BOSCH_SENSOR_DESCRIPTORS = {
             "translation_key": "dhw_operation_mode",
             "path": ["dhw_circuits", "dhw1", "operationMode"],
             "name": "Operation Mode",
+            "state_key": True,
             "device_class": None,
             "unit": None,
             "state_class": None,

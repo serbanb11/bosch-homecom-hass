@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
@@ -11,6 +12,7 @@ from homecom_alt import BHCDeviceWddw2
 from custom_components.bosch_homecom.const import BOSCH_SENSOR_DESCRIPTORS, DOMAIN
 from custom_components.bosch_homecom.sensor import (
     BoschComSensorNotificationsWddw2,
+    _build_wddw2_descriptor_sensor,
     async_setup_entry as sensor_async_setup_entry,
 )
 from custom_components.bosch_homecom.switch import (
@@ -211,6 +213,109 @@ async def test_water_heater_set_operation_mode_writable_calls_api():
         "102051881", "dhw1", "high"
     )
     coord.async_request_refresh.assert_called_once()
+
+
+# Tronic presets as a Tronic 7000 control panel reports them with the safety
+# temperature off: camelCase API values, dishWash only offered above 42 °C.
+_DHW_PRESETS = [
+    {
+        "id": "/dhwCircuits/dhw1",
+        "operationMode": {
+            "value": "handWash",
+            "writeable": 1,
+            "allowedValues": ["manual", "handWash", "shower", "bath", "dishWash"],
+        },
+        "outletTemperature": {"value": 35.0, "unitOfMeasure": "C"},
+        "tempLevel": {
+            "manual": {"value": 34, "writeable": 1, "minValue": 20, "maxValue": 60},
+            "handWash": {"value": 35},
+            "dishWash": {"value": 48},
+        },
+        "safetyTemperature": {"value": "off"},
+    }
+]
+
+
+def test_water_heater_presets_use_state_keys():
+    coord = _coordinator(dhw_circuits=_DHW_PRESETS)
+    entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw1")
+
+    assert entity.operation_list == [
+        "manual",
+        "hand_wash",
+        "shower",
+        "bath",
+        "dish_wash",
+    ]
+    assert entity.current_operation == "hand_wash"
+    assert entity.target_temperature == 35
+
+
+async def test_water_heater_set_preset_writes_api_value():
+    coord = _coordinator(dhw_circuits=_DHW_PRESETS)
+    entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw1")
+
+    await entity.async_set_operation_mode("dish_wash")
+
+    coord.bhc.async_put_dhw_operation_mode.assert_called_once_with(
+        "102051881", "dhw1", "dishWash"
+    )
+
+
+async def test_water_heater_manual_reapplies_last_manual_setpoint():
+    circuits = [
+        dict(
+            _DHW_PRESETS[0],
+            operationMode=dict(_DHW_PRESETS[0]["operationMode"], value="manual"),
+        )
+    ]
+    coord = _coordinator(dhw_circuits=circuits)
+    entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw1")
+
+    # The device switches to a preset; the remembered manual setpoint stays.
+    coord.data = _make_data(_DHW_PRESETS)
+    entity.set_attr()
+    await entity.async_set_operation_mode("manual")
+
+    coord.bhc.async_put_dhw_operation_mode.assert_called_once_with(
+        "102051881", "dhw1", "manual"
+    )
+    coord.bhc.async_set_dhw_temp_level.assert_called_once_with(
+        "102051881", "dhw1", "manual", 34
+    )
+
+
+async def test_water_heater_manual_without_known_setpoint_writes_mode_only():
+    coord = _coordinator(dhw_circuits=_DHW_PRESETS)
+    entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw1")
+
+    await entity.async_set_operation_mode("manual")
+
+    coord.bhc.async_put_dhw_operation_mode.assert_called_once()
+    coord.bhc.async_set_dhw_temp_level.assert_not_called()
+
+
+def test_operation_mode_sensor_reports_state_key():
+    desc = next(
+        d for d in BOSCH_SENSOR_DESCRIPTORS["wddw2"] if d["key"] == "operation_mode"
+    )
+    coord = _coordinator(dhw_circuits=_DHW_PRESETS)
+    sensor = _build_wddw2_descriptor_sensor(coord, desc, "dhw1", desc["path"])
+
+    assert sensor.native_value == "hand_wash"
+
+
+def test_translations_cover_every_preset():
+    path = "custom_components/bosch_homecom/translations/{}.json"
+    for lang in ("en", "de", "nl"):
+        with open(path.format(lang), encoding="utf-8") as fh:
+            entity = json.load(fh)["entity"]
+        for states in (
+            entity["water_heater"]["dhw_wddw2"]["state"],
+            entity["sensor"]["dhw_operation_mode"]["state"],
+        ):
+            for key in ("manual", "hand_wash", "shower", "bath", "dish_wash"):
+                assert key in states, (lang, key)
 
 
 async def test_water_heater_set_temperature_readonly_noop():
@@ -550,3 +655,48 @@ async def test_no_listener_when_every_sensor_is_present(hass):
     )
     _, listener = await _setup_recording(hass, coord)
     assert listener is None
+
+
+# ---------------------------------------------------------------------------
+# Recorded payloads: one Tronic, TR4001 panel vs. TR7001 panel
+# ---------------------------------------------------------------------------
+
+_TRONIC = json.loads(
+    (Path(__file__).parent / "fixtures" / "wddw2_tronic.json").read_text("utf-8")
+)
+
+
+def test_tronic_tr4001_panel_stays_read_only():
+    coord = _coordinator(dhw_circuits=_TRONIC["tr4001"])
+    entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw1")
+
+    assert entity.supported_features == WaterHeaterEntityFeature(0)
+    assert entity.operation_list is None
+    assert entity.current_operation == "bath"
+    assert entity.target_temperature == 42
+
+
+def test_tronic_tr7001_panel_with_safety_temperature():
+    coord = _coordinator(dhw_circuits=_TRONIC["tr7001_safety_on"])
+    entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw1")
+
+    assert WaterHeaterEntityFeature.OPERATION_MODE in entity.supported_features
+    assert WaterHeaterEntityFeature.TARGET_TEMPERATURE in entity.supported_features
+    assert entity.operation_list == ["manual", "hand_wash", "shower", "bath"]
+    assert (entity.min_temp, entity.max_temp) == (20, 42)
+
+
+def test_tronic_tr7001_panel_without_safety_temperature():
+    coord = _coordinator(dhw_circuits=_TRONIC["tr7001_safety_off"])
+    entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw1")
+
+    assert entity.operation_list == [
+        "manual",
+        "hand_wash",
+        "shower",
+        "bath",
+        "dish_wash",
+    ]
+    assert (entity.min_temp, entity.max_temp) == (20, 60)
+    assert entity.current_operation == "manual"
+    assert entity.target_temperature == 41
