@@ -360,7 +360,14 @@
         "name": "Room Setpoint"
       },
       "thermostat_battery": {
-        "name": "Battery"
+        "name": "Battery",
+        "state": {
+          "normal": "Normal",
+          "low": "Low",
+          "too_low": "Too low",
+          "fota_forbidden": "Too low for firmware update",
+          "no_battery": "No battery"
+        }
       },
       "thermostat_signal": {
         "name": "Signal Strength"

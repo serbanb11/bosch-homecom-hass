@@ -362,7 +362,14 @@
         "name": "Raumsollwert"
       },
       "thermostat_battery": {
-        "name": "Batterie"
+        "name": "Batterie",
+        "state": {
+          "normal": "Normal",
+          "low": "Schwach",
+          "too_low": "Zu schwach",
+          "fota_forbidden": "Zu schwach für Firmware-Update",
+          "no_battery": "Keine Batterie"
+        }
       },
       "thermostat_signal": {
         "name": "Signalstärke"
