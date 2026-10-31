@@ -642,6 +642,18 @@
       },
       "hc_supply_temp_setpoint": {
         "name": "{circuit} aanvoertemperatuur instelpunt"
+      },
+      "dhw_fan_speed": {
+        "name": "Ventilatorsnelheid"
+      },
+      "dhw_water_consumption_today": {
+        "name": "Warmwaterverbruik vandaag"
+      },
+      "system_health_status": {
+        "name": "Systeemstatus"
+      },
+      "heating_active_power": {
+        "name": "Vermogen tijdens verwarming"
       }
     },
     "binary_sensor": {

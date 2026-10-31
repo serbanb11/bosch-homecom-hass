@@ -642,6 +642,18 @@
       },
       "hc_supply_temp_setpoint": {
         "name": "{circuit} supply temperature setpoint"
+      },
+      "dhw_fan_speed": {
+        "name": "Fan Speed"
+      },
+      "dhw_water_consumption_today": {
+        "name": "DHW Water Consumption Today"
+      },
+      "system_health_status": {
+        "name": "System Health Status"
+      },
+      "heating_active_power": {
+        "name": "Heating Active Power"
       }
     },
     "binary_sensor": {
