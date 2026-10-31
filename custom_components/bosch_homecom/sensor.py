@@ -1547,6 +1547,17 @@ class BoschComSensorSolarCircuit(BoschComSensorBase):
             return None
 
 
+def _value_with_unit(node) -> str:
+    """Return a reading as "<value><unit>", or "unknown" when it has no value.
+
+    Concatenating the two defaults gave "unknownunknown" for every reading the
+    device does not report (#178).
+    """
+    if not isinstance(node, dict) or node.get("value") is None:
+        return "unknown"
+    return f"{node['value']}{node.get('unitOfMeasure') or ''}"
+
+
 class BoschComSensorHs(BoschComSensorBase):
     """BoschComSensorHs sensor."""
 
@@ -1626,33 +1637,17 @@ class BoschComSensorHs(BoschComSensorBase):
             k: v for d in numberOfStarts if isinstance(d, dict) for k, v in d.items()
         }
 
-        returnTemperature = str(
-            (hs.get("returnTemperature") or {}).get("value", "unknown")
-        ) + (hs.get("returnTemperature") or {}).get("unitOfMeasure", "unknown")
-
-        actualSupplyTemperature = str(
-            (hs.get("actualSupplyTemperature") or {}).get("value", "unknown")
-        ) + (hs.get("actualSupplyTemperature") or {}).get("unitOfMeasure", "unknown")
-
-        actualModulation = str(
-            (hs.get("actualModulation") or {}).get("value", "unknown")
-        ) + (hs.get("actualModulation") or {}).get("unitOfMeasure", "unknown")
-
-        collectorInflowTemp = str(
-            (hs.get("collectorInflowTemp") or {}).get("value", "unknown")
-        ) + (hs.get("collectorInflowTemp") or {}).get("unitOfMeasure", "unknown")
-
-        collectorOutflowTemp = str(
-            (hs.get("collectorOutflowTemp") or {}).get("value", "unknown")
-        ) + (hs.get("collectorOutflowTemp") or {}).get("unitOfMeasure", "unknown")
+        returnTemperature = _value_with_unit(hs.get("returnTemperature"))
+        actualSupplyTemperature = _value_with_unit(hs.get("actualSupplyTemperature"))
+        actualModulation = _value_with_unit(hs.get("actualModulation"))
+        collectorInflowTemp = _value_with_unit(hs.get("collectorInflowTemp"))
+        collectorOutflowTemp = _value_with_unit(hs.get("collectorOutflowTemp"))
 
         actualHeatDemand = (hs.get("actualHeatDemand") or {}).get("values", ["unknown"])
 
-        totalWorkingTime = str(
-            (hs.get("totalWorkingTime") or {}).get("value", "unknown")
-        ) + (hs.get("totalWorkingTime") or {}).get("unitOfMeasure", "unknown")
+        totalWorkingTime = _value_with_unit(hs.get("totalWorkingTime"))
 
-        systemPressure = (hs.get("systemPressure") or {}).get("value", ["unknown"])
+        systemPressure = (hs.get("systemPressure") or {}).get("value", "unknown")
 
         totalWorkingTimeReadable = self.seconds_to_readable(
             int((hs.get("totalWorkingTime") or {}).get("value", 0) or 0)
