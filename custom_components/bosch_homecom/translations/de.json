@@ -627,6 +627,9 @@
       "thermostat_rf_status": {
         "name": "Funkverbindung"
       },
+      "local_hc_pump_status": {
+        "name": "{circuit} Heizkreispumpe"
+      },
       "bacon_online": {
         "name": "Verbindung"
       }
