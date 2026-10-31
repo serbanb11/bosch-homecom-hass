@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from typing import Any
+
 from homeassistant import config_entries, core
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -16,6 +19,7 @@ from .const import BACON_DEVICE_TYPES
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
+    BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
 
@@ -43,6 +47,19 @@ async def async_setup_entry(
                             coordinator=coordinator, dev_id=dev_id
                         )
                     )
+        if isinstance(coordinator, BoschComModuleCoordinatorIcom):
+            # One per circuit whose holidayMode/activated the gateway serves.
+            for kind, refs in (
+                ("heating_circuits", coordinator.data.heating_circuits),
+                ("dhw_circuits", coordinator.data.dhw_circuits),
+            ):
+                for ref in refs or []:
+                    if isinstance(ref.get("holidayActivated"), dict):
+                        entities.append(
+                            BoschComIcomHolidayActiveSensor(
+                                coordinator, kind, ref["id"].split("/")[-1]
+                            )
+                        )
         if (
             isinstance(coordinator, BoschComModuleCoordinatorK40)
             and coordinator.local_first is not None
@@ -269,7 +286,115 @@ class BoschComBaconOnlineSensor(CoordinatorEntity, BinarySensorEntity):
         return bool(value) if isinstance(value, bool) else None
 
     @property
-    def extra_state_attributes(self) -> dict[str, str]:
-        """Expose the link quality the device reports alongside."""
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the link quality and the versions the device reports alongside.
+
+        The appliance firmware and the installed firmware package (from the
+        ``$package`` shadow) have no better home than the connectivity sensor.
+        """
+        attributes: dict[str, Any] = {}
         quality = (self._info.get("network") or {}).get("signalQuality")
-        return {"signal_quality": quality} if quality else {}
+        if quality:
+            attributes["signal_quality"] = quality
+        appliance = self._info.get("appliance")
+        if isinstance(appliance, dict) and appliance.get("firmwareVersion"):
+            attributes["appliance_firmware"] = appliance["firmwareVersion"]
+        get_package = getattr(
+            getattr(self.coordinator, "client", None), "get_package", None
+        )
+        package = (
+            get_package(self.coordinator.unique_id) if callable(get_package) else None
+        )
+        if isinstance(package, dict):
+            for name, node in package.items():
+                if not isinstance(node, dict):
+                    continue
+                attributes["firmware_package"] = name
+                if node.get("version") is not None:
+                    attributes["firmware_package_version"] = node["version"]
+                auto = (node.get("attributes") or {}).get("autoUpdate")
+                if isinstance(auto, bool):
+                    attributes["firmware_auto_update"] = auto
+                break
+        return attributes
+
+
+# --- icom holiday periods -----------------------------------------------------
+
+_HOLIDAY_PERIOD_RE = re.compile(r"^hm[1-5]$")
+
+
+class BoschComIcomHolidayActiveSensor(CoordinatorEntity, BinarySensorEntity):
+    """Whether one of the icom's holiday periods is active on a circuit.
+
+    ``holidayMode/activated`` names the period (``hm1`` to ``hm5``) while one
+    applies and something else otherwise, as the app reads it. The period's
+    dates and modes come from ``/system/holidayModes/hm{N}``, which the
+    library already fetches, so they ride along as attributes.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_translation_key = "holiday_active"
+    _attr_icon = "mdi:beach"
+
+    def __init__(
+        self, coordinator: BoschComModuleCoordinatorIcom, kind: str, circuit_id: str
+    ) -> None:
+        """Initialize for one heating or DHW circuit."""
+        super().__init__(coordinator)
+        self._kind = kind
+        self._circuit_id = circuit_id
+        self._attr_translation_placeholders = {"circuit": circuit_id}
+        self._attr_unique_id = f"{coordinator.unique_id}-{circuit_id}-holiday_active"
+        self._attr_device_info = coordinator.device_info
+
+    def _activated(self) -> str | None:
+        data = self.coordinator.data
+        for ref in (getattr(data, self._kind, None) if data else None) or []:
+            if ref.get("id", "").endswith(f"/{self._circuit_id}"):
+                node = ref.get("holidayActivated")
+                return node.get("value") if isinstance(node, dict) else None
+        return None
+
+    def _period(self) -> dict | None:
+        value = self._activated()
+        if not isinstance(value, str) or not _HOLIDAY_PERIOD_RE.match(value):
+            return None
+        data = self.coordinator.data
+        for ref in (getattr(data, "holiday_mode", None) if data else None) or []:
+            if isinstance(ref, dict) and ref.get("id", "").endswith(f"/{value}"):
+                return ref
+        return {"id": value}
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return whether a holiday period applies, None before the first read."""
+        value = self._activated()
+        if value is None:
+            return None
+        return bool(_HOLIDAY_PERIOD_RE.match(str(value)))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Describe the active period: id, dates, modes, fixed temperature."""
+        period = self._period()
+        if period is None:
+            return {}
+
+        def value(key: str) -> Any:
+            node = period.get(key)
+            return node.get("value") if isinstance(node, dict) else None
+
+        start = end = None
+        dates = value("startStop")
+        if isinstance(dates, str) and "/" in dates:
+            start, end = dates.split("/", 1)
+        return {
+            "period": period.get("id", "").split("/")[-1],
+            "start": start,
+            "end": end,
+            "heating_mode": value("hcMode"),
+            "dhw_mode": value("dhwMode"),
+            "fixed_temperature": value("fixTemperature"),
+        }

@@ -551,3 +551,37 @@ async def test_switch_setup_adds_feature_switches_that_appear_later(hass):
     # The same fields on a later update are not added twice.
     listener()
     assert len(added) == 2
+
+
+# --- connectivity sensor: versions and firmware package (item 4) --------------
+
+
+def test_online_sensor_exposes_versions_and_package():
+    info = {
+        "online": True,
+        "network": {"signalQuality": "good"},
+        "appliance": {"type": "rac", "firmwareVersion": "00.00.02"},
+        "gateway": {"firmwareVersion": "1.0.1", "hardwareVersion": "G10-3"},
+    }
+    coordinator = _coordinator(info=info)
+    coordinator.client.get_package.return_value = {
+        "rac_midea_v1": {"version": "1.0.1", "attributes": {"autoUpdate": True}}
+    }
+    sensor = BoschComBaconOnlineSensor(coordinator=coordinator)
+
+    assert sensor.is_on is True
+    assert sensor.extra_state_attributes == {
+        "signal_quality": "good",
+        "appliance_firmware": "00.00.02",
+        "firmware_package": "rac_midea_v1",
+        "firmware_package_version": "1.0.1",
+        "firmware_auto_update": True,
+    }
+
+
+def test_online_sensor_without_info_or_package_has_no_attributes():
+    coordinator = _coordinator(info=None)
+    coordinator.client.get_package.return_value = None
+    assert (
+        BoschComBaconOnlineSensor(coordinator=coordinator).extra_state_attributes == {}
+    )

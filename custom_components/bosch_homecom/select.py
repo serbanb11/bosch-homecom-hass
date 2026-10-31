@@ -117,6 +117,17 @@ async def async_setup_entry(
                             allowedValues=entry["operationMode"]["allowedValues"],
                         )
                     )
+                program = entry.get("activeSwitchProgram")
+                if (
+                    isinstance(coordinator, BoschComModuleCoordinatorIcom)
+                    and isinstance(program, dict)
+                    and program.get("value") is not None
+                ):
+                    entities.append(
+                        BoschComSelectHcSwitchProgram(
+                            coordinator=coordinator, field=hc_id
+                        )
+                    )
                 suwi_source = _suwi_source(entry)
                 if suwi_source is not None:
                     entities.append(
@@ -1493,4 +1504,62 @@ class BoschComK40HcControlTypeSelect(CoordinatorEntity, SelectEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data."""
+        self.async_write_ha_state()
+
+
+class BoschComSelectHcSwitchProgram(CoordinatorEntity, SelectEntity):
+    """Which switch program (A or B) an icom heating circuit follows.
+
+    Read from ``activeSwitchProgram``, written with the same path; the
+    program's mode (``switchProgramMode``) rides along as an attribute.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorIcom, field: str) -> None:
+        """Initialize for one heating circuit."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "hc_switch_program"
+        self._attr_translation_placeholders = {"circuit": field}
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{field}-switch_program"
+        self.field = field
+
+    def _circuit(self) -> dict:
+        for entry in self.coordinator.data.heating_circuits or []:
+            if entry.get("id") == f"/heatingCircuits/{self.field}":
+                return entry
+        return {}
+
+    @property
+    def options(self) -> list[str]:
+        """Return the programs the device lists, A and B by default."""
+        node = self._circuit().get("activeSwitchProgram") or {}
+        allowed = node.get("allowedValues")
+        return list(allowed) if isinstance(allowed, list) and allowed else ["A", "B"]
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the active program."""
+        return (self._circuit().get("activeSwitchProgram") or {}).get("value")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the schedule mode the device reports alongside."""
+        mode = (self._circuit().get("switchProgramMode") or {}).get("value")
+        return {"switch_program_mode": mode} if mode is not None else {}
+
+    async def async_select_option(self, option: str) -> None:
+        """Write the program choice."""
+        await self.coordinator.bhc.async_set_hc_active_switch_program(
+            self.coordinator.unique_id, self.field, option
+        )
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
         self.async_write_ha_state()

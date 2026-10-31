@@ -286,6 +286,9 @@
       },
       "hc1_control_type": {
         "name": "HC1 control type"
+      },
+      "hc_switch_program": {
+        "name": "{circuit} switch program"
       }
     },
     "sensor": {
@@ -669,6 +672,9 @@
       },
       "bacon_online": {
         "name": "Connectivity"
+      },
+      "holiday_active": {
+        "name": "{circuit} holiday active"
       }
     },
     "number": {
@@ -710,6 +716,12 @@
       },
       "bacon_off_timer": {
         "name": "Turn off after"
+      },
+      "hc_comfort2": {
+        "name": "{circuit} comfort setpoint"
+      },
+      "hc_eco": {
+        "name": "{circuit} eco setpoint"
       }
     },
     "button": {

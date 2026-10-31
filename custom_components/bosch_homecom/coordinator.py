@@ -19,7 +19,7 @@ from homeassistant.core import (
 )
 from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -1325,6 +1325,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             **{k: v for k, v in (state.get("desired") or {}).items() if v is not None},
         }
         info = self.bhc.info
+        self._sync_versions(info)
         title = reported.get("customTitle")
         if title:
             clean = title.split("%|")[0].strip()
@@ -1353,6 +1354,36 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             metadata=self.bhc.metadata,
             info=info,
         )
+
+    def _sync_versions(self, info: dict | None) -> None:
+        """Put the gateway's firmware and hardware versions on the device.
+
+        The pointt firmware lookup does not know Matter devices, so the device
+        was registered with "unknown". topics/info carries the real versions
+        (``gateway.firmwareVersion`` / ``hardwareVersion``); once it has
+        arrived they replace the placeholder, on the device registry entry too,
+        since Home Assistant only reads an entity's device_info when it is added.
+        """
+        gateway = (info or {}).get("gateway") if isinstance(info, dict) else None
+        if not isinstance(gateway, dict):
+            return
+        versions = {
+            "sw_version": gateway.get("firmwareVersion"),
+            "hw_version": gateway.get("hardwareVersion"),
+        }
+        changes = {
+            key: value
+            for key, value in versions.items()
+            if isinstance(value, str) and value and self.device_info.get(key) != value
+        }
+        if not changes:
+            return
+        self.device_info.update(changes)
+        device = dr.async_get(self.hass).async_get_device(
+            identifiers={(DOMAIN, self.unique_id)}
+        )
+        if device is not None:
+            dr.async_get(self.hass).async_update_device(device.id, **changes)
 
     def _persist_title(self, title: str) -> None:
         """Persist the friendly name on the entry so it survives a reload."""

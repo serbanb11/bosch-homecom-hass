@@ -59,3 +59,16 @@ def test_battery_is_enum_without_unit():
     sensor = _battery_sensor({"value": "BAT_LOW"})
     assert sensor.device_class == SensorDeviceClass.ENUM
     assert sensor.native_unit_of_measurement is None
+
+
+def test_room_unit_reports_its_zone_and_circuit():
+    """zoneId and assignedHC were read with the device but never shown."""
+    sensor = _battery_sensor({"value": "BAT_NORMAL"})
+    device = sensor.coordinator.data.devices[0]
+    device["zoneId"] = {"value": 1}
+    device["assignedHC"] = {"value": "hc1"}
+
+    assert sensor.extra_state_attributes == {"zone_id": 1, "heating_circuit": "hc1"}
+
+    del device["zoneId"]
+    assert sensor.extra_state_attributes == {"heating_circuit": "hc1"}

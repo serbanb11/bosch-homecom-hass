@@ -280,6 +280,22 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
 
         await self.coordinator.async_request_refresh()
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Tell whether a manual change is overriding the schedule.
+
+        ``switchPrograms/temporarySetting/enabled`` arrives in the program list;
+        the app shows it as "until the next switch point". Absent on units that
+        do not report it.
+        """
+        for ref in self.coordinator.data.switch_programs or []:
+            if isinstance(ref, dict) and str(ref.get("id", "")).endswith(
+                "temporarySetting/enabled"
+            ):
+                value = ref.get("value")
+                return {"schedule_override_active": value in ("on", "true", True)}
+        return {}
+
     def _set_standard_functions(self, standard_functions: list[dict]) -> None:
         """Populate standard functions."""
         saw_setpoint = False
@@ -554,6 +570,34 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         away = (getattr(data, "away_mode", None) or {}).get("value")
         self._attr_preset_mode = PRESET_AWAY if away in ("on", "true") else PRESET_NONE
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the temporary setpoint an icom holds until the next switch point.
+
+        The icom bulk reads ``temporaryRoomSetpoint``; the app shows it as
+        "temporary setpoint until <switch point>" and writes ``-1`` to clear
+        it, so a value above 0 means the override is active. K40 circuits do
+        not carry the node and get no attributes.
+        """
+        data = self.coordinator.data
+        for entry in (getattr(data, "heating_circuits", None) if data else None) or []:
+            if entry.get("id") != f"/heatingCircuits/{self.field}":
+                continue
+            node = entry.get("temporaryRoomSetpoint")
+            if not isinstance(node, dict):
+                return {}
+            value = node.get("value")
+            active = (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and value > 0
+            )
+            return {
+                "temporary_room_setpoint": value if active else None,
+                "temporary_setpoint_active": active,
+            }
+        return {}
+
 
 class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
     """Representation of a BoschCom zone climate entity."""
@@ -703,6 +747,8 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         self._manual_temp: float | None = None
         self._clock_temp: float | None = None
         self._clock_override: float | None = None
+        self._zone_name: str | None = None
+        self._zone_icon: str | None = None
         self._attr_suggested_object_id = field
         self.set_attr()
 
@@ -792,6 +838,11 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
             manual = entry.get("manualTemperatureHeating") or {}
             clock = entry.get("temperatureHeatingSetpoint") or {}
             override = entry.get("clockOverrideTemperatureHeating") or {}
+            # The room name and icon the user gave the zone in the app. Kept
+            # as attributes: the entity name stays "Zone zn1" so existing
+            # entity ids and dashboards are untouched.
+            self._zone_name = (entry.get("name") or {}).get("value") or None
+            self._zone_icon = (entry.get("icon") or {}).get("value") or None
             if manual.get("value") is not None:
                 self._manual_temp = manual["value"]
             if clock.get("value") is not None:
@@ -844,6 +895,8 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose the program setpoint and the clock override, as the app does."""
         return {
+            "zone_name": self._zone_name,
+            "zone_icon": self._zone_icon,
             "scheduled_temperature": self._clock_temp,
             "clock_override_active": self._clock_override is not None,
             "clock_override_temperature": self._clock_override,

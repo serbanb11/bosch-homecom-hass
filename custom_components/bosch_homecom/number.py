@@ -79,6 +79,7 @@ async def async_setup_entry(
             entities.extend(_build_rrc2_numbers(coordinator))
         if coordinator.data.device["deviceType"] == "icom":
             entities.extend(_build_icom_dhw_numbers(coordinator))
+            entities.extend(_build_icom_hc_level_numbers(coordinator))
         if coordinator.data.device["deviceType"] == BACON_AP_TYPE:
             reported = getattr(coordinator.data, "reported", None) or {}
             entities.extend(
@@ -650,6 +651,104 @@ def _build_icom_dhw_numbers(
                 )
             )
 
+    return entities
+
+
+# Heating-circuit temperature levels the icom bulk already carries: ref key ->
+# (translation key, unique suffix, library setter). Read from the circuit, so
+# no extra request; the K40 reads the same levels through HC_TUNE_ENDPOINTS.
+_ICOM_HC_LEVELS: dict[str, tuple[str, str, str]] = {
+    "temperatureLevelComfort2": (
+        "hc_comfort2",
+        "comfort2",
+        "async_set_hc_temp_level_comfort2",
+    ),
+    "temperatureLevelEco": ("hc_eco", "eco", "async_set_hc_temp_level_eco"),
+}
+
+
+class BoschComIcomHcLevelNumber(CoordinatorEntity, NumberEntity):
+    """A heating-circuit temperature level (comfort or eco) of an icom."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_mode = NumberMode.BOX
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorIcom,
+        *,
+        hc_id: str,
+        field: str,
+        min_value: float,
+        max_value: float,
+        step: float,
+    ) -> None:
+        """Initialize one level of one circuit."""
+        super().__init__(coordinator)
+        translation_key, suffix, setter = _ICOM_HC_LEVELS[field]
+        self._hc_id = hc_id
+        self._field = field
+        self._setter = setter
+        self._attr_translation_key = translation_key
+        self._attr_translation_placeholders = {"circuit": hc_id}
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{hc_id}-{suffix}"
+        self._attr_native_min_value = min_value
+        self._attr_native_max_value = max_value
+        self._attr_native_step = step
+
+    def _node(self) -> dict | None:
+        for ref in self.coordinator.data.heating_circuits or []:
+            if ref.get("id", "").endswith(f"/{self._hc_id}"):
+                node = ref.get(self._field)
+                return node if isinstance(node, dict) else None
+        return None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the level the device reports."""
+        value = (self._node() or {}).get("value")
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Write the level and re-read."""
+        setter = getattr(self.coordinator.bhc, self._setter)
+        await setter(self.coordinator.unique_id, self._hc_id, float(value))
+        await self.coordinator.async_request_refresh()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        self.async_write_ha_state()
+
+
+def _build_icom_hc_level_numbers(
+    coordinator: BoschComModuleCoordinatorIcom,
+) -> list[NumberEntity]:
+    """One number per level the circuit reports with a value."""
+    entities: list[NumberEntity] = []
+    for ref in coordinator.data.heating_circuits or []:
+        hc_id = ref["id"].split("/")[-1]
+        for field in _ICOM_HC_LEVELS:
+            node = ref.get(field)
+            if not isinstance(node, dict) or node.get("value") is None:
+                continue
+            entities.append(
+                BoschComIcomHcLevelNumber(
+                    coordinator,
+                    hc_id=hc_id,
+                    field=field,
+                    min_value=float(node.get("minValue", 5)),
+                    max_value=float(node.get("maxValue", 30)),
+                    step=float(node.get("stepSize") or 0.5),
+                )
+            )
     return entities
 
 

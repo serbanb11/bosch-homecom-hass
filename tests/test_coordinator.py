@@ -1592,3 +1592,36 @@ def test_bacon_coordinator_appliance_name_never_overrides_a_title(
 
     coordinator._build({"reported": {"powerEnabled": True}})
     assert coordinator.device_info["name"] == "Living Room AC"
+
+
+# --- bacon: gateway versions reach the device registry (item 4) ---------------
+
+
+async def test_bacon_versions_from_topics_info_update_the_device(hass, entry, firmware):
+    """topics/info replaces the "unknown" firmware the pointt lookup left behind."""
+    from homeassistant.helpers import device_registry as dr  # noqa: PLC0415
+
+    entry.add_to_hass(hass)
+    coordinator = _make_bacon_coordinator(hass, entry, firmware)
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "86DM-1")},
+        sw_version="unknown",
+    )
+
+    coordinator._sync_versions(
+        {"gateway": {"firmwareVersion": "1.0.1", "hardwareVersion": "G10-3"}}
+    )
+
+    assert coordinator.device_info["sw_version"] == "1.0.1"
+    assert coordinator.device_info["hw_version"] == "G10-3"
+    device = registry.async_get(device.id)
+    assert device.sw_version == "1.0.1"
+    assert device.hw_version == "G10-3"
+
+    # Nothing to say: nothing touched.
+    coordinator._sync_versions(None)
+    coordinator._sync_versions({"gateway": {}})
+    assert coordinator.device_info["sw_version"] == "1.0.1"
+    await coordinator.async_shutdown()

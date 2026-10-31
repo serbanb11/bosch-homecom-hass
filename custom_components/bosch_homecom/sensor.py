@@ -1084,8 +1084,12 @@ class BoschComSensorHc(BoschComSensorBase):
                 coolingRoomTempSetpoint_value = (
                     entry.get("coolingRoomTempSetpoint") or {}
                 ).get("value", "unknown")
+                heatingType_value = (entry.get("heatingType") or {}).get(
+                    "value", "unknown"
+                )
 
                 return {
+                    "heatingType": heatingType_value,
                     "currentSuWiMode": currentSuWiMode_value,
                     "heatCoolMode": heatCoolMode_value,
                     "roomTemp": roomTemp_value,
@@ -2445,6 +2449,22 @@ class _ThermostatDeviceSensorBase(CoordinatorEntity, SensorEntity):
             return None
         return (dev.get(key) or {}).get("value")
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Say which zone and heating circuit the room unit belongs to.
+
+        ``zoneId`` and ``assignedHC`` are read with the device but were never
+        shown; they are what lets a room unit be matched to its circuit.
+        """
+        attributes: dict[str, Any] = {}
+        zone = self._get_property("zoneId")
+        if zone is not None:
+            attributes["zone_id"] = zone
+        circuit = self._get_property("assignedHC")
+        if circuit is not None:
+            attributes["heating_circuit"] = circuit
+        return attributes
+
 
 class BoschComThermostatRoomTempSensor(_ThermostatDeviceSensorBase):
     """Thermostat room temperature sensor."""
@@ -2993,6 +3013,20 @@ class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
         """Return sensor value."""
         return self._read_value()
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """On the gateway sensor, the rest of gateway_info the app shows."""
+        if self._scope != "gateway":
+            return {}
+        data = self.coordinator.data
+        info = (getattr(data, "gateway_info", None) if data else None) or {}
+        attributes: dict[str, Any] = {}
+        for key, name in (("uuid", "uuid"), ("time", "time"), ("timezone", "timezone")):
+            node = info.get(key)
+            if isinstance(node, dict) and node.get("value") is not None:
+                attributes[name] = node["value"]
+        return attributes
+
 
 def _build_rrc2_sensors(
     coordinator: BoschComModuleCoordinatorRrc2,
@@ -3428,6 +3462,20 @@ def _build_icom_extra_sensors(
                 name_suffix="brand",
                 unique_suffix="brand",
                 icon="mdi:tag",
+            )
+        )
+    system_bus = getattr(data, "system_bus", None)
+    if isinstance(system_bus, dict) and system_bus.get("value") is not None:
+        # The app supports EMS2_0 only and refuses CAN/EMS1_0 gateways, so
+        # this says why an icom behaves oddly before anyone reads a log.
+        entities.append(
+            BoschComIcomExtraSensor(
+                coordinator,
+                attr="system_bus",
+                sub_key=None,
+                name_suffix="system_bus",
+                unique_suffix="system-bus",
+                icon="mdi:lan",
             )
         )
 

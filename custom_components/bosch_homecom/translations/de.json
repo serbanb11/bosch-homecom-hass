@@ -287,6 +287,9 @@
       },
       "hc1_control_type": {
         "name": "Heizkreis 1 Regelungsart"
+      },
+      "hc_switch_program": {
+        "name": "{circuit} Schaltprogramm"
       }
     },
     "sensor": {
@@ -670,6 +673,9 @@
       },
       "bacon_online": {
         "name": "Verbindung"
+      },
+      "holiday_active": {
+        "name": "{circuit} Urlaub aktiv"
       }
     },
     "number": {
@@ -711,6 +717,12 @@
       },
       "bacon_off_timer": {
         "name": "Ausschalten nach"
+      },
+      "hc_comfort2": {
+        "name": "{circuit} Komfort-Sollwert"
+      },
+      "hc_eco": {
+        "name": "{circuit} Eco-Sollwert"
       }
     },
     "button": {

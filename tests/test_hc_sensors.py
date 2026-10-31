@@ -150,3 +150,17 @@ def test_status_sensor_exposes_the_flow_temperature_attribute():
         coordinator=coordinator, config_entry=MagicMock(), field="hc9"
     )
     assert orphan.extra_state_attributes["actualSupplyTemp"] == "unknown"
+
+
+def test_status_sensor_exposes_the_heating_type():
+    """heatingType is read per circuit and shown as an attribute."""
+    coordinator = _coordinator([{**HC1, "heatingType": {"value": "radiator"}}, HC2])
+    hc1 = BoschComSensorHc(
+        coordinator=coordinator, config_entry=MagicMock(), field="hc1"
+    )
+    hc2 = BoschComSensorHc(
+        coordinator=coordinator, config_entry=MagicMock(), field="hc2"
+    )
+
+    assert hc1.extra_state_attributes["heatingType"] == "radiator"
+    assert hc2.extra_state_attributes["heatingType"] == "unknown"

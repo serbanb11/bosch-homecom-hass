@@ -1,5 +1,6 @@
 """Test climate platform."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.climate import ClimateEntityFeature, HVACMode
@@ -527,6 +528,8 @@ def test_rrc2_clock_mode_target_is_the_program_setpoint_without_override():
     assert climate.hvac_mode == HVACMode.AUTO
     assert climate.target_temperature == 15.0
     assert climate.extra_state_attributes == {
+        "zone_name": None,
+        "zone_icon": None,
         "scheduled_temperature": 15.0,
         "clock_override_active": False,
         "clock_override_temperature": None,
@@ -541,6 +544,8 @@ def test_rrc2_clock_mode_target_is_the_override_while_active():
 
     assert climate.target_temperature == 22.0
     assert climate.extra_state_attributes == {
+        "zone_name": None,
+        "zone_icon": None,
         "scheduled_temperature": 15.0,
         "clock_override_active": True,
         "clock_override_temperature": 22.0,
@@ -565,3 +570,80 @@ def test_rrc2_gateway_without_the_override_resource_behaves_as_before():
 
     assert climate.target_temperature == 15.0
     assert climate.extra_state_attributes["clock_override_active"] is False
+
+
+# ---------------------------------------------------------------------------
+# Data the library fetched but nothing showed (gap analysis item 4)
+# ---------------------------------------------------------------------------
+
+
+def test_rrc2_zone_name_and_icon_are_attributes_not_the_name():
+    """The room name the user gave the zone rides along; the entity name stays."""
+    coordinator = _make_rrc2_coordinator(user_mode="clock")
+    zone = coordinator.data.zones[0]
+    zone["name"] = {"value": "Living room"}
+    zone["icon"] = {"value": "livingroom"}
+    climate = _make_zone_climate(coordinator)
+
+    assert climate.translation_placeholders == {"zone": "zn1"}
+    attrs = climate.extra_state_attributes
+    assert attrs["zone_name"] == "Living room"
+    assert attrs["zone_icon"] == "livingroom"
+
+
+def test_rrc2_zone_without_name_reports_none():
+    climate = _make_zone_climate(_make_rrc2_coordinator(user_mode="clock"))
+    assert climate.extra_state_attributes["zone_name"] is None
+    assert climate.extra_state_attributes["zone_icon"] is None
+
+
+def test_rac_schedule_override_attribute_follows_temporary_setting():
+    """switchPrograms/temporarySetting/enabled says a manual change holds."""
+    coordinator = _make_rac_coordinator(_FULL_RAC_FUNCTIONS)
+    climate = BoschComRacClimate(coordinator=coordinator, field="ac")
+    assert climate.extra_state_attributes == {}
+
+    coordinator.data = replace(
+        coordinator.data,
+        switch_programs=[
+            {"id": "/airConditioning/switchPrograms/activeProgram", "value": "1"},
+            {
+                "id": "/airConditioning/switchPrograms/temporarySetting/enabled",
+                "value": "on",
+            },
+        ],
+    )
+    assert climate.extra_state_attributes == {"schedule_override_active": True}
+
+    coordinator.data.switch_programs[1]["value"] = "off"
+    assert climate.extra_state_attributes == {"schedule_override_active": False}
+
+
+def test_icom_temporary_setpoint_attributes():
+    """An icom shows the setpoint it holds until the next switch point."""
+    coordinator = _make_icom_coordinator(suwi="heating", operation_mode="auto")
+    hc1 = {
+        **coordinator.data.heating_circuits[0],
+        "temporaryRoomSetpoint": {"value": 23},
+    }
+    coordinator.data = replace(coordinator.data, heating_circuits=[hc1])
+    climate = _make_climate(coordinator)
+
+    assert climate.extra_state_attributes == {
+        "temporary_room_setpoint": 23,
+        "temporary_setpoint_active": True,
+    }
+
+    # 0 is "off" and -1 clears it: neither is an active override.
+    for idle in (0, -1):
+        hc1 = {**hc1, "temporaryRoomSetpoint": {"value": idle}}
+        coordinator.data = replace(coordinator.data, heating_circuits=[hc1])
+        assert climate.extra_state_attributes == {
+            "temporary_room_setpoint": None,
+            "temporary_setpoint_active": False,
+        }
+
+
+def test_k40_circuit_without_the_node_has_no_temporary_attributes():
+    coordinator = _make_k40_coordinator(suwi="forced", heatcool="heating")
+    assert _make_climate(coordinator).extra_state_attributes == {}

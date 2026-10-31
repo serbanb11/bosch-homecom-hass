@@ -285,6 +285,9 @@
       },
       "hc1_control_type": {
         "name": "Circuit 1 regeltype"
+      },
+      "hc_switch_program": {
+        "name": "{circuit} schakelprogramma"
       }
     },
     "sensor": {
@@ -668,6 +671,9 @@
       },
       "bacon_online": {
         "name": "Verbinding"
+      },
+      "holiday_active": {
+        "name": "{circuit} vakantie actief"
       }
     },
     "number": {
@@ -709,6 +715,12 @@
       },
       "bacon_off_timer": {
         "name": "Uitschakelen na"
+      },
+      "hc_comfort2": {
+        "name": "{circuit} comfort instelpunt"
+      },
+      "hc_eco": {
+        "name": "{circuit} eco instelpunt"
       }
     },
     "button": {
