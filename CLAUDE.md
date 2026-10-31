@@ -13,8 +13,8 @@ Home Assistant custom component for Bosch HomeCom Easy-connected appliances. Clo
 |------|-------|-------------|------------|
 | `rac` | Residential Air Conditioning | `BoschComModuleCoordinatorRac` | `HomeComRac` |
 | `k30`, `k40` | Bosch boiler | `BoschComModuleCoordinatorK40` | `HomeComK40` |
-| `icom` | Bosch Heat Pump | `BoschComModuleCoordinatorK40` | `HomeComK40` |
-| `rrc2` | Bosch Thermostat | `BoschComModuleCoordinatorK40` | `HomeComK40` |
+| `icom` | Bosch Heat Pump | `BoschComModuleCoordinatorIcom` | `HomeComIcom` |
+| `rrc2` | Bosch Thermostat | `BoschComModuleCoordinatorRrc2` | `HomeComRrc2` |
 | `wddw2` | Bosch Water Heater | `BoschComModuleCoordinatorWddw2` | `HomeComWddw2` |
 | `bacon_rac` | Matter-commissioned AC (MQTT shadow) | `BoschComModuleCoordinatorBaconRac` | `HomeComBaconRac` |
 | `bacon_ap` | Matter-commissioned air purifier (Air 4000i) | `BoschComModuleCoordinatorBaconRac` | `HomeComBaconAp` |
@@ -36,7 +36,7 @@ Each platform's `async_setup_entry` iterates coordinators, checks `deviceType`, 
 
 ### Coordinator Pattern
 
-All four coordinator classes (`Generic`, `Rac`, `K40`, `Wddw2`) in `coordinator.py` follow identical structure:
+The REST coordinator classes (`Generic`, `Rac`, `K40`, `Wddw2`, `Icom`, `Rrc2`, `Commodule`) in `coordinator.py` follow identical structure:
 - Inherit `DataUpdateCoordinator[BHCDevice*]`
 - Store `self.bhc` (API client), `self.unique_id`, `self.device`, `self.entry`, `self.auth_provider`
 - `_async_update_data()` refreshes tokens (if `auth_provider`), calls `self.bhc.async_update()`, returns typed data object
@@ -68,7 +68,7 @@ All entities:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Entry point: coordinator creation, service registration, options listener |
-| `coordinator.py` | 4 coordinator classes (Generic, Rac, K40, Wddw2) |
+| `coordinator.py` | Coordinator classes (Generic, Rac, K40, Wddw2, Icom, Rrc2, Commodule, BaconRac) |
 | `config_flow.py` | ConfigFlow (user/browser/devices steps), OptionsFlow, reauth/reconfigure |
 | `const.py` | Constants, device model map, attribute names, sensor descriptors, login URL |
 | `climate.py` | `BoschComRacClimate` (AC), `BoschComK40Climate` (heating circuits) |
@@ -177,6 +177,6 @@ Options: `{"update_seconds": int}` (default 60)
 
 - API responses may contain `None` for nested fields (e.g., `entry["operationMode"]` can be `None`). Always guard with null checks before calling `.get()`.
 - The first coordinator in the list is the `auth_provider` responsible for token refresh. Others reuse the shared session.
-- Device types `k30`, `k40`, `icom`, `rrc2` all use the same `K40` coordinator and API client but may have different data available.
+- `k30` and `k40` share the `K40` coordinator and client; `icom` and `rrc2` have their own (`HomeComIcom` subclasses `HomeComK40` with a smaller endpoint set, `HomeComRrc2` is separate), so the data they carry differs.
 - Entity unique IDs embed the device ID and zone/circuit field — changing these breaks existing entities.
 - `CONF_DEVICES` key format is `{deviceId}_{deviceType}` (underscore-separated).

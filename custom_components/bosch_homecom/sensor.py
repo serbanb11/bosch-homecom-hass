@@ -720,6 +720,53 @@ class BoschComSensorBase(CoordinatorEntity, SensorEntity):
         )
 
 
+def _notification_code(item: Any) -> str | None:
+    """Return a notification's ``dcd-ccd`` code, or None for a malformed entry."""
+    if not isinstance(item, dict) or "dcd" not in item:
+        return None
+    if "ccd" in item:
+        return f"{item['dcd']}-{item['ccd']}"
+    return str(item["dcd"])
+
+
+def _notification_is_active(item: dict) -> bool:
+    """Return whether a notification is current rather than history.
+
+    The gateway keeps cleared faults in the list with ``act`` set to ``H``;
+    the app hides those from the active list (ErrorClassProviderImpl).
+    """
+    return item.get("act") != "H"
+
+
+def _notifications_state(notifications: Any) -> str:
+    """Return the active notification codes, one per line, or an empty string."""
+    return "\n".join(
+        code
+        for item in (notifications if isinstance(notifications, list) else [])
+        if (code := _notification_code(item)) is not None
+        and _notification_is_active(item)
+    )
+
+
+def _notifications_attributes(notifications: Any) -> dict[str, Any]:
+    """Return the full list, history included, with language-neutral fields.
+
+    ``dlv`` is the error class the app reads (``8`` = fatal), ``t`` the
+    gateway's timestamp; both are passed through as the API sends them.
+    """
+    history = [
+        {
+            "code": code,
+            "active": _notification_is_active(item),
+            "fatal": item.get("dlv") == "8",
+            "timestamp": item.get("t"),
+        }
+        for item in (notifications if isinstance(notifications, list) else [])
+        if (code := _notification_code(item)) is not None
+    ]
+    return {"history": history} if history else {}
+
+
 class BoschComSensorNotificationsRac(BoschComSensorBase):
     """BoschComSensor notifications."""
 
@@ -750,8 +797,13 @@ class BoschComSensorNotificationsRac(BoschComSensorBase):
 
     @property
     def state(self):
-        """Return Notifications."""
-        return self.coordinator.data.notifications
+        """Return the active notification codes."""
+        return _notifications_state(self.coordinator.data.notifications)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return every notification, cleared ones included."""
+        return _notifications_attributes(self.coordinator.data.notifications)
 
 
 class BoschComSensorNotificationsK40(BoschComSensorBase):
@@ -784,12 +836,13 @@ class BoschComSensorNotificationsK40(BoschComSensorBase):
 
     @property
     def state(self):
-        """Return Notifications."""
-        return "\n".join(
-            f"{item['dcd']}-{item['ccd']}"
-            for item in self.coordinator.data.notifications or []
-            if "dcd" in item and "ccd" in item
-        )
+        """Return the active notification codes, cleared faults left out."""
+        return _notifications_state(self.coordinator.data.notifications)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return every notification, cleared ones included."""
+        return _notifications_attributes(self.coordinator.data.notifications)
 
 
 class BoschComSensorNotificationsWddw2(BoschComSensorBase):
@@ -1697,20 +1750,27 @@ class BoschComSensorHs(BoschComSensorBase):
             k: v for d in numberOfStarts if isinstance(d, dict) for k, v in d.items()
         }
 
+        # An icom names these supplyTemperature, modulation and workingTime
+        # (icom.py); fall back to those so its status sensor is not all unknown.
         returnTemperature = _value_with_unit(hs.get("returnTemperature"))
-        actualSupplyTemperature = _value_with_unit(hs.get("actualSupplyTemperature"))
-        actualModulation = _value_with_unit(hs.get("actualModulation"))
+        actualSupplyTemperature = _value_with_unit(
+            hs.get("actualSupplyTemperature") or hs.get("supplyTemperature")
+        )
+        actualModulation = _value_with_unit(
+            hs.get("actualModulation") or hs.get("modulation")
+        )
         collectorInflowTemp = _value_with_unit(hs.get("collectorInflowTemp"))
         collectorOutflowTemp = _value_with_unit(hs.get("collectorOutflowTemp"))
 
         actualHeatDemand = (hs.get("actualHeatDemand") or {}).get("values", ["unknown"])
 
-        totalWorkingTime = _value_with_unit(hs.get("totalWorkingTime"))
+        working_time = hs.get("totalWorkingTime") or hs.get("workingTime") or {}
+        totalWorkingTime = _value_with_unit(working_time)
 
         systemPressure = (hs.get("systemPressure") or {}).get("value", "unknown")
 
         totalWorkingTimeReadable = self.seconds_to_readable(
-            int((hs.get("totalWorkingTime") or {}).get("value", 0) or 0)
+            int(working_time.get("value", 0) or 0)
         )
 
         result = {

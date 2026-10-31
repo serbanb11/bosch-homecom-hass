@@ -128,3 +128,22 @@ def test_hs_sensor_unreported_readings_are_unknown():
     assert attrs["actualSupplyTemperature"] == "unknown"
     # A value without a unit keeps the value instead of appending "unknown".
     assert attrs["totalWorkingTime"] == "21084230.0"
+
+
+def test_hs_sensor_reads_the_icom_key_names():
+    """An icom names modulation, supply and working time differently (icom.py)."""
+    sensor = _hs_sensor(
+        {
+            "type": {"value": "heatpump"},
+            "supplyTemperature": {"value": 35.5, "unitOfMeasure": "C"},
+            "modulation": {"value": 42.0, "unitOfMeasure": "%"},
+            "workingTime": {"value": 7200, "unitOfMeasure": "s"},
+        }
+    )
+
+    assert sensor.state == "heatpump"
+    attrs = sensor.extra_state_attributes
+    assert attrs["actualSupplyTemperature"] == "35.5C"
+    assert attrs["actualModulation"] == "42.0%"
+    assert attrs["totalWorkingTime"] == "7200s"
+    assert attrs["totalWorkingTimeReadable"] == "2 hours"
