@@ -626,7 +626,7 @@
         "name": "RF Connection"
       },
       "local_hc_pump_status": {
-        "name": "{circuit} circulation pump"
+        "name": "{circuit} heating circuit pump"
       },
       "bacon_online": {
         "name": "Connectivity"

@@ -97,7 +97,7 @@ It has been verified on a Bosch Connect-Key K 40 RF; reports from the other bran
 The integration reloads and adds:
 
 - **Local-only sensors** the cloud does not offer: compressor and electric heater power (W), the refrigerant circuit (hot gas, suction gas, compressor, high/low pressure and condenser supply temperatures), compressor and outdoor fan speed, pump flow, and heating / hot water start and runtime counters. The less commonly useful ones are disabled by default
-- **Heating-circuit pump status** binary sensors (`on` / `off`) for circuits whose status the gateway serves. These indicate the pump's reported operating state, not measured water flow; a missing resource creates no entity, and a local outage makes an existing entity unavailable
+- **Heating-circuit pump status** binary sensors (`on` / `off`) for circuits whose status the gateway serves. These indicate the pump's reported operating state, not measured water flow, and they are the heating-circuit pumps rather than the DHW circulation pump or the heat-source primary pump; a missing resource creates no entity, and a local outage makes an existing entity unavailable
 - A **Data source** diagnostic sensor (`both` / `local` / `cloud`), so a cloud outage can be told apart from a LAN problem
 - **Outage tolerance:** while the cloud fails but the gateway answers locally, cloud-backed entities keep their last values for up to 5 refreshes instead of going unavailable
 
