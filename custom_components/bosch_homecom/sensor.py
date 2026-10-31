@@ -28,7 +28,6 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 from homeassistant.core import callback
-from homeassistant.util import dt as dt_util
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -36,6 +35,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
+from homeassistant.util import dt as dt_util
 
 from .bacon import BACON_AIR_QUALITY_OPTIONS, bacon_air_quality_level, bacon_pm25_level
 
@@ -3522,7 +3522,7 @@ class BoschComWddw2HeatingActivePowerSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-heating-active-power"
-        self._attr_name = "Heating Active Power"
+        self._attr_translation_key = "heating_active_power"
         self._attr_suggested_object_id = "heating_active_power"
 
     @property
@@ -3589,7 +3589,7 @@ class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-dhw-water-today"
-        self._attr_name = "DHW Water Consumption Today"
+        self._attr_translation_key = "dhw_water_consumption_today"
         self._attr_suggested_object_id = "dhw_water_consumption_today"
 
     @property
@@ -3613,7 +3613,7 @@ class BoschComWddw2HealthStatusSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-system-health-status"
-        self._attr_name = "System Health Status"
+        self._attr_translation_key = "system_health_status"
         self._attr_suggested_object_id = "system_health_status"
 
     @property
