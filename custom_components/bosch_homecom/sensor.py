@@ -183,6 +183,14 @@ async def async_setup_entry(
                         field=zone_id,
                     )
                 )
+                if (ref.get("filterRemainingTime") or {}).get("value") is not None:
+                    entities.append(
+                        BoschComSensorVentilationFilter(
+                            coordinator=coordinator,
+                            config_entry=config_entry,
+                            zone_id=zone_id,
+                        )
+                    )
             # Heating circuits
             for ref in coordinator.data.heating_circuits or []:
                 hc_id = ref["id"].split("/")[-1]
@@ -1288,6 +1296,55 @@ class BoschComSensorVentilation(BoschComSensorBase):
         return {}
 
 
+class BoschComSensorVentilationFilter(BoschComSensorBase):
+    """Time left until the ventilation unit's filter needs changing.
+
+    Read from /ventilation/{zone}/filter/remainingTime, which the gateway
+    reports in minutes. Created only for zones that serve it.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_suggested_unit_of_measurement = UnitOfTime.DAYS
+    _attr_suggested_display_precision = 0
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        config_entry: config_entries.ConfigEntry,
+        zone_id: str,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{zone_id}-filter_remaining_time",
+            icon="mdi:air-filter",
+        )
+        self._zone_id = zone_id
+        self._attr_translation_key = "ventilation_filter_remaining_time"
+        self._attr_translation_placeholders = {"zone": zone_id}
+        self._attr_suggested_object_id = f"{zone_id}_filter_remaining_time"
+        self._attr_should_poll = False
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the remaining filter time in minutes."""
+        for entry in self.coordinator.data.ventilation or []:
+            if entry.get("id") == "/ventilation/" + self._zone_id:
+                value = (entry.get("filterRemainingTime") or {}).get("value")
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    return None
+                return value
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
 # heat_sources node -> translation key. Read from
 # /heatSources/hs1/brineCircuit/collector{In,Out}flowTemp by homecom_alt.
 BRINE_TEMP_FIELDS: Final[dict[str, str]] = {
@@ -1549,6 +1606,17 @@ class BoschComSensorSolarCircuit(BoschComSensorBase):
             return None
 
 
+def _value_with_unit(node) -> str:
+    """Return a reading as "<value><unit>", or "unknown" when it has no value.
+
+    Concatenating the two defaults gave "unknownunknown" for every reading the
+    device does not report (#178).
+    """
+    if not isinstance(node, dict) or node.get("value") is None:
+        return "unknown"
+    return f"{node['value']}{node.get('unitOfMeasure') or ''}"
+
+
 class BoschComSensorHs(BoschComSensorBase):
     """BoschComSensorHs sensor."""
 
@@ -1628,33 +1696,17 @@ class BoschComSensorHs(BoschComSensorBase):
             k: v for d in numberOfStarts if isinstance(d, dict) for k, v in d.items()
         }
 
-        returnTemperature = str(
-            (hs.get("returnTemperature") or {}).get("value", "unknown")
-        ) + (hs.get("returnTemperature") or {}).get("unitOfMeasure", "unknown")
-
-        actualSupplyTemperature = str(
-            (hs.get("actualSupplyTemperature") or {}).get("value", "unknown")
-        ) + (hs.get("actualSupplyTemperature") or {}).get("unitOfMeasure", "unknown")
-
-        actualModulation = str(
-            (hs.get("actualModulation") or {}).get("value", "unknown")
-        ) + (hs.get("actualModulation") or {}).get("unitOfMeasure", "unknown")
-
-        collectorInflowTemp = str(
-            (hs.get("collectorInflowTemp") or {}).get("value", "unknown")
-        ) + (hs.get("collectorInflowTemp") or {}).get("unitOfMeasure", "unknown")
-
-        collectorOutflowTemp = str(
-            (hs.get("collectorOutflowTemp") or {}).get("value", "unknown")
-        ) + (hs.get("collectorOutflowTemp") or {}).get("unitOfMeasure", "unknown")
+        returnTemperature = _value_with_unit(hs.get("returnTemperature"))
+        actualSupplyTemperature = _value_with_unit(hs.get("actualSupplyTemperature"))
+        actualModulation = _value_with_unit(hs.get("actualModulation"))
+        collectorInflowTemp = _value_with_unit(hs.get("collectorInflowTemp"))
+        collectorOutflowTemp = _value_with_unit(hs.get("collectorOutflowTemp"))
 
         actualHeatDemand = (hs.get("actualHeatDemand") or {}).get("values", ["unknown"])
 
-        totalWorkingTime = str(
-            (hs.get("totalWorkingTime") or {}).get("value", "unknown")
-        ) + (hs.get("totalWorkingTime") or {}).get("unitOfMeasure", "unknown")
+        totalWorkingTime = _value_with_unit(hs.get("totalWorkingTime"))
 
-        systemPressure = (hs.get("systemPressure") or {}).get("value", ["unknown"])
+        systemPressure = (hs.get("systemPressure") or {}).get("value", "unknown")
 
         totalWorkingTimeReadable = self.seconds_to_readable(
             int((hs.get("totalWorkingTime") or {}).get("value", 0) or 0)
@@ -2454,8 +2506,22 @@ class BoschComThermostatSetpointSensor(_ThermostatDeviceSensorBase):
         return None
 
 
+# /devices/{id}/battery is a stringValue, not a percentage.
+THERMOSTAT_BATTERY_STATES: dict[str, str] = {
+    "BAT_NORMAL": "normal",
+    "BAT_LOW": "low",
+    "BAT_TOO_LOW": "too_low",
+    "BAT_FOTA_FORBIDDEN": "fota_forbidden",
+    "NO_BAT": "no_battery",
+}
+
+
 class BoschComThermostatBatterySensor(_ThermostatDeviceSensorBase):
-    """Thermostat battery sensor."""
+    """Thermostat battery state.
+
+    The gateway reports a battery state (``BAT_NORMAL``, ``BAT_LOW``, ...), not
+    a level. Read as a percentage, the sensor stayed unknown on every device.
+    """
 
     def __init__(self, coordinator, config_entry, dev_id) -> None:
         """Initialize battery sensor."""
@@ -2468,20 +2534,14 @@ class BoschComThermostatBatterySensor(_ThermostatDeviceSensorBase):
         )
         self._attr_translation_key = "thermostat_battery"
         self._attr_suggested_object_id = f"{dev_id}_battery"
-        self._attr_device_class = SensorDeviceClass.BATTERY
-        self._attr_native_unit_of_measurement = "%"
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = list(THERMOSTAT_BATTERY_STATES.values())
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
-    def native_value(self):
-        """Return battery level."""
-        val = self._get_property("battery")
-        if val is not None:
-            try:
-                return float(val)
-            except (TypeError, ValueError):
-                return None
-        return None
+    def native_value(self) -> str | None:
+        """Return the battery state, or None for a value we do not know."""
+        return THERMOSTAT_BATTERY_STATES.get(self._get_property("battery"))
 
 
 class BoschComThermostatSignalSensor(_ThermostatDeviceSensorBase):

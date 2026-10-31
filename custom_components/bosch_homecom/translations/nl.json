@@ -359,8 +359,18 @@
       "thermostat_setpoint": {
         "name": "Kamer Instelpunt"
       },
+      "ventilation_filter_remaining_time": {
+        "name": "Ventilatie {zone} resterende filtertijd"
+      },
       "thermostat_battery": {
-        "name": "Batterij"
+        "name": "Batterij",
+        "state": {
+          "normal": "Normaal",
+          "low": "Laag",
+          "too_low": "Te laag",
+          "fota_forbidden": "Te laag voor firmware-update",
+          "no_battery": "Geen batterij"
+        }
       },
       "thermostat_signal": {
         "name": "Signaalsterkte"
@@ -637,6 +647,9 @@
       },
       "thermostat_rf_status": {
         "name": "RF Verbinding"
+      },
+      "local_hc_pump_status": {
+        "name": "{circuit} cv-pomp"
       },
       "bacon_online": {
         "name": "Verbinding"

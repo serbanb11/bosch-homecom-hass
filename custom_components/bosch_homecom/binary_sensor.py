@@ -30,6 +30,7 @@ async def async_setup_entry(
     """Set up the BoschCom binary sensors."""
     coordinators = config_entry.runtime_data
     entities = []
+    pending_pumps = []
     for coordinator in coordinators:
         if coordinator.data.device["deviceType"] == "commodule":
             entities.append(BoschComCommoduleNetworkSensor(coordinator=coordinator))
@@ -42,11 +43,51 @@ async def async_setup_entry(
                             coordinator=coordinator, dev_id=dev_id
                         )
                     )
+        if (
+            isinstance(coordinator, BoschComModuleCoordinatorK40)
+            and coordinator.local_first is not None
+        ):
+            pending = set()
+            resources = (
+                getattr(getattr(coordinator, "local_data", None), "resources", {}) or {}
+            )
+            for circuit in coordinator.data.heating_circuits or []:
+                circuit_id = circuit["id"].split("/")[-1]
+                if f"/heatingCircuits/{circuit_id}/pumpStatus" in resources:
+                    entities.append(
+                        BoschComK40LocalPumpStatusSensor(coordinator, circuit_id)
+                    )
+                else:
+                    pending.add(circuit_id)
+            if pending:
+                pending_pumps.append((coordinator, pending))
         if coordinator.data.device["deviceType"] in BACON_DEVICE_TYPES:
             # Comfort features are switch entities (see switch.py); only the
             # connectivity sensor lives here.
             entities.append(BoschComBaconOnlineSensor(coordinator=coordinator))
     async_add_entities(entities)
+    for coordinator, pending in pending_pumps:
+
+        @callback
+        def _add_pumps_when_served(coordinator=coordinator, pending=pending) -> None:
+            resources = (
+                getattr(getattr(coordinator, "local_data", None), "resources", {}) or {}
+            )
+            present = {
+                circuit_id
+                for circuit_id in pending
+                if f"/heatingCircuits/{circuit_id}/pumpStatus" in resources
+            }
+            if present:
+                pending.difference_update(present)
+                async_add_entities(
+                    BoschComK40LocalPumpStatusSensor(coordinator, circuit_id)
+                    for circuit_id in sorted(present)
+                )
+
+        config_entry.async_on_unload(
+            coordinator.async_add_listener(_add_pumps_when_served)
+        )
 
 
 class BoschComCommoduleNetworkSensor(CoordinatorEntity, BinarySensorEntity):
@@ -149,6 +190,52 @@ class BoschComThermostatRfStatusSensor(CoordinatorEntity, BinarySensorEntity):
             self._attr_is_on = None
         else:
             self._attr_is_on = status.lower() in ("online", "connected", "on")
+        self.async_write_ha_state()
+
+
+class BoschComK40LocalPumpStatusSensor(CoordinatorEntity, BinarySensorEntity):
+    """K40 circuit pump status from the read-only Local API.
+
+    This is an on/off status, not a measured water-flow rate. A missing
+    resource or local outage must be unavailable rather than falsely off.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_should_poll = False
+    _attr_translation_key = "local_hc_pump_status"
+
+    def __init__(
+        self, coordinator: BoschComModuleCoordinatorK40, circuit_id: str
+    ) -> None:
+        super().__init__(coordinator)
+        self._resource = f"/heatingCircuits/{circuit_id}/pumpStatus"
+        self._attr_unique_id = f"{coordinator.unique_id}-{circuit_id}-local_pump_status"
+        self._attr_device_info = coordinator.device_info
+        self._attr_translation_placeholders = {"circuit": circuit_id.upper()}
+        self._attr_is_on = self._read_status()
+
+    def _read_status(self) -> bool | None:
+        local = getattr(self.coordinator, "local_data", None)
+        resources = getattr(local, "resources", None) or {}
+        payload = resources.get(self._resource)
+        value = payload.get("value") if isinstance(payload, dict) else None
+        if value == "on":
+            return True
+        if value == "off":
+            return False
+        return None
+
+    @property
+    def available(self) -> bool:
+        return bool(
+            getattr(self.coordinator, "local_healthy", False)
+            and self._attr_is_on is not None
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._attr_is_on = self._read_status()
         self.async_write_ha_state()
 
 
