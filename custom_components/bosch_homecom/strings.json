@@ -387,6 +387,9 @@
       "thermostat_setpoint": {
         "name": "Room Setpoint"
       },
+      "ventilation_filter_remaining_time": {
+        "name": "Ventilation {zone} filter remaining time"
+      },
       "thermostat_battery": {
         "name": "Battery",
         "state": {

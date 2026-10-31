@@ -359,6 +359,9 @@
       "thermostat_setpoint": {
         "name": "Kamer Instelpunt"
       },
+      "ventilation_filter_remaining_time": {
+        "name": "Ventilatie {zone} resterende filtertijd"
+      },
       "thermostat_battery": {
         "name": "Batterij",
         "state": {
