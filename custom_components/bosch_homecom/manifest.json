@@ -14,7 +14,7 @@
     "homecom_alt"
   ],
   "requirements": [
-    "homecom_alt>=1.9.0"
+    "homecom_alt>=1.9.1"
   ],
-  "version": "1.6.0"
+  "version": "1.6.1"
 }
