@@ -1052,6 +1052,13 @@ async def test_local_sensor_reads_scalar_and_emon_values(hass, entry, device, fi
     assert power.available is True
 
 
+def test_pump_volume_flow_is_litres_per_hour() -> None:
+    """The gateway reports the pump volume flow in l/h, not L/min (issue #211)."""
+    flow = {d.key: d for d in LOCAL_SENSORS}["local_pump_volume_flow"]
+    assert flow.native_unit_of_measurement == "L/h"
+    assert flow.device_class == "volume_flow_rate"
+
+
 @pytest.mark.asyncio
 async def test_local_sensors_add_to_the_platform(hass, entry, device, firmware, caplog):
     """Every local sensor survives being added by Home Assistant (issue #184).
