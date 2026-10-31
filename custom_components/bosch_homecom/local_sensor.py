@@ -148,7 +148,9 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         key="local_pump_volume_flow",
         translation_key="local_pump_volume_flow",
         resource="/heatSources/hs1/pumpVolumeFlow",
-        native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_MINUTE,
+        # The gateway reports l/h (API spec: unitOfMeasure "l/h").
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_HOUR,
         state_class=_MEASUREMENT,
         entity_registry_enabled_default=False,
     ),

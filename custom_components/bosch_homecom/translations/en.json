@@ -359,8 +359,18 @@
       "thermostat_setpoint": {
         "name": "Room Setpoint"
       },
+      "ventilation_filter_remaining_time": {
+        "name": "Ventilation {zone} filter remaining time"
+      },
       "thermostat_battery": {
-        "name": "Battery"
+        "name": "Battery",
+        "state": {
+          "normal": "Normal",
+          "low": "Low",
+          "too_low": "Too low",
+          "fota_forbidden": "Too low for firmware update",
+          "no_battery": "No battery"
+        }
       },
       "thermostat_signal": {
         "name": "Signal Strength"
@@ -413,6 +423,19 @@
           "frost": "Frost protection"
         }
       },
+      "compressor_status": {
+        "name": "Compressor status",
+        "state": {
+          "off": "Off",
+          "heating": "Heating",
+          "cooling": "Cooling",
+          "dhw": "Hot water",
+          "pool": "Pool",
+          "pool_heat": "Pool heating",
+          "defrost": "Defrost",
+          "alarm": "Alarm"
+        }
+      },
       "compressor_starts": {
         "name": "Compressor starts"
       },
@@ -424,7 +447,10 @@
           "high": "High (Comfort)",
           "eco": "Eco+",
           "manual": "Manual",
-          "bath": "Safety Temperature",
+          "hand_wash": "Hand wash",
+          "shower": "Shower",
+          "bath": "Bath",
+          "dish_wash": "Dishwashing",
           "ownprogram": "Own program"
         }
       },
@@ -637,6 +663,9 @@
       "thermostat_rf_status": {
         "name": "RF Connection"
       },
+      "local_hc_pump_status": {
+        "name": "{circuit} heating circuit pump"
+      },
       "bacon_online": {
         "name": "Connectivity"
       }
@@ -782,7 +811,10 @@
           "high": "High (Comfort)",
           "eco": "Eco+",
           "manual": "Manual",
-          "bath": "Safety Temperature",
+          "hand_wash": "Hand wash",
+          "shower": "Shower",
+          "bath": "Bath",
+          "dish_wash": "Dishwashing",
           "ownprogram": "Own program"
         }
       }

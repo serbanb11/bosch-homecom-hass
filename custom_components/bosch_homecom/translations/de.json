@@ -361,8 +361,18 @@
       "thermostat_setpoint": {
         "name": "Raumsollwert"
       },
+      "ventilation_filter_remaining_time": {
+        "name": "Lüftung {zone} Filter-Restlaufzeit"
+      },
       "thermostat_battery": {
-        "name": "Batterie"
+        "name": "Batterie",
+        "state": {
+          "normal": "Normal",
+          "low": "Schwach",
+          "too_low": "Zu schwach",
+          "fota_forbidden": "Zu schwach für Firmware-Update",
+          "no_battery": "Keine Batterie"
+        }
       },
       "thermostat_signal": {
         "name": "Signalstärke"
@@ -415,6 +425,19 @@
           "frost": "Frostschutz"
         }
       },
+      "compressor_status": {
+        "name": "Kompressorstatus",
+        "state": {
+          "off": "Aus",
+          "heating": "Heizen",
+          "cooling": "Kühlen",
+          "dhw": "Warmwasser",
+          "pool": "Pool",
+          "pool_heat": "Poolheizung",
+          "defrost": "Abtauen",
+          "alarm": "Störung"
+        }
+      },
       "compressor_starts": {
         "name": "Kompressor Starts"
       },
@@ -426,7 +449,10 @@
           "high": "Hoch (Komfort)",
           "eco": "Eco+",
           "manual": "Manuell",
-          "bath": "Sicherheitstemperatur",
+          "hand_wash": "Händewaschen",
+          "shower": "Dusche",
+          "bath": "Bad",
+          "dish_wash": "Geschirrspülen",
           "ownprogram": "Eigenes Programm"
         }
       },
@@ -639,6 +665,9 @@
       "thermostat_rf_status": {
         "name": "Funkverbindung"
       },
+      "local_hc_pump_status": {
+        "name": "{circuit} Heizkreispumpe"
+      },
       "bacon_online": {
         "name": "Verbindung"
       }
@@ -784,7 +813,10 @@
           "high": "Hoch (Komfort)",
           "eco": "Eco+",
           "manual": "Manuell",
-          "bath": "Sicherheitstemperatur",
+          "hand_wash": "Händewaschen",
+          "shower": "Dusche",
+          "bath": "Bad",
+          "dish_wash": "Geschirrspülen",
           "ownprogram": "Eigenes Programm"
         }
       }

@@ -17,7 +17,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, api_value_to_state_key
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorWddw2
 
 
@@ -164,8 +164,17 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     """Representation of a BoschComWddw2 water heater entity.
 
-    Operation modes are exposed as raw API values (``manual``, ``bath``, ...)
-    and localized via the entity ``state`` translations. Read-only devices
+    Operation modes are exposed as lowercase state keys derived from the API
+    values (``manual``, ``hand_wash``, ``bath``, ...) and localized via the
+    entity ``state`` translations. Which modes exist is read from the device's
+    ``allowedValues``; e.g. ``dishWash`` only appears while the safety
+    temperature is off.
+
+    ``manual`` is not a stored preset: the device reports it whenever the
+    setpoint matches none of its temperature levels, and ignores a plain
+    ``manual`` write. Selecting it therefore re-applies the last manual
+    setpoint seen on this entity. (The Bosch app's "custom" temperature lives
+    in the app only and is not exposed by the API.) Read-only devices
     (e.g. Tronic TR4001, ``writeable == 0``) drop the corresponding supported
     feature so the UI does not offer non-functional controls.
     """
@@ -194,6 +203,10 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         self._attr_max_temp = 60
         self._attr_target_temperature = None
         self._attr_current_temperature = None
+        # State key -> raw API value, so writes use the device vocabulary.
+        self._api_modes: dict[str, str] = {}
+        # Last setpoint seen while the device reported ``manual``.
+        self._last_manual_temp: float | None = None
 
         # Populate right away since the data is already in the coordinator.
         self.set_attr()
@@ -219,8 +232,22 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         if (ref.get("operationMode") or {}).get("writeable", 1) == 0:
             return
         await self.coordinator.bhc.async_put_dhw_operation_mode(
-            self.coordinator.unique_id, self.field, operation_mode
+            self.coordinator.unique_id,
+            self.field,
+            self._api_modes.get(operation_mode, operation_mode),
         )
+        manual = (ref.get("tempLevel") or {}).get("manual") or {}
+        if (
+            operation_mode == "manual"
+            and self._last_manual_temp is not None
+            and manual.get("writeable")
+        ):
+            await self.coordinator.bhc.async_set_dhw_temp_level(
+                self.coordinator.unique_id,
+                self.field,
+                "manual",
+                int(self._last_manual_temp),
+            )
         await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
@@ -268,9 +295,10 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             op = op_node.get("value")
             allowed = op_node.get("allowedValues") or []
             if allowed:
-                self._attr_operation_list = allowed
+                self._api_modes = {api_value_to_state_key(v): v for v in allowed}
+                self._attr_operation_list = list(self._api_modes)
             if op:
-                self._attr_current_operation = op
+                self._attr_current_operation = api_value_to_state_key(op)
             if op_node.get("writeable", 1) != 0:
                 features |= WaterHeaterEntityFeature.OPERATION_MODE
 
@@ -282,6 +310,9 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             unit_str = manual.get("unitOfMeasure")
             if unit_str:
                 self._attr_temperature_unit = _parse_temp_unit(unit_str)
+
+            if op == "manual" and isinstance(manual.get("value"), (int, float)):
+                self._last_manual_temp = manual["value"]
 
             set_for_mode = (temp_level.get(op) or {}).get("value")
             if isinstance(set_for_mode, (int, float)):

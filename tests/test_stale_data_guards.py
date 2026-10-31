@@ -83,8 +83,9 @@ def test_hs_sensor_none_heat_sources_survives():
 
     assert sensor.state is None
     attrs = sensor.extra_state_attributes
-    assert attrs["returnTemperature"] == "unknownunknown"
+    assert attrs["returnTemperature"] == "unknown"
     assert attrs["numberOfStartsTotal"] == "unknown"
+    assert attrs["systemPressure"] == "unknown"
 
 
 def test_hs_sensor_healthy_payload_roundtrip():
@@ -101,3 +102,29 @@ def test_hs_sensor_healthy_payload_roundtrip():
     attrs = sensor.extra_state_attributes
     assert attrs["returnTemperature"] == "31.5C"
     assert attrs["numberOfStartsTotal"] == 1234
+
+
+def test_hs_sensor_unreported_readings_are_unknown():
+    """A reading the device does not report is "unknown", not "unknownunknown".
+
+    A K40 heat pump sends empty collector temperatures; an icom sends no
+    supply temperature, modulation or working time (#178).
+    """
+    sensor = _hs_sensor(
+        {
+            "returnTemperature": {"value": 27.7, "unitOfMeasure": "C"},
+            "collectorInflowTemp": {},
+            "collectorOutflowTemp": {},
+            "actualModulation": {"value": None, "unitOfMeasure": "%"},
+            "totalWorkingTime": {"value": 21084230.0},
+        }
+    )
+
+    attrs = sensor.extra_state_attributes
+    assert attrs["returnTemperature"] == "27.7C"
+    assert attrs["collectorInflowTemp"] == "unknown"
+    assert attrs["collectorOutflowTemp"] == "unknown"
+    assert attrs["actualModulation"] == "unknown"
+    assert attrs["actualSupplyTemperature"] == "unknown"
+    # A value without a unit keeps the value instead of appending "unknown".
+    assert attrs["totalWorkingTime"] == "21084230.0"

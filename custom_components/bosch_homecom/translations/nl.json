@@ -359,8 +359,18 @@
       "thermostat_setpoint": {
         "name": "Kamer Instelpunt"
       },
+      "ventilation_filter_remaining_time": {
+        "name": "Ventilatie {zone} resterende filtertijd"
+      },
       "thermostat_battery": {
-        "name": "Batterij"
+        "name": "Batterij",
+        "state": {
+          "normal": "Normaal",
+          "low": "Laag",
+          "too_low": "Te laag",
+          "fota_forbidden": "Te laag voor firmware-update",
+          "no_battery": "Geen batterij"
+        }
       },
       "thermostat_signal": {
         "name": "Signaalsterkte"
@@ -413,6 +423,19 @@
           "frost": "Vorstbeveiliging"
         }
       },
+      "compressor_status": {
+        "name": "Compressorstatus",
+        "state": {
+          "off": "Uit",
+          "heating": "Verwarmen",
+          "cooling": "Koelen",
+          "dhw": "Warm water",
+          "pool": "Zwembad",
+          "pool_heat": "Zwembadverwarming",
+          "defrost": "Ontdooien",
+          "alarm": "Alarm"
+        }
+      },
       "compressor_starts": {
         "name": "Compressor starts"
       },
@@ -424,7 +447,10 @@
           "high": "Hoog (Comfort)",
           "eco": "Eco+",
           "manual": "Handmatig",
-          "bath": "Veiligheidstemperatuur",
+          "hand_wash": "Handen wassen",
+          "shower": "Douche",
+          "bath": "Bad",
+          "dish_wash": "Afwassen",
           "ownprogram": "Eigen programma"
         }
       },
@@ -637,6 +663,9 @@
       "thermostat_rf_status": {
         "name": "RF Verbinding"
       },
+      "local_hc_pump_status": {
+        "name": "{circuit} cv-pomp"
+      },
       "bacon_online": {
         "name": "Verbinding"
       }
@@ -782,7 +811,10 @@
           "high": "Hoog (Comfort)",
           "eco": "Eco+",
           "manual": "Handmatig",
-          "bath": "Veiligheidstemperatuur",
+          "hand_wash": "Handen wassen",
+          "shower": "Douche",
+          "bath": "Bad",
+          "dish_wash": "Afwassen",
           "ownprogram": "Eigen programma"
         }
       }

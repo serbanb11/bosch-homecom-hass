@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import re
 from typing import Final
 
 from homeassistant.components.sensor import SensorDeviceClass
@@ -70,6 +71,16 @@ CONF_BACON_REGION: Final = "bacon_region"
 CONF_BACON_TITLES: Final = "bacon_titles"
 DEFAULT_WB_LABEL: Final = "Wallbox"
 
+
+def api_value_to_state_key(value: str) -> str:
+    """Turn a camelCase API value into a translatable state key.
+
+    hassfest only accepts lowercase slugs as state translation keys, so
+    wddw2 operation modes such as ``handWash`` are exposed as ``hand_wash``.
+    """
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", value).lower()
+
+
 BOSCH_SENSOR_DESCRIPTORS = {
     "wddw2": [
         {
@@ -87,6 +98,7 @@ BOSCH_SENSOR_DESCRIPTORS = {
             "translation_key": "dhw_operation_mode",
             "path": ["dhw_circuits", "dhw1", "operationMode"],
             "name": "Operation Mode",
+            "state_key": True,
             "device_class": None,
             "unit": None,
             "state_class": None,
@@ -166,10 +178,10 @@ CONF_LOCAL_GATEWAY: Final = "local_gateway"
 CONF_LOCAL_REMOVE: Final = "local_remove"
 
 # How many consecutive cloud failures to ride out while the local transport is
-# proving the appliance is reachable. At the default 60 s interval this holds the
-# cloud-backed entities at their last value for ~5 minutes instead of dropping
-# them to unavailable, then gives up so staleness stays bounded. Local-only
-# entities are unaffected — they keep updating from the LAN throughout.
+# proving the appliance is reachable. At the default 60 s interval the values
+# only the cloud has keep their last state for ~5 minutes, then go empty so
+# staleness stays bounded. Values the gateway also serves keep updating
+# throughout, in the same entities.
 MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 
 # How many consecutive failed cloud refreshes to ride out on the last good data

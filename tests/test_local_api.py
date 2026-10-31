@@ -4,8 +4,11 @@ Covers the options-flow steps where the user enters the gateway details, the
 coordinator's local-first behaviour, and the local-only sensors.
 """
 
+import dataclasses
+from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -25,6 +28,11 @@ from pytest_homeassistant_custom_component.common import (
     MockEntityPlatform,
 )
 
+from custom_components.bosch_homecom import _local_only_devices
+from custom_components.bosch_homecom.binary_sensor import (
+    BoschComK40LocalPumpStatusSensor,
+    async_setup_entry as binary_sensor_async_setup_entry,
+)
 from custom_components.bosch_homecom.const import (
     CONF_DEVICES,
     CONF_LOCAL,
@@ -35,12 +43,14 @@ from custom_components.bosch_homecom.const import (
     CONF_LOCAL_REMOVE,
     CONF_LOCAL_TOKEN,
     CONF_LOCAL_TOKEN_ID,
+    CONF_REFRESH,
     DOMAIN,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
 from custom_components.bosch_homecom.coordinator import (
     HC_TUNE_ENDPOINTS,
     BoschComModuleCoordinatorK40,
+    _overlay_local,
 )
 from custom_components.bosch_homecom.diagnostics import (
     async_get_config_entry_diagnostics,
@@ -55,7 +65,7 @@ from custom_components.bosch_homecom.local_sensor import (
 _FLOW_CLIENT = "custom_components.bosch_homecom.config_flow.HomeComK40Local"
 HOST = "192.0.2.10"
 GATEWAY = "102128202"
-LOCAL_TOKEN = "local-token"  # noqa: S105 - test fixture
+LOCAL_TOKEN = "local-token"
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +230,7 @@ async def test_local_multiple_gateways_asks_which(hass):
     assert result["step_id"] == "local"
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_LOCAL_GATEWAY: "555_k40".split("_")[0]}
+        result["flow_id"], {CONF_LOCAL_GATEWAY: "555"}
     )
     assert result["step_id"] == "local_credentials"
 
@@ -265,13 +275,12 @@ async def test_local_credentials_success_stores_token(hass, entry):
         {"token_id": "4", "client_name": "home-assistant", "created_at": "2026-09-01"},
         {"token_id": "7", "client_name": "home-assistant", "created_at": "2026-09-20"},
     ]
-    with patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create), patch(
-        f"{_FLOW_CLIENT}.async_list_tokens", new=AsyncMock(return_value=tokens)
-    ), patch(
-        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
-    ) as revoke, patch.object(
-        hass.config_entries, "async_schedule_reload"
-    ) as reload:
+    with (
+        patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create),
+        patch(f"{_FLOW_CLIENT}.async_list_tokens", new=AsyncMock(return_value=tokens)),
+        patch(f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()) as revoke,
+        patch.object(hass.config_entries, "async_schedule_reload") as reload,
+    ):
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             {
@@ -333,12 +342,11 @@ async def test_reprovisioning_revokes_the_replaced_token(hass, entry):
         {"token_id": "4", "client_name": "home-assistant", "created_at": 1775134322},
         {"token_id": "9", "client_name": "home-assistant", "created_at": 1790000000},
     ]
-    with patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create), patch(
-        f"{_FLOW_CLIENT}.async_list_tokens", new=AsyncMock(return_value=tokens)
-    ), patch(
-        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
-    ) as revoke, patch.object(
-        hass.config_entries, "async_schedule_reload"
+    with (
+        patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create),
+        patch(f"{_FLOW_CLIENT}.async_list_tokens", new=AsyncMock(return_value=tokens)),
+        patch(f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()) as revoke,
+        patch.object(hass.config_entries, "async_schedule_reload"),
     ):
         await _configure_local(
             hass,
@@ -366,10 +374,14 @@ async def test_token_listing_failure_does_not_block_provisioning(hass, entry):
         self.token = LOCAL_TOKEN
         return {"access_token": LOCAL_TOKEN}
 
-    with patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create), patch(
-        f"{_FLOW_CLIENT}.async_list_tokens",
-        new=AsyncMock(side_effect=NotRespondingError("timeout")),
-    ), patch.object(hass.config_entries, "async_schedule_reload"):
+    with (
+        patch(f"{_FLOW_CLIENT}.async_create_token", new=fake_create),
+        patch(
+            f"{_FLOW_CLIENT}.async_list_tokens",
+            new=AsyncMock(side_effect=NotRespondingError("timeout")),
+        ),
+        patch.object(hass.config_entries, "async_schedule_reload"),
+    ):
         result = await _configure_local(
             hass,
             entry,
@@ -397,9 +409,13 @@ async def test_removal_revokes_the_token_and_reloads(hass, entry, revoke_error):
         {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: "old", CONF_LOCAL_TOKEN_ID: "4"},
     )
 
-    with patch(
-        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock(side_effect=revoke_error)
-    ) as revoke, patch.object(hass.config_entries, "async_schedule_reload") as reload:
+    with (
+        patch(
+            f"{_FLOW_CLIENT}.async_revoke_token",
+            new=AsyncMock(side_effect=revoke_error),
+        ) as revoke,
+        patch.object(hass.config_entries, "async_schedule_reload") as reload,
+    ):
         result = await _configure_local(
             hass,
             entry,
@@ -496,9 +512,11 @@ async def test_pasted_token_is_verified_and_stored(hass, entry):
         seen[path] = self.token
         return _basic_info()
 
-    with patch(f"{_FLOW_CLIENT}.async_get_resource", new=fake_get), patch(
-        f"{_FLOW_CLIENT}.async_create_token", new=AsyncMock()
-    ) as create, patch.object(hass.config_entries, "async_schedule_reload") as reload:
+    with (
+        patch(f"{_FLOW_CLIENT}.async_get_resource", new=fake_get),
+        patch(f"{_FLOW_CLIENT}.async_create_token", new=AsyncMock()) as create,
+        patch.object(hass.config_entries, "async_schedule_reload") as reload,
+    ):
         result = await _configure_local(
             hass,
             entry,
@@ -524,9 +542,10 @@ async def test_pasted_token_is_verified_and_stored(hass, entry):
 async def test_pasted_token_accepted_when_basic_info_is_absent(hass, entry):
     """A 403/404 comes after authentication, so it still proves the token."""
     entry.add_to_hass(hass)
-    with patch(
-        f"{_FLOW_CLIENT}.async_get_resource", new=AsyncMock(return_value=None)
-    ), patch.object(hass.config_entries, "async_schedule_reload"):
+    with (
+        patch(f"{_FLOW_CLIENT}.async_get_resource", new=AsyncMock(return_value=None)),
+        patch.object(hass.config_entries, "async_schedule_reload"),
+    ):
         result = await _configure_local(
             hass,
             entry,
@@ -571,12 +590,13 @@ async def test_pasted_token_replaces_and_revokes_the_old_one(hass, entry):
         entry,
         {CONF_LOCAL_HOST: HOST, CONF_LOCAL_TOKEN: "old", CONF_LOCAL_TOKEN_ID: "4"},
     )
-    with patch(
-        f"{_FLOW_CLIENT}.async_get_resource", new=AsyncMock(return_value=_basic_info())
-    ), patch(
-        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
-    ) as revoke, patch.object(
-        hass.config_entries, "async_schedule_reload"
+    with (
+        patch(
+            f"{_FLOW_CLIENT}.async_get_resource",
+            new=AsyncMock(return_value=_basic_info()),
+        ),
+        patch(f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()) as revoke,
+        patch.object(hass.config_entries, "async_schedule_reload"),
     ):
         await _configure_local(
             hass,
@@ -601,12 +621,13 @@ async def test_re_entering_the_same_token_keeps_it(hass, entry):
             CONF_LOCAL_TOKEN_ID: "4",
         },
     )
-    with patch(
-        f"{_FLOW_CLIENT}.async_get_resource", new=AsyncMock(return_value=_basic_info())
-    ), patch(
-        f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()
-    ) as revoke, patch.object(
-        hass.config_entries, "async_schedule_reload"
+    with (
+        patch(
+            f"{_FLOW_CLIENT}.async_get_resource",
+            new=AsyncMock(return_value=_basic_info()),
+        ),
+        patch(f"{_FLOW_CLIENT}.async_revoke_token", new=AsyncMock()) as revoke,
+        patch.object(hass.config_entries, "async_schedule_reload"),
     ):
         await _configure_local(
             hass,
@@ -723,63 +744,51 @@ async def test_cloud_outage_holds_last_data_while_local_alive(
 
     data = await coordinator._async_update_data()
 
-    assert data is previous
+    # The held cloud data, with the gateway's readings laid over it.
+    assert data.device == previous.device
+    assert data.firmware == previous.firmware
     assert coordinator.local_source == "local"
 
 
 @pytest.mark.asyncio
-async def test_cloud_outage_staleness_is_bounded(hass, entry, device, firmware):
-    """Held cloud data expires so a long outage does not look healthy forever."""
+async def test_long_cloud_outage_keeps_serving_local_readings(
+    hass, entry, device, firmware
+):
+    """However long the cloud is down, the gateway keeps the shared values live."""
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
     coordinator.data = _cloud_device()
-    coordinator.local_first.async_update = AsyncMock(
-        return_value=K40Update(
-            local=_local_device(),
-            cloud=None,
-            source="local",
-            local_healthy=True,
-            cloud_error="504",
+    for outdoor in (7.0, 6.5, 6.0, 5.5, 5.0, 4.5, 4.0):
+        coordinator.local_first.async_update = AsyncMock(
+            return_value=K40Update(
+                local=_local_device(resources=_resource(OUTDOOR, outdoor)),
+                cloud=None,
+                source="local",
+                local_healthy=True,
+                cloud_error="504",
+            )
         )
-    )
+        coordinator.data = await coordinator._async_update_data()
 
-    for _ in range(MAX_CLOUD_FAILURES_WITH_LOCAL):
-        await coordinator._async_update_data()
-
-    with pytest.raises(UpdateFailed):
-        await coordinator._async_update_data()
+    assert coordinator.data.outdoor_temp["value"] == 4.0
 
 
 @pytest.mark.asyncio
-async def test_local_sensors_keep_updating_through_a_long_outage(
+async def test_listeners_notified_on_every_failed_refresh(
     hass, entry, device, firmware
 ):
-    """Past the held-data bound the local-only sensors must still be refreshed.
+    """Local-only sensors must hear about every failed refresh, not just the first.
 
     DataUpdateCoordinator notifies listeners only on the first of a run of failed
-    refreshes, so the local sensors used to freeze while still reporting
-    available — in exactly the outage they exist for.
+    refreshes, so the local sensors used to keep presenting a stale reading.
     """
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
-    coordinator.data = _cloud_device()
-    coordinator.local_first.async_update = AsyncMock(
-        return_value=K40Update(
-            local=_local_device(),
-            cloud=None,
-            source="local",
-            local_healthy=True,
-            cloud_error="504",
-        )
-    )
+    coordinator.local_first.async_update = AsyncMock(side_effect=ApiError("down"))
     listener = Mock()
     coordinator.async_add_listener(listener)
 
-    # Held cycles succeed (one notification each), then the refresh fails: the
-    # coordinator notifies once on the transition, and our hook keeps notifying
-    # on every failed refresh after it.
-    for _ in range(MAX_CLOUD_FAILURES_WITH_LOCAL + 1):
-        await coordinator.async_refresh()
+    await coordinator.async_refresh()
     assert coordinator.last_update_success is False
     notified = listener.call_count
 
@@ -787,7 +796,6 @@ async def test_local_sensors_keep_updating_through_a_long_outage(
     await coordinator.async_refresh()
 
     assert listener.call_count == notified + 2
-    assert coordinator.local_data is not None
 
     await coordinator.async_shutdown()
 
@@ -844,15 +852,21 @@ async def test_cloud_recovery_resets_the_failure_count(hass, entry, device, firm
 
 
 @pytest.mark.asyncio
-async def test_no_previous_data_fails_instead_of_returning_none(
+async def test_no_previous_cloud_data_serves_the_gateway_alone(
     hass, entry, device, firmware
 ):
-    """At startup there is nothing to hold, so the refresh must fail properly."""
+    """At startup without the cloud there is nothing to hold: local values only."""
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
     coordinator.local_first.async_update = AsyncMock(
         return_value=K40Update(
-            local=_local_device(),
+            local=_local_device(
+                resources={
+                    **_resource(OUTDOOR, 7.1),
+                    **_resource("/dhwCircuits/dhw1/actualTemp", 36.5),
+                    **_resource("/heatingCircuits/hc1/currentRoomSetpoint", 21.0),
+                }
+            ),
             cloud=None,
             source="local",
             local_healthy=True,
@@ -860,8 +874,14 @@ async def test_no_previous_data_fails_instead_of_returning_none(
         )
     )
 
-    with pytest.raises(UpdateFailed):
-        await coordinator._async_update_data()
+    data = await coordinator._async_update_data()
+
+    assert data.device == device
+    assert data.outdoor_temp["value"] == 7.1
+    assert data.dhw_circuits[0]["id"] == "/dhwCircuits/dhw1"
+    assert data.dhw_circuits[0]["actualTemp"]["value"] == 36.5
+    assert data.heating_circuits[0]["id"] == "/heatingCircuits/hc1"
+    assert data.notifications is None
 
 
 @pytest.mark.asyncio
@@ -904,6 +924,107 @@ async def test_transient_cloud_401_does_not_trigger_reauth(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
+async def test_local_circuit_pump_status_distinguishes_off_from_missing(
+    hass, entry, device, firmware
+):
+    """A stopped pump is off; a missing local resource is unavailable."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={
+            "/heatingCircuits/hc1/pumpStatus": {"value": "on"},
+            "/heatingCircuits/hc2/pumpStatus": {"value": "off"},
+        }
+    )
+    coordinator.local_healthy = True
+    hc1 = BoschComK40LocalPumpStatusSensor(coordinator, "hc1")
+    hc2 = BoschComK40LocalPumpStatusSensor(coordinator, "hc2")
+    hc3 = BoschComK40LocalPumpStatusSensor(coordinator, "hc3")
+
+    assert hc1.is_on is True and hc1.available
+    assert hc2.is_on is False and hc2.available
+    assert hc3.is_on is None and not hc3.available
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": 1}}
+    )
+    hc1 = BoschComK40LocalPumpStatusSensor(coordinator, "hc1")
+    assert hc1.is_on is None and not hc1.available
+    coordinator.local_healthy = False
+    assert not hc1.available
+
+
+@pytest.mark.asyncio
+async def test_local_pump_entities_wait_for_served_circuit(
+    hass, entry, device, firmware
+):
+    """Unsupported circuits stay absent; a later local read can add one."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.async_set_updated_data(
+        replace(
+            _cloud_device(),
+            heating_circuits=[
+                {"id": f"/heatingCircuits/hc{number}"} for number in range(1, 4)
+            ],
+        )
+    )
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": "on"}}
+    )
+    coordinator.local_healthy = True
+    entry.runtime_data = [coordinator]
+    entities = []
+
+    await binary_sensor_async_setup_entry(hass, entry, entities.extend)
+    assert [e._resource for e in entities] == ["/heatingCircuits/hc1/pumpStatus"]
+
+    coordinator.local_data = _local_device(
+        resources={
+            "/heatingCircuits/hc1/pumpStatus": {"value": "on"},
+            "/heatingCircuits/hc2/pumpStatus": {"value": "off"},
+        }
+    )
+    coordinator.async_update_listeners()
+    coordinator.async_update_listeners()
+    assert [e._resource for e in entities] == [
+        "/heatingCircuits/hc1/pumpStatus",
+        "/heatingCircuits/hc2/pumpStatus",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_local_circuit_pump_status_adds_to_platform(
+    hass, entry, device, firmware, caplog
+):
+    """A live local status becomes a running binary sensor in HA."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": "on"}}
+    )
+    coordinator.local_healthy = True
+    pump = BoschComK40LocalPumpStatusSensor(coordinator, "hc1")
+
+    platform = MockEntityPlatform(hass, domain="binary_sensor", platform_name=DOMAIN)
+    await platform.async_add_entities([pump])
+
+    assert "Error adding entity" not in caplog.text
+    state = hass.states.get(pump.entity_id)
+    assert state.state == "on"
+    assert state.attributes["device_class"] == "running"
+
+    coordinator.local_data = _local_device(
+        resources={"/heatingCircuits/hc1/pumpStatus": {"value": "off"}}
+    )
+    coordinator.async_update_listeners()
+    assert hass.states.get(pump.entity_id).state == "off"
+
+    coordinator.local_healthy = False
+    coordinator.async_update_listeners()
+    assert hass.states.get(pump.entity_id).state == "unavailable"
+
+
 def test_emon_field_extraction() -> None:
     """Named keys are pulled out of the gateway's list-of-dicts shape."""
     values = [{"ch": 149}, {"dhw": 129}, {"total": 278}]
@@ -929,6 +1050,13 @@ async def test_local_sensor_reads_scalar_and_emon_values(hass, entry, device, fi
     assert power.native_value == 25.0
     assert starts.native_value == 129
     assert power.available is True
+
+
+def test_pump_volume_flow_is_litres_per_hour() -> None:
+    """The gateway reports the pump volume flow in l/h, not L/min (issue #211)."""
+    flow = {d.key: d for d in LOCAL_SENSORS}["local_pump_volume_flow"]
+    assert flow.native_unit_of_measurement == "L/h"
+    assert flow.device_class == "volume_flow_rate"
 
 
 @pytest.mark.asyncio
@@ -1055,3 +1183,418 @@ async def test_local_path_still_fetches_extra_endpoints(hass, entry, device, fir
     bhc.async_get_silent_mode.assert_awaited_once()
     bhc.async_get_dhw_charge_duration.assert_awaited_once()
     assert coordinator.extra_data["additional_heater"] == {"value": "off"}
+
+
+# ---------------------------------------------------------------------------
+# Local readings in the existing (cloud) entities
+# ---------------------------------------------------------------------------
+
+OUTDOOR = "/system/sensors/temperatures/outdoor_t1"
+
+
+def _resource(path, value, **extra):
+    return {path: {"id": path, "type": "floatValue", "value": value, **extra}}
+
+
+def _cloud_with_circuits():
+    """Cloud payload with the nodes the overlay touches."""
+    return dataclasses.replace(
+        _cloud_device(),
+        outdoor_temp={"value": 9.0, "unitOfMeasure": "C"},
+        heat_sources={
+            "actualSupplyTemperature": {"value": 30.0, "unitOfMeasure": "C"},
+            "pumpType": {"value": "air_water"},
+        },
+        dhw_circuits=[
+            {
+                "id": "/dhwCircuits/dhw1",
+                "actualTemp": {"value": 40.0},
+                "currentTemperatureLevel": {
+                    "value": "eco",
+                    "allowedValues": ["off", "eco", "low", "high"],
+                },
+                "operationMode": {"value": "ownprogram"},
+            }
+        ],
+        heating_circuits=[
+            {"id": "/heatingCircuits/hc1", "currentSuWiMode": {"value": "off"}}
+        ],
+    )
+
+
+def test_overlay_replaces_shared_values_and_keeps_cloud_only_ones() -> None:
+    """Same entities, one value each: the gateway's where it has one."""
+    local = _local_device(
+        resources={
+            **_resource(OUTDOOR, 7.1, unitOfMeasure="C"),
+            **_resource("/heatSources/actualSupplyTemperature", 28.8),
+            **_resource("/heatSources/systemPressure", 1.7),
+            **_resource("/dhwCircuits/dhw1/actualTemp", 36.5),
+            "/dhwCircuits/dhw1/currentTemperatureLevel": {"value": "off"},
+            "/heatingCircuits/hc1/currentSuWiMode": {"value": "forced"},
+        }
+    )
+
+    data = _overlay_local(_cloud_with_circuits(), local)
+
+    assert data.outdoor_temp == {
+        "id": OUTDOOR,
+        "type": "floatValue",
+        "value": 7.1,
+        "unitOfMeasure": "C",
+    }
+    assert data.heat_sources["actualSupplyTemperature"]["value"] == 28.8
+    # Cloud lacked it, the gateway has it: now available.
+    assert data.heat_sources["systemPressure"]["value"] == 1.7
+    # Only the cloud has it: untouched.
+    assert data.heat_sources["pumpType"] == {"value": "air_water"}
+    dhw = data.dhw_circuits[0]
+    assert dhw["actualTemp"]["value"] == 36.5
+    # Merged, not swapped: the cloud's allowedValues survive.
+    assert dhw["currentTemperatureLevel"] == {
+        "value": "off",
+        "allowedValues": ["off", "eco", "low", "high"],
+    }
+    assert dhw["operationMode"] == {"value": "ownprogram"}
+    assert data.heating_circuits[0]["currentSuWiMode"]["value"] == "forced"
+
+
+def test_overlay_does_not_mutate_the_cloud_payload() -> None:
+    """The held cloud data is reused each cycle, so it must stay pristine."""
+    cloud = _cloud_with_circuits()
+    _overlay_local(
+        cloud, _local_device(resources=_resource("/dhwCircuits/dhw1/actualTemp", 1.0))
+    )
+    assert cloud.dhw_circuits[0]["actualTemp"] == {"value": 40.0}
+
+
+def test_overlay_without_local_data_is_a_no_op() -> None:
+    """No gateway payload, no change."""
+    cloud = _cloud_with_circuits()
+    assert _overlay_local(cloud, None) is cloud
+
+
+@pytest.mark.asyncio
+async def test_both_transports_ok_prefers_the_gateway_values(
+    hass, entry, device, firmware
+):
+    """With both answering, a shared value comes from the gateway."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_first.async_update = AsyncMock(
+        return_value=K40Update(
+            local=_local_device(resources=_resource(OUTDOOR, 7.1)),
+            cloud=_cloud_device(),
+            source="both",
+            local_healthy=True,
+        )
+    )
+
+    data = await coordinator._async_update_data()
+
+    assert data.outdoor_temp["value"] == 7.1
+
+
+def _token_owner(hass, entry, device, firmware, token_error):
+    """A local-enabled coordinator that owns the token and fails to refresh it."""
+    coordinator, bhc = _coordinator(hass, entry, device, firmware)
+    coordinator.auth_provider = True
+    coordinator.data = _cloud_with_circuits()
+    bhc.get_token = AsyncMock(side_effect=token_error)
+    coordinator.local_first.async_update = AsyncMock()
+    coordinator.local_client.async_update = AsyncMock(
+        return_value=_local_device(resources=_resource(OUTDOOR, 7.1))
+    )
+    return coordinator, bhc
+
+
+@pytest.mark.asyncio
+async def test_rejected_token_keeps_the_entities_live_and_starts_reauth(
+    hass, entry, device, firmware
+):
+    """A dead refresh token must not take the gateway readings down with it."""
+    entry.add_to_hass(hass)
+    coordinator, bhc = _token_owner(
+        hass, entry, device, firmware, AuthFailedError("Failed to refresh")
+    )
+    entry.async_start_reauth = Mock()
+
+    data = await coordinator._async_update_data()
+
+    entry.async_start_reauth.assert_called_once()
+    assert data.outdoor_temp["value"] == 7.1
+    assert data.heat_sources["actualSupplyTemperature"]["value"] == 30.0
+    # The cloud is not asked again: its own token check would only fail.
+    coordinator.local_first.async_update.assert_not_awaited()
+    bhc.async_get_additional_heater_mode.assert_not_awaited()
+    assert coordinator.local_source == "local"
+    assert coordinator.local_healthy is True
+
+
+@pytest.mark.asyncio
+async def test_unreachable_token_endpoint_serves_local_without_reauth(
+    hass, entry, device, firmware
+):
+    """A DNS timeout on the token endpoint is no reason to bother the user."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _token_owner(
+        hass,
+        entry,
+        device,
+        firmware,
+        NotRespondingError("https://singlekey-id.com/auth/connect/token"),
+    )
+    entry.async_start_reauth = Mock()
+
+    data = await coordinator._async_update_data()
+
+    entry.async_start_reauth.assert_not_called()
+    assert data.outdoor_temp["value"] == 7.1
+
+
+@pytest.mark.asyncio
+async def test_unusable_token_and_unreachable_gateway_fails(
+    hass, entry, device, firmware
+):
+    """With both down there is nothing current to show."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _token_owner(
+        hass, entry, device, firmware, AuthFailedError("Failed to refresh")
+    )
+    coordinator.local_healthy = True
+    coordinator.local_client.async_update = AsyncMock(
+        side_effect=NotRespondingError("gateway")
+    )
+    entry.async_start_reauth = Mock()
+
+    with pytest.raises(UpdateFailed, match="No usable cloud token"):
+        await coordinator._async_update_data()
+
+    assert coordinator.local_healthy is False
+
+
+@pytest.mark.asyncio
+async def test_unusable_token_skips_a_parked_local_transport(
+    hass, entry, device, firmware
+):
+    """A gateway token that was already rejected is not retried here either."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _token_owner(
+        hass, entry, device, firmware, AuthFailedError("Failed to refresh")
+    )
+    coordinator.local_first._local_disabled = True
+    entry.async_start_reauth = Mock()
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    coordinator.local_client.async_update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_token_refresh_dns_timeout_without_local_is_update_failed(
+    hass, entry, device, firmware
+):
+    """Cloud-only: an unreachable token endpoint is a plain UpdateFailed."""
+    entry.add_to_hass(hass)
+    coordinator, bhc = _coordinator(hass, entry, device, firmware, local=False)
+    coordinator.auth_provider = True
+    bhc.get_token = AsyncMock(side_effect=NotRespondingError("token endpoint"))
+
+    with pytest.raises(UpdateFailed, match="Token refresh failed"):
+        await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_cloud_only_values_go_empty_after_the_bound(
+    hass, entry, device, firmware
+):
+    """Shared values stay live; cloud-only ones are held briefly, then cleared."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.data = dataclasses.replace(
+        _cloud_with_circuits(), notifications=[{"code": "A01"}]
+    )
+    coordinator.local_first.async_update = AsyncMock(
+        return_value=K40Update(
+            local=_local_device(resources=_resource(OUTDOOR, 7.1)),
+            cloud=None,
+            source="local",
+            local_healthy=True,
+            cloud_error="504",
+        )
+    )
+
+    for _ in range(MAX_CLOUD_FAILURES_WITH_LOCAL):
+        coordinator.data = await coordinator._async_update_data()
+    assert coordinator.data.notifications == [{"code": "A01"}]
+    assert coordinator.data.dhw_circuits[0]["operationMode"] == {"value": "ownprogram"}
+
+    coordinator.data = await coordinator._async_update_data()
+
+    assert coordinator.data.notifications is None
+    assert "operationMode" not in coordinator.data.dhw_circuits[0]
+    assert coordinator.data.outdoor_temp["value"] == 7.1
+
+
+@pytest.mark.asyncio
+async def test_cloud_back_reloads_an_entry_set_up_without_it(
+    hass, entry, device, firmware
+):
+    """Cloud-only entities were never created, so reload once the cloud answers."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.cloud_setup_pending = True
+    coordinator.local_first.async_update = AsyncMock(
+        return_value=K40Update(
+            local=_local_device(),
+            cloud=_cloud_device(),
+            source="both",
+            local_healthy=True,
+        )
+    )
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        await coordinator._async_update_data()
+        await coordinator._async_update_data()
+
+    reload.assert_called_once_with(entry.entry_id)
+    assert coordinator.cloud_setup_pending is False
+
+
+def _local_entry(**data):
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="test-user",
+        unique_id="test-user",
+        data={
+            CONF_DEVICES: {f"{GATEWAY}_k40": True, "555_rac": True},
+            CONF_LOCAL: {
+                GATEWAY: {CONF_LOCAL_HOST: "192.0.2.10", CONF_LOCAL_TOKEN: LOCAL_TOKEN}
+            },
+            CONF_REFRESH: "refresh",
+            CONF_TOKEN: "token",
+            CONF_USERNAME: "test-user",
+            **data,
+        },
+    )
+
+
+def test_local_only_devices_come_from_the_entry() -> None:
+    """Only selected gateways with local access can be set up without the cloud."""
+    assert _local_only_devices(_local_entry()) == [
+        {"deviceId": GATEWAY, "deviceType": "k40"}
+    ]
+    assert _local_only_devices(_local_entry(**{CONF_LOCAL: {}})) == []
+    assert (
+        _local_only_devices(_local_entry(**{CONF_DEVICES: {f"{GATEWAY}_k40": False}}))
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("cloud_error", "reauth"),
+    [(AuthFailedError("Failed to refresh"), True), (ApiError("504"), False)],
+)
+async def test_setup_without_the_cloud_uses_the_gateway(hass, cloud_error, reauth):
+    """An expired login or a cloud outage at startup still sets up the gateway."""
+    entry = _local_entry()
+    entry.add_to_hass(hass)
+    local = _local_device(
+        resources={
+            **_resource(OUTDOOR, 7.1, unitOfMeasure="C"),
+            **_resource("/heatSources/actualSupplyTemperature", 28.8),
+            **_resource("/dhwCircuits/dhw1/actualTemp", 36.5),
+        }
+    )
+    bhc = AsyncMock()
+    bhc.token = "token"
+    bhc.refresh_token = "refresh"
+    bhc.async_get_devices.side_effect = cloud_error
+
+    with (
+        patch(
+            "custom_components.bosch_homecom.HomeComAlt.create",
+            new=AsyncMock(return_value=bhc),
+        ),
+        patch(
+            "custom_components.bosch_homecom.HomeComK40.get_token",
+            new=AsyncMock(side_effect=cloud_error),
+        ),
+        patch(
+            "custom_components.bosch_homecom.HomeComK40.async_update",
+            new=AsyncMock(side_effect=ApiError("504")),
+        ),
+        patch(
+            "custom_components.bosch_homecom.HomeComK40Local.async_update",
+            new=AsyncMock(return_value=local),
+        ),
+        patch.object(entry, "async_start_reauth") as start_reauth,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert entry.state is ConfigEntryState.LOADED
+        assert bool(start_reauth.call_count) is reauth
+        (coordinator,) = entry.runtime_data
+        assert coordinator.cloud_setup_pending is True
+        assert coordinator.data.outdoor_temp["value"] == 7.1
+
+        outdoor = [
+            state for state in hass.states.async_all("sensor") if state.state == "7.1"
+        ]
+        assert outdoor, "outdoor temperature entity not served from the gateway"
+
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
+async def test_setup_without_cloud_or_local_access_still_fails(hass):
+    """Nothing to read locally: keep the old behaviour (reauth / retry)."""
+    entry = _local_entry(**{CONF_LOCAL: {}})
+    entry.add_to_hass(hass)
+    bhc = AsyncMock()
+    bhc.async_get_devices.side_effect = AuthFailedError("Failed to refresh")
+
+    with patch(
+        "custom_components.bosch_homecom.HomeComAlt.create",
+        new=AsyncMock(return_value=bhc),
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+
+
+def test_overlay_derives_the_operation_modes_from_the_status() -> None:
+    """No operationMode resource locally: it comes from overallStatus."""
+    cloud = dataclasses.replace(
+        _cloud_with_circuits(),
+        heating_circuits=[
+            {
+                "id": "/heatingCircuits/hc1",
+                "operationMode": {
+                    "value": "auto",
+                    "allowedValues": ["off", "manual", "auto"],
+                },
+            }
+        ],
+    )
+    local = _local_device(hc_status="heating_manual_on", dhw_mode="eco")
+
+    data = _overlay_local(cloud, local)
+
+    assert data.heating_circuits[0]["operationMode"] == {
+        "value": "manual",
+        "allowedValues": ["off", "manual", "auto"],
+    }
+    assert data.dhw_circuits[0]["operationMode"]["value"] == "eco"
+
+
+def test_overlay_keeps_the_mode_for_statuses_without_one() -> None:
+    """Away, holiday and the like say nothing about the mode."""
+    cloud = _cloud_with_circuits()
+    data = _overlay_local(cloud, _local_device(hc_status="away", dhw_mode=None))
+
+    assert "operationMode" not in data.heating_circuits[0]
+    assert data.dhw_circuits[0]["operationMode"] == {"value": "ownprogram"}

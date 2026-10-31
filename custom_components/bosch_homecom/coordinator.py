@@ -33,6 +33,7 @@ from homecom_alt import (
     BHCDeviceGeneric,
     BHCDeviceIcom,
     BHCDeviceK40,
+    BHCDeviceK40Local,
     BHCDeviceRac,
     BHCDeviceRrc2,
     BHCDeviceWddw2,
@@ -166,6 +167,11 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
         except AuthFailedError:
             self.entry.async_start_reauth(self.hass)
             raise UpdateFailed("Re-authentication required") from None
+        except (ApiError, NotRespondingError, RetryError, TimeoutError) as error:
+            # The token endpoint was unreachable or answered with a server error
+            # (e.g. a DNS timeout or a 5xx), so the refresh token was not spent. A normal failed refresh, retried on
+            # the next poll -- not an "unexpected error" with a traceback.
+            raise UpdateFailed(f"Token refresh failed: {error}") from error
         if self.bhc.token != self.entry.data.get(
             CONF_TOKEN
         ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
@@ -611,6 +617,134 @@ class _K40ExtraEndpointsMixin:
                 self.recordings[meta["key"]] = round(y_sum, 3)
 
 
+# Values the K 40 RF Local API serves in the same payload format as the cloud.
+# Cloud resource paths are the local ones prefixed with ``/resource``.
+_LOCAL_OUTDOOR_TEMP = "/system/sensors/temperatures/outdoor_t1"
+_LOCAL_HEAT_SOURCES: dict[str, str] = {
+    "actualSupplyTemperature": "/heatSources/actualSupplyTemperature",
+    "returnTemperature": "/heatSources/returnTemperature",
+    "actualModulation": "/heatSources/actualModulation",
+    "actualHeatDemand": "/heatSources/actualHeatDemand",
+    "systemPressure": "/heatSources/systemPressure",
+    "starts": "/heatSources/hs1/numberOfStarts",
+    "totalWorkingTime": "/heatSources/workingTime/totalSystem",
+}
+# Per-circuit keys, read from ``{circuit id}/{key}``, e.g. /dhwCircuits/dhw1/actualTemp.
+_LOCAL_DHW_KEYS = ("actualTemp", "currentTemperatureLevel", "chargeRemainingTime")
+_LOCAL_HC_KEYS = ("currentSuWiMode", "currentRoomSetpoint")
+# The Local API has no operationMode resource. The library derives the DHW one
+# from overallStatus (``dhw_mode``); the heating circuit's is derived the same
+# way here. Statuses without a mode (away, holiday, boost, ...) map to nothing.
+_LOCAL_HC_STATUS_TO_MODE: dict[str, str] = {
+    "heating_auto": "auto",
+    "heating_manual_on": "manual",
+    "heating_manual_off": "off",
+}
+_LOCAL_DHW_CIRCUIT = "/dhwCircuits/dhw1"
+_LOCAL_HC_CIRCUIT = "/heatingCircuits/hc1"
+
+
+def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
+    """Return ``data`` with every value the gateway also served replaced by it.
+
+    Each local payload is merged over the cloud one rather than swapped in, so
+    keys only the cloud sends (``allowedValues`` and the like) survive.
+    """
+    resources = getattr(local, "resources", None) or {}
+    if not resources:
+        return data
+
+    def merged(node, path: str):
+        payload = resources.get(path)
+        if not isinstance(payload, dict):
+            return node
+        return {**node, **payload} if isinstance(node, dict) else dict(payload)
+
+    modes = {
+        _LOCAL_DHW_CIRCUIT: getattr(local, "dhw_mode", None),
+        _LOCAL_HC_CIRCUIT: _LOCAL_HC_STATUS_TO_MODE.get(
+            getattr(local, "hc_status", None)
+        ),
+    }
+
+    def circuits(refs, keys: tuple[str, ...]):
+        if not isinstance(refs, list):
+            return refs
+        result = []
+        for ref in refs:
+            if isinstance(ref, dict) and isinstance(ref.get("id"), str):
+                ref = dict(ref)
+                for key in keys:
+                    ref[key] = merged(ref.get(key), f"{ref['id']}/{key}")
+                if mode := modes.get(ref["id"]):
+                    node = ref.get("operationMode")
+                    ref["operationMode"] = {
+                        **(node if isinstance(node, dict) else {}),
+                        "value": mode,
+                    }
+            result.append(ref)
+        return result
+
+    heat_sources = dict(data.heat_sources or {})
+    for key, path in _LOCAL_HEAT_SOURCES.items():
+        heat_sources[key] = merged(heat_sources.get(key) or {}, path)
+
+    return dataclasses.replace(
+        data,
+        outdoor_temp=merged(data.outdoor_temp, _LOCAL_OUTDOOR_TEMP),
+        heat_sources=heat_sources,
+        dhw_circuits=circuits(data.dhw_circuits, _LOCAL_DHW_KEYS),
+        heating_circuits=circuits(data.heating_circuits, _LOCAL_HC_KEYS),
+    )
+
+
+def _cloud_skeleton(
+    device: dict, previous: BHCDeviceK40 | None, local: BHCDeviceK40Local
+) -> BHCDeviceK40:
+    """Build an empty cloud payload for the known circuits.
+
+    Used when there is no cloud data to lay the local readings over (setup
+    without the cloud) or when it is too old to show. Everything only the cloud
+    has stays empty, so those entities report no value instead of a stale one.
+    The circuits are the ones the cloud last listed plus any the gateway reports.
+    """
+    circuits: dict[str, set[str]] = {"dhwCircuits": set(), "heatingCircuits": set()}
+    for refs in (
+        getattr(previous, "dhw_circuits", None),
+        getattr(previous, "heating_circuits", None),
+    ):
+        for ref in refs if isinstance(refs, list) else []:
+            ref_id = ref.get("id") if isinstance(ref, dict) else None
+            if isinstance(ref_id, str) and ref_id.split("/")[1:2] in (
+                ["dhwCircuits"],
+                ["heatingCircuits"],
+            ):
+                circuits[ref_id.split("/")[1]].add(ref_id)
+    for path in getattr(local, "resources", None) or {}:
+        parts = path.split("/")
+        if len(parts) > 3 and parts[1] in circuits:
+            circuits[parts[1]].add(f"/{parts[1]}/{parts[2]}")
+    return BHCDeviceK40(
+        device=device,
+        firmware=getattr(previous, "firmware", None),
+        notifications=None,
+        holiday_mode=None,
+        away_mode=None,
+        power_limitation=None,
+        outdoor_temp=None,
+        heat_sources={},
+        dhw_circuits=[{"id": c} for c in sorted(circuits["dhwCircuits"])],
+        heating_circuits=[{"id": c} for c in sorted(circuits["heatingCircuits"])],
+        ventilation=None,
+        zones=None,
+        flame_indication=None,
+        energy_history=None,
+        hourly_energy_history=None,
+        indoor_humidity=None,
+        devices=None,
+    )
+
+
 class BoschComModuleCoordinatorK40(
     _K40ExtraEndpointsMixin,
     _LastKnownGoodMixin,
@@ -623,14 +757,16 @@ class BoschComModuleCoordinatorK40(
     does (no operationMode, no per-level DHW setpoints, no zones), so it
     *supplements* rather than replaces the cloud data:
 
-    * ``self.data`` keeps coming from the cloud, so every existing entity behaves
-      exactly as before.
+    * ``self.data`` is the cloud payload with the gateway's readings laid over
+      it (see :func:`_overlay_local`): values both transports serve come from
+      the gateway, everything else from the cloud, in the same entities.
     * ``self.local_data`` carries the local payload and powers the local-only
       entities, which therefore stay live through a cloud outage.
-    * When the cloud fails **and** the local transport proves the appliance is
-      reachable, the previous cloud data is held for up to
-      ``MAX_CLOUD_FAILURES_WITH_LOCAL`` refreshes instead of failing. Without a
-      local transport the behaviour is unchanged: the refresh fails immediately.
+    * When the cloud fails, or its token cannot be refreshed, **and** the local
+      transport answers, the overlaid values stay live; the cloud-only ones
+      keep their last state for ``MAX_CLOUD_FAILURES_WITH_LOCAL`` refreshes and
+      are empty after that. Without a local transport the behaviour is
+      unchanged: the refresh fails immediately.
     """
 
     HC_TUNE_KEYS = K40_HC_TUNE_KEYS
@@ -655,13 +791,22 @@ class BoschComModuleCoordinatorK40(
         self.local_source: str | None = None
         self.local_healthy = False
         self._cloud_failures = 0
+        # True when the entry was set up without the cloud (see __init__).
+        self.cloud_setup_pending = False
 
     async def _async_update_data(self) -> BHCDeviceK40:
         """Update from the cloud, and from the local gateway when configured."""
         if self.local_first is None:
             return await super()._async_update_data()
 
-        await self._async_refresh_tokens()
+        try:
+            await self._async_refresh_tokens()
+        except UpdateFailed:
+            # No usable cloud token this cycle: either SingleKey rejected the
+            # refresh (reauth already started) or its endpoint was unreachable.
+            # The gateway does not need that token, so serve it alone instead
+            # of taking the whole device down with the cloud.
+            return await self._async_update_local_only()
 
         try:
             update = await self.local_first.async_update(self.unique_id)
@@ -690,27 +835,19 @@ class BoschComModuleCoordinatorK40(
 
         if update.cloud is not None:
             self._cloud_failures = 0
-            data = self._build_device_data(update.cloud)
+            if self.cloud_setup_pending:
+                # Set up from the gateway alone: the cloud-only entities were
+                # never created. Reload once so they are.
+                self.cloud_setup_pending = False
+                self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
+            data = _overlay_local(self._build_device_data(update.cloud), update.local)
         else:
             # Cloud failed while the gateway answered locally, so the appliance
-            # is demonstrably fine and this is a cloud-side problem. Hold the
-            # last known cloud data briefly rather than dropping every entity to
-            # unavailable.
+            # is demonstrably fine and this is a cloud-side problem.
             self._cloud_failures += 1
-            if (
-                self.data is None
-                or self._cloud_failures > MAX_CLOUD_FAILURES_WITH_LOCAL
-            ):
-                self._async_notify_local_listeners()
-                raise UpdateFailed(update.cloud_error or "Cloud update failed")
-            _LOGGER.info(
-                "Device_Id: %s, cloud update failed (%s/%s) but the gateway "
-                "answered locally; keeping the last cloud values",
-                self.unique_id,
-                self._cloud_failures,
-                MAX_CLOUD_FAILURES_WITH_LOCAL,
+            data = self._local_data_or_fail(
+                update.local, update.cloud_error or "Cloud update failed"
             )
-            data = self.data
 
         # These are the _K40ExtraEndpointsMixin steps. This method bypasses the
         # mixin's _async_update_data to drive the local transport, so they have
@@ -721,6 +858,68 @@ class BoschComModuleCoordinatorK40(
         await self._fetch_hc_tune()
         await self._fetch_recordings()
         return data
+
+    async def _async_update_local_only(self) -> BHCDeviceK40:
+        """Serve an update from the gateway alone while the cloud token is unusable.
+
+        Bypasses the local-first policy on purpose: that runs the cloud client
+        too, whose own token check would only fail again. The extra cloud
+        endpoints are skipped for the same reason.
+        """
+        local = None
+        if not self.local_first.local_disabled:
+            try:
+                local = await self.local_client.async_update()
+            except (
+                ApiError,
+                AuthFailedError,
+                InvalidSensorDataError,
+                RetryError,
+                NotRespondingError,
+                TimeoutError,
+            ) as error:
+                _LOGGER.debug(
+                    "Device_Id: %s, local update failed while the cloud token "
+                    "is unusable: %s",
+                    self.unique_id,
+                    error,
+                )
+        self._cloud_failures += 1
+        self.local_data = local
+        self.local_source = "local" if local is not None else None
+        self.local_healthy = local is not None
+        return self._local_data_or_fail(local, "No usable cloud token")
+
+    def _local_data_or_fail(
+        self, local: BHCDeviceK40Local | None, cloud_error: str
+    ) -> BHCDeviceK40:
+        """Serve the gateway's readings in the existing entities.
+
+        Values the Local API also serves (temperatures, pressure, modulation,
+        heat demand, DHW and heating-circuit status) keep updating. Values only
+        the cloud has keep their last state for ``MAX_CLOUD_FAILURES_WITH_LOCAL``
+        polls and are empty after that, or straight away when there is no
+        cloud data yet (setup without the cloud). Without local data the
+        refresh fails as before.
+        """
+        if local is None:
+            self._async_notify_local_listeners()
+            raise UpdateFailed(cloud_error)
+        if self.data is not None and (
+            self._cloud_failures <= MAX_CLOUD_FAILURES_WITH_LOCAL
+        ):
+            base = self.data
+        else:
+            if self._cloud_failures == MAX_CLOUD_FAILURES_WITH_LOCAL + 1:
+                _LOGGER.warning(
+                    "Device_Id: %s, no cloud data for %s polls (%s); showing "
+                    "only the gateway's local readings until the cloud is back",
+                    self.unique_id,
+                    self._cloud_failures,
+                    cloud_error,
+                )
+            base = _cloud_skeleton(self.device, self.data, local)
+        return _overlay_local(base, local)
 
     @callback
     def _async_notify_local_listeners(self) -> None:
