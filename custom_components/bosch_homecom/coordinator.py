@@ -216,6 +216,14 @@ class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
 
 
 RECORDINGS_POLL_INTERVAL = timedelta(hours=1)
+
+# The WDDW2 coordinator re-reads today's water recording and the health status
+# at this cadence. Both move slowly (the recording gains a bucket per hour, the
+# health status changes on a fault), and five minutes keeps the daily figure
+# close to the app's while adding two requests per interval, not per poll.
+WDDW2_RECORDINGS_POLL_INTERVAL = timedelta(minutes=5)
+WDDW2_WATER_TODAY_KEY = "dhw_water_today"
+WDDW2_HEALTH_STATUS_PATH = "/system/healthStatus"
 HC_TUNE_POLL_INTERVAL = timedelta(minutes=15)
 
 # Weather-compensation / underfloor-heating settings of heating circuit hc1,
@@ -965,69 +973,99 @@ class BoschComModuleCoordinatorK40(
         return self._keep_last_known_good(BHCDeviceK40(**kwargs))
 
 
+def _sum_recording(payload: Any) -> float | None:
+    """Return the sum of a recording's ``y`` buckets, or None without buckets.
+
+    The daily water recording lists one bucket per hour with the litres drawn
+    in that hour under ``y``; ``c`` is the observation count, not a multiplier.
+    The author of #220 checked the sum against the app's daily figure.
+    """
+    if not isinstance(payload, dict):
+        return None
+    recording = payload.get("recording")
+    if not isinstance(recording, list) or not recording:
+        return None
+    litres = sum(
+        float(item["y"])
+        for item in recording
+        if isinstance(item, dict) and isinstance(item.get("y"), (int, float))
+    )
+    return round(litres, 2)
+
+
 class BoschComModuleCoordinatorWddw2(BoschComModuleCoordinatorBase[BHCDeviceWddw2]):
-    """A coordinator to manage the fetching of BoschCom data."""
+    """A coordinator to manage the fetching of BoschCom data.
+
+    Besides the library's bulk update it reads, every
+    WDDW2_RECORDINGS_POLL_INTERVAL, today's DHW water recording into
+    ``recordings`` (the same cache shape the K40 recordings use) and
+    ``/system/healthStatus`` into ``health_status``. Both reads are optional:
+    a transport failure keeps the previous values and retries on the next
+    poll, and a device that does not serve them never fills them, so the
+    sensors built on them stay pending (see sensor.py) instead of sitting
+    unknown for the life of the install.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        """Initialize, with the recordings and health status caches empty."""
+        super().__init__(*args, **kwargs)
+        self.recordings: dict[str, float] = {}
+        self.health_status: dict | None = None
+        self._last_recordings_fetch: datetime | None = None
+        self._recordings_day: str | None = None
 
     async def _async_update_data(self) -> BHCDeviceWddw2:
-        """Refresh device values and optional diagnostic/consumption resources."""
+        """Update via the library, then the slower optional reads."""
         data = await super()._async_update_data()
-        now = dt_util.utcnow()
-        last_health = getattr(self, "_health_fetched_at", None)
-        if last_health is None or now - last_health >= timedelta(minutes=5):
-            try:
-                response = await self.bhc.async_request_bulk(
-                    self.unique_id, ["/system/healthStatus"]
-                )
-                node = (response or {}).get("/system/healthStatus")
-                if isinstance(node, dict) and node.get("value") is not None:
-                    self.health_status_node = node
-                self._health_fetched_at = now
-            except (
-                ApiError,
-                InvalidSensorDataError,
-                NotRespondingError,
-                RetryError,
-                TimeoutError,
-            ):
-                _LOGGER.debug("Device %s: health status read failed", self.unique_id)
-
-        today = dt_util.now().date().isoformat()
-        last_water = getattr(self, "_water_fetched_at", None)
-        if (
-            getattr(self, "_water_day", None) != today
-            or last_water is None
-            or now - last_water >= timedelta(minutes=5)
-        ):
-            path = f"/recordings/dhwCircuits/dhw1/sensor/water?interval={today}"
-            try:
-                response = await self.bhc.async_request_bulk(self.unique_id, [path])
-                node = (response or {}).get(path)
-                samples = node.get("recording") if isinstance(node, dict) else None
-                if isinstance(samples, list) and samples:
-                    # yRecording.y contains liters for the hourly bucket.
-                    # c is an observation count, not a volume multiplier.
-                    liters = sum(
-                        float(sample["y"])
-                        for sample in samples
-                        if isinstance(sample, dict)
-                        and isinstance(sample.get("y"), (int, float))
-                    )
-                    self.water_today_liters = round(liters, 2)
-                    self._water_day = today
-                else:
-                    self.water_today_liters = None
-                self._water_fetched_at = now
-            except (
-                ApiError,
-                InvalidSensorDataError,
-                NotRespondingError,
-                RetryError,
-                TimeoutError,
-            ):
-                _LOGGER.debug("Device %s: water history read failed", self.unique_id)
-                if getattr(self, "_water_day", None) != today:
-                    self.water_today_liters = None
+        await self._fetch_recordings()
         return data
+
+    async def _fetch_recordings(self) -> None:
+        """Read today's water recording and the health status, rate-limited."""
+        now = dt_util.utcnow()
+        today = dt_util.now().strftime("%Y-%m-%d")
+        if today != self._recordings_day:
+            # A new day: yesterday's total must not be shown as today's, so
+            # drop it until today's recording has been read, and read it now.
+            self.recordings.pop(WDDW2_WATER_TODAY_KEY, None)
+            self._recordings_day = today
+            self._last_recordings_fetch = None
+        if (
+            self._last_recordings_fetch is not None
+            and now - self._last_recordings_fetch < WDDW2_RECORDINGS_POLL_INTERVAL
+        ):
+            return
+
+        water_path = f"/recordings/dhwCircuits/dhw1/sensor/water?interval={today}"
+        try:
+            # Two calls, as verified on hardware: whether the bulk endpoint
+            # accepts a recording and a resource in one request is unknown.
+            health = await self.bhc.async_request_bulk(
+                self.unique_id, [WDDW2_HEALTH_STATUS_PATH]
+            )
+            water = await self.bhc.async_request_bulk(self.unique_id, [water_path])
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            RetryError,
+            TimeoutError,
+        ):
+            # Transport failure: keep the last values and leave the timestamp
+            # unset so the next regular poll retries straight away.
+            _LOGGER.debug(
+                "Device %s: recordings fetch failed, keeping last values",
+                self.unique_id,
+            )
+            return
+        self._last_recordings_fetch = now
+
+        node = (health or {}).get(WDDW2_HEALTH_STATUS_PATH)
+        if isinstance(node, dict) and node.get("value") is not None:
+            self.health_status = node
+        litres = _sum_recording((water or {}).get(water_path))
+        if litres is not None:
+            self.recordings[WDDW2_WATER_TODAY_KEY] = litres
 
     def _build_device_data(self, data: BHCDeviceWddw2) -> BHCDeviceWddw2:
         """Build WDDW2 device data."""

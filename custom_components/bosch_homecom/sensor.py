@@ -35,7 +35,6 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
-from homeassistant.util import dt as dt_util
 
 from .bacon import BACON_AIR_QUALITY_OPTIONS, bacon_air_quality_level, bacon_pm25_level
 
@@ -55,6 +54,7 @@ from .const import (
     api_value_to_state_key,
 )
 from .coordinator import (
+    WDDW2_WATER_TODAY_KEY,
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
@@ -373,9 +373,12 @@ async def async_setup_entry(
             # their value; one the device really lacks simply never is.
             wddw2_pending: list[_Wddw2Candidate] = []
 
-            entities.append(BoschComWddw2HealthStatusSensor(coordinator))
-            entities.append(BoschComWddw2WaterTodaySensor(coordinator))
-            entities.append(BoschComWddw2HeatingActivePowerSensor(coordinator))
+            # Health status and today's water come from the coordinator's
+            # slower recordings fetch, the heating-only power from fields a
+            # Tronic gas heater lacks: all three go through the same pending
+            # mechanism, so none sits unknown for the life of the install.
+            for candidate in _wddw2_extra_candidates(coordinator):
+                _add_or_defer(candidate, entities, wddw2_pending)
 
             # Issue #129: surface heat-source + water totals (top-level paths).
             for candidate in _wddw2_totals_candidates(coordinator):
@@ -2099,54 +2102,10 @@ class BoschComHeatingActiveBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        data = getattr(self.coordinator, "data", {}) or {}
-        if hasattr(data, "asdict"):
-            data = data.asdict()
-        elif hasattr(data, "__dict__"):
-            data = data.__dict__
-
-        # helper para encontrar o circuito /dhwCircuits/dhw1
-        def _dhw1():
-            for entry in data.get("dhw_circuits", []) or []:
-                if entry.get("id") == "/dhwCircuits/dhw1":
-                    return entry
-            return None
-
-        dhw = _dhw1()
-        if not isinstance(dhw, dict):
-            return False
-
-        def _val(node_key: str):
-            node = dhw.get(node_key)
-            if isinstance(node, dict):
-                return node.get("value")
-            return node
-
-        # No WDDW2 os nós estão no nível do circuito (sem 'sensor')
-        water_flow = _val("waterFlow")
-        inlet = _val("inletTemperature")
-        outlet = _val("outletTemperature")
-
-        try:
-            _LOGGER.debug(
-                "heating_active: water_flow=%s inlet=%s outlet=%s",
-                water_flow,
-                inlet,
-                outlet,
-            )
-
-            if (
-                water_flow is not None
-                and float(water_flow) > 0
-                and inlet is not None
-                and outlet is not None
-            ):
-                return (float(outlet) - float(inlet)) >= self._delta_t_threshold
-
-        except (TypeError, ValueError):
-            return False
-
-        return False
+        """Return whether water is flowing and being heated right now."""
+        return _wddw2_heating_active(
+            _wddw2_dhw1(self.coordinator.data), self._delta_t_threshold
+        )
 
 
 class BoschComSensorIndoorHumidity(BoschComSensorBase):
@@ -3575,8 +3534,52 @@ def _build_icom_extra_sensors(
     return entities
 
 
+# ---- WDDW2 heating heuristic, shared by the binary and the power sensor ----
+
+# Outlet warmer than inlet by at least this much, with water flowing, counts
+# as heating. Shared so the power sensor cannot drift from the binary sensor.
+WDDW2_HEATING_DELTA_T: Final = 3.0
+
+
+def _wddw2_dhw1(data: Any) -> dict | None:
+    """Return the /dhwCircuits/dhw1 circuit of a wddw2 payload, if present."""
+    for circuit in getattr(data, "dhw_circuits", None) or []:
+        if isinstance(circuit, dict) and circuit.get("id") == "/dhwCircuits/dhw1":
+            return circuit
+    return None
+
+
+def _wddw2_number(node: Any) -> float | None:
+    """Return a node's value as a float, or None when it has none."""
+    raw = node.get("value") if isinstance(node, dict) else node
+    try:
+        return float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _wddw2_heating_active(dhw: dict | None, delta_t_threshold: float) -> bool:
+    """Return whether the circuit shows water flowing and warming up."""
+    if not isinstance(dhw, dict):
+        return False
+    flow = _wddw2_number(dhw.get("waterFlow"))
+    inlet = _wddw2_number(dhw.get("inletTemperature"))
+    outlet = _wddw2_number(dhw.get("outletTemperature"))
+    if flow is None or inlet is None or outlet is None:
+        return False
+    return flow > 0 and outlet - inlet >= delta_t_threshold
+
+
+# ---- WDDW2 optional sensors (#220) -----------------------------------------
+
+
 class BoschComWddw2HeatingActivePowerSensor(CoordinatorEntity, SensorEntity):
-    """Power percentage sampled only while heating is explicitly active."""
+    """The heat source's power percentage, but only while heating water.
+
+    The plain power percentage averages idle time into its statistics; this
+    one is unknown unless the same coordinator snapshot shows water flowing
+    and warming, so its long-term mean describes the heating runs.
+    """
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -3595,57 +3598,28 @@ class BoschComWddw2HeatingActivePowerSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Use one coordinator snapshot to confirm heating and positive power."""
+        """Return the power percentage while heating, otherwise None."""
         data = self.coordinator.data
-        if data is None:
-            return None
-
-        dhw = next(
-            (
-                circuit
-                for circuit in (data.dhw_circuits or [])
-                if isinstance(circuit, dict)
-                and circuit.get("id") == "/dhwCircuits/dhw1"
-            ),
-            None,
-        )
-        if dhw is None:
-            return None
-
-        def value_of(field: str) -> float | None:
-            node = dhw.get(field)
-            raw = node.get("value") if isinstance(node, dict) else node
-            try:
-                return float(raw) if raw is not None else None
-            except (TypeError, ValueError):
-                return None
-
-        flow = value_of("waterFlow")
-        inlet = value_of("inletTemperature")
-        outlet = value_of("outletTemperature")
-        # Match the existing Heating Active heuristic without reading its
-        # entity state, which may still reflect the previous coordinator poll.
-        if (
-            flow is None
-            or flow <= 0
-            or inlet is None
-            or outlet is None
-            or outlet - inlet < 3.0
+        if data is None or not _wddw2_heating_active(
+            _wddw2_dhw1(data), WDDW2_HEATING_DELTA_T
         ):
             return None
-
-        heat_sources = data.heat_sources or {}
-        power_node = heat_sources.get("powerPercentage")
-        power = power_node.get("value") if isinstance(power_node, dict) else None
-        try:
-            percentage = float(power)
-        except (TypeError, ValueError):
+        percentage = _wddw2_number(
+            (getattr(data, "heat_sources", None) or {}).get("powerPercentage")
+        )
+        if percentage is None:
             return None
         return percentage if 0 < percentage <= 100 else None
 
 
 class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
-    """Today's Bosch-reported DHW water consumption, in liters."""
+    """Today's DHW water consumption in litres, as the app reports it.
+
+    Summed from the hourly buckets of today's water recording (see
+    coordinator._fetch_recordings). It grows through the day and the
+    coordinator drops it at midnight, which is the ``total_increasing``
+    reset; a failed fetch keeps the last value, so no false reset is logged.
+    """
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -3664,13 +3638,8 @@ class BoschComWddw2WaterTodaySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Return today's value only, never yesterday's stale value."""
-        if (
-            getattr(self.coordinator, "_water_day", None)
-            != dt_util.now().date().isoformat()
-        ):
-            return None
-        return getattr(self.coordinator, "water_today_liters", None)
+        """Return today's litres so far, None before today's first read."""
+        return self.coordinator.recordings.get(WDDW2_WATER_TODAY_KEY)
 
 
 class BoschComWddw2HealthStatusSensor(CoordinatorEntity, SensorEntity):
@@ -3691,13 +3660,61 @@ class BoschComWddw2HealthStatusSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> str | None:
-        """Return None if the endpoint has not provided a health state."""
-        node = getattr(self.coordinator, "health_status_node", None)
-        return (
-            str(node["value"])
-            if isinstance(node, dict) and node.get("value") is not None
-            else None
+        """Return the health state, or None until the endpoint has served one."""
+        node = self.coordinator.health_status
+        if isinstance(node, dict) and node.get("value") is not None:
+            return str(node["value"])
+        return None
+
+
+def _wddw2_has_health_status(coordinator: BoschComModuleCoordinatorWddw2) -> bool:
+    """Return whether the health status endpoint has answered."""
+    return isinstance(getattr(coordinator, "health_status", None), dict)
+
+
+def _wddw2_has_water_today(coordinator: BoschComModuleCoordinatorWddw2) -> bool:
+    """Return whether today's water recording has been read."""
+    return WDDW2_WATER_TODAY_KEY in (getattr(coordinator, "recordings", None) or {})
+
+
+def _wddw2_has_power_fields(coordinator: BoschComModuleCoordinatorWddw2) -> bool:
+    """Return whether the device reports the fields the power sensor needs.
+
+    A Tronic gas heater has no power percentage, so it gets no such sensor.
+    """
+    data = coordinator.data
+    dhw = _wddw2_dhw1(data)
+    if dhw is None:
+        return False
+    node = (getattr(data, "heat_sources", None) or {}).get("powerPercentage")
+    return (
+        isinstance(node, dict)
+        and "value" in node
+        and all(
+            dhw.get(field) is not None
+            for field in ("waterFlow", "inletTemperature", "outletTemperature")
         )
+    )
+
+
+def _wddw2_extra_candidates(
+    coordinator: BoschComModuleCoordinatorWddw2,
+) -> list[_Wddw2Candidate]:
+    """Return the optional wddw2 sensors as pending candidates."""
+    return [
+        (
+            partial(_wddw2_has_health_status, coordinator),
+            partial(BoschComWddw2HealthStatusSensor, coordinator),
+        ),
+        (
+            partial(_wddw2_has_water_today, coordinator),
+            partial(BoschComWddw2WaterTodaySensor, coordinator),
+        ),
+        (
+            partial(_wddw2_has_power_fields, coordinator),
+            partial(BoschComWddw2HeatingActivePowerSensor, coordinator),
+        ),
+    ]
 
 
 # ---- WDDW2 heat-source + water totals (issue #129) -------------------------
