@@ -657,6 +657,64 @@
       },
       "heating_active_power": {
         "name": "Heating Active Power"
+      },
+      "eheater_status": {
+        "name": "Electric heater status",
+        "state": {
+          "off": "Off",
+          "heating": "Heating",
+          "cooling": "Cooling",
+          "dhw": "Hot water",
+          "pool": "Pool",
+          "pool_heat": "Pool heating",
+          "defrost": "Defrost",
+          "alarm": "Alarm"
+        }
+      },
+      "lifetime_compressor_total": {
+        "name": "Compressor electricity lifetime (total)"
+      },
+      "lifetime_eheater_total": {
+        "name": "Electric heater electricity lifetime (total)"
+      },
+      "lifetime_heat_produced_total": {
+        "name": "Heat produced lifetime (total)"
+      },
+      "lifetime_compressor_ch": {
+        "name": "Compressor electricity lifetime (heating)"
+      },
+      "lifetime_eheater_ch": {
+        "name": "Electric heater electricity lifetime (heating)"
+      },
+      "lifetime_heat_produced_ch": {
+        "name": "Heat produced lifetime (heating)"
+      },
+      "lifetime_compressor_dhw": {
+        "name": "Compressor electricity lifetime (hot water)"
+      },
+      "lifetime_eheater_dhw": {
+        "name": "Electric heater electricity lifetime (hot water)"
+      },
+      "lifetime_heat_produced_dhw": {
+        "name": "Heat produced lifetime (hot water)"
+      },
+      "lifetime_compressor_cooling": {
+        "name": "Compressor electricity lifetime (cooling)"
+      },
+      "lifetime_eheater_cooling": {
+        "name": "Electric heater electricity lifetime (cooling)"
+      },
+      "lifetime_heat_produced_cooling": {
+        "name": "Heat produced lifetime (cooling)"
+      },
+      "lifetime_compressor_pool": {
+        "name": "Compressor electricity lifetime (pool)"
+      },
+      "lifetime_eheater_pool": {
+        "name": "Electric heater electricity lifetime (pool)"
+      },
+      "lifetime_heat_produced_pool": {
+        "name": "Heat produced lifetime (pool)"
       }
     },
     "binary_sensor": {
@@ -674,6 +732,18 @@
       },
       "holiday_active": {
         "name": "{circuit} holiday active"
+      },
+      "hs_ch_status": {
+        "name": "Central heating active"
+      },
+      "hs_standby_mode": {
+        "name": "Standby mode"
+      },
+      "hs_emergency_mode": {
+        "name": "Emergency mode"
+      },
+      "hs_pv_contact": {
+        "name": "PV contact"
       }
     },
     "number": {

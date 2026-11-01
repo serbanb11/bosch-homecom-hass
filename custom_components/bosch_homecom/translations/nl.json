@@ -657,6 +657,64 @@
       },
       "heating_active_power": {
         "name": "Vermogen tijdens verwarming"
+      },
+      "eheater_status": {
+        "name": "Elektrische verwarming status",
+        "state": {
+          "off": "Uit",
+          "heating": "Verwarmen",
+          "cooling": "Koelen",
+          "dhw": "Warm water",
+          "pool": "Zwembad",
+          "pool_heat": "Zwembadverwarming",
+          "defrost": "Ontdooien",
+          "alarm": "Alarm"
+        }
+      },
+      "lifetime_compressor_total": {
+        "name": "Compressor elektriciteit totaalteller (totaal)"
+      },
+      "lifetime_eheater_total": {
+        "name": "Elektrische verwarming elektriciteit totaalteller (totaal)"
+      },
+      "lifetime_heat_produced_total": {
+        "name": "Geproduceerde warmte totaalteller (totaal)"
+      },
+      "lifetime_compressor_ch": {
+        "name": "Compressor elektriciteit totaalteller (verwarming)"
+      },
+      "lifetime_eheater_ch": {
+        "name": "Elektrische verwarming elektriciteit totaalteller (verwarming)"
+      },
+      "lifetime_heat_produced_ch": {
+        "name": "Geproduceerde warmte totaalteller (verwarming)"
+      },
+      "lifetime_compressor_dhw": {
+        "name": "Compressor elektriciteit totaalteller (warm water)"
+      },
+      "lifetime_eheater_dhw": {
+        "name": "Elektrische verwarming elektriciteit totaalteller (warm water)"
+      },
+      "lifetime_heat_produced_dhw": {
+        "name": "Geproduceerde warmte totaalteller (warm water)"
+      },
+      "lifetime_compressor_cooling": {
+        "name": "Compressor elektriciteit totaalteller (koeling)"
+      },
+      "lifetime_eheater_cooling": {
+        "name": "Elektrische verwarming elektriciteit totaalteller (koeling)"
+      },
+      "lifetime_heat_produced_cooling": {
+        "name": "Geproduceerde warmte totaalteller (koeling)"
+      },
+      "lifetime_compressor_pool": {
+        "name": "Compressor elektriciteit totaalteller (zwembad)"
+      },
+      "lifetime_eheater_pool": {
+        "name": "Elektrische verwarming elektriciteit totaalteller (zwembad)"
+      },
+      "lifetime_heat_produced_pool": {
+        "name": "Geproduceerde warmte totaalteller (zwembad)"
       }
     },
     "binary_sensor": {
@@ -674,6 +732,18 @@
       },
       "holiday_active": {
         "name": "{circuit} vakantie actief"
+      },
+      "hs_ch_status": {
+        "name": "Centrale verwarming actief"
+      },
+      "hs_standby_mode": {
+        "name": "Stand-bymodus"
+      },
+      "hs_emergency_mode": {
+        "name": "Noodbedrijf"
+      },
+      "hs_pv_contact": {
+        "name": "PV-contact"
       }
     },
     "number": {

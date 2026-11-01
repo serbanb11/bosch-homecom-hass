@@ -22,6 +22,7 @@ from .coordinator import (
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
+from .sensor import _add_or_defer, _add_pending_sensors_later
 
 PARALLEL_UPDATES = 1
 
@@ -47,6 +48,17 @@ async def async_setup_entry(
                             coordinator=coordinator, dev_id=dev_id
                         )
                     )
+        if isinstance(coordinator, BoschComModuleCoordinatorK40):
+            # Heat source status tiles the app's dashboard shows (#161). A tile
+            # the system does not serve is a 404 and gets no entity; one hidden
+            # by a transient failure at setup is added by a later update.
+            flag_pending: list = []
+            for candidate in _heat_source_flag_candidates(coordinator):
+                _add_or_defer(candidate, entities, flag_pending)
+            if flag_pending:
+                _add_pending_sensors_later(
+                    coordinator, config_entry, flag_pending, async_add_entities
+                )
         if isinstance(coordinator, BoschComModuleCoordinatorIcom):
             # One per circuit whose holidayMode/activated the gateway serves.
             for kind, refs in (
@@ -398,3 +410,76 @@ class BoschComIcomHolidayActiveSensor(CoordinatorEntity, BinarySensorEntity):
             "dhw_mode": value("dhwMode"),
             "fixed_temperature": value("fixTemperature"),
         }
+
+
+# --- K40 heat source status tiles ---------------------------------------------
+
+# heat_sources key -> (translation key, device class, icon, "on" test). The
+# app treats chStatus as active unless it is "off" and the others as active
+# when "on" (LocalConnectKeyFeatureDetectionExtensions); pvContactState is the
+# heat pump's SG-ready / PV contact, on or off.
+_HEAT_SOURCE_FLAGS: dict[str, tuple[str, BinarySensorDeviceClass | None, str, bool]] = {
+    "chStatus": ("hs_ch_status", BinarySensorDeviceClass.HEAT, "mdi:radiator", False),
+    "standbyMode": ("hs_standby_mode", None, "mdi:power-standby", True),
+    "emergencyMode": (
+        "hs_emergency_mode",
+        BinarySensorDeviceClass.PROBLEM,
+        "mdi:alert-circle-outline",
+        True,
+    ),
+    "pvContactState": ("hs_pv_contact", None, "mdi:solar-power", True),
+}
+
+
+class BoschComK40HeatSourceFlagSensor(CoordinatorEntity, BinarySensorEntity):
+    """An on/off status of the heat source, from the heat sources bulk."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40, key: str) -> None:
+        """Initialize for one heat_sources key."""
+        super().__init__(coordinator)
+        translation_key, device_class, icon, self._on_is_on = _HEAT_SOURCE_FLAGS[key]
+        self._key = key
+        self._attr_translation_key = translation_key
+        self._attr_device_class = device_class
+        self._attr_icon = icon
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{translation_key}"
+        self._attr_suggested_object_id = translation_key
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return the state, None while the value is unknown."""
+        value = _heat_source_value(self.coordinator, self._key)
+        if not isinstance(value, str):
+            return None
+        value = value.lower()
+        if self._on_is_on:
+            return value in ("on", "true", "active")
+        return value != "off"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the raw value, since the vocabulary is only partly known."""
+        value = _heat_source_value(self.coordinator, self._key)
+        return {"raw_value": value} if value is not None else {}
+
+
+def _heat_source_value(coordinator: BoschComModuleCoordinatorK40, key: str) -> Any:
+    data = coordinator.data
+    node = ((getattr(data, "heat_sources", None) if data else None) or {}).get(key)
+    return node.get("value") if isinstance(node, dict) else None
+
+
+def _heat_source_flag_candidates(coordinator: BoschComModuleCoordinatorK40) -> list:
+    """Return the status tiles as pending candidates."""
+    return [
+        (
+            lambda key=key: _heat_source_value(coordinator, key) is not None,
+            lambda key=key: BoschComK40HeatSourceFlagSensor(coordinator, key),
+        )
+        for key in _HEAT_SOURCE_FLAGS
+    ]

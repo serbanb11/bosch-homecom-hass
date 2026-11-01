@@ -659,6 +659,64 @@
       },
       "heating_active_power": {
         "name": "Heizleistung bei Aktivität"
+      },
+      "eheater_status": {
+        "name": "E-Heizer Status",
+        "state": {
+          "off": "Aus",
+          "heating": "Heizen",
+          "cooling": "Kühlen",
+          "dhw": "Warmwasser",
+          "pool": "Pool",
+          "pool_heat": "Poolheizung",
+          "defrost": "Abtauen",
+          "alarm": "Störung"
+        }
+      },
+      "lifetime_compressor_total": {
+        "name": "Kompressor Strom Gesamtzähler (gesamt)"
+      },
+      "lifetime_eheater_total": {
+        "name": "E-Heizer Strom Gesamtzähler (gesamt)"
+      },
+      "lifetime_heat_produced_total": {
+        "name": "Erzeugte Wärme Gesamtzähler (gesamt)"
+      },
+      "lifetime_compressor_ch": {
+        "name": "Kompressor Strom Gesamtzähler (Heizung)"
+      },
+      "lifetime_eheater_ch": {
+        "name": "E-Heizer Strom Gesamtzähler (Heizung)"
+      },
+      "lifetime_heat_produced_ch": {
+        "name": "Erzeugte Wärme Gesamtzähler (Heizung)"
+      },
+      "lifetime_compressor_dhw": {
+        "name": "Kompressor Strom Gesamtzähler (Warmwasser)"
+      },
+      "lifetime_eheater_dhw": {
+        "name": "E-Heizer Strom Gesamtzähler (Warmwasser)"
+      },
+      "lifetime_heat_produced_dhw": {
+        "name": "Erzeugte Wärme Gesamtzähler (Warmwasser)"
+      },
+      "lifetime_compressor_cooling": {
+        "name": "Kompressor Strom Gesamtzähler (Kühlung)"
+      },
+      "lifetime_eheater_cooling": {
+        "name": "E-Heizer Strom Gesamtzähler (Kühlung)"
+      },
+      "lifetime_heat_produced_cooling": {
+        "name": "Erzeugte Wärme Gesamtzähler (Kühlung)"
+      },
+      "lifetime_compressor_pool": {
+        "name": "Kompressor Strom Gesamtzähler (Pool)"
+      },
+      "lifetime_eheater_pool": {
+        "name": "E-Heizer Strom Gesamtzähler (Pool)"
+      },
+      "lifetime_heat_produced_pool": {
+        "name": "Erzeugte Wärme Gesamtzähler (Pool)"
       }
     },
     "binary_sensor": {
@@ -676,6 +734,18 @@
       },
       "holiday_active": {
         "name": "{circuit} Urlaub aktiv"
+      },
+      "hs_ch_status": {
+        "name": "Heizbetrieb aktiv"
+      },
+      "hs_standby_mode": {
+        "name": "Standby-Modus"
+      },
+      "hs_emergency_mode": {
+        "name": "Notbetrieb"
+      },
+      "hs_pv_contact": {
+        "name": "PV-Kontakt"
       }
     },
     "number": {

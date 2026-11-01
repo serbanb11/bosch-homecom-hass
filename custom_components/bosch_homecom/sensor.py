@@ -619,6 +619,19 @@ async def async_setup_entry(
                 entities.append(BoschComK40HeatDemandSensor(coordinator))
             if hs.get("compressorStatus"):
                 entities.append(BoschComK40CompressorStatusSensor(coordinator))
+            if hs.get("eHeaterStatus"):
+                entities.append(BoschComK40EHeaterStatusSensor(coordinator))
+            # Lifetime energy split per mode (#58, #206): the device's own
+            # counters, so no bucket rounding and no lag. A mode the system
+            # lacks (cooling, pool) answers 404 and gets no sensor; one hidden
+            # by a transient failure at setup is added by a later update.
+            lifetime_pending: list[_PendingSensor] = []
+            for candidate in _lifetime_energy_candidates(coordinator):
+                _add_or_defer(candidate, entities, lifetime_pending)
+            if lifetime_pending:
+                _add_pending_sensors_later(
+                    coordinator, config_entry, lifetime_pending, async_add_entities
+                )
             if hs.get("starts"):
                 entities.append(BoschComK40StartCountsSensor(coordinator))
 
@@ -4217,6 +4230,155 @@ class BoschComK40CompressorStatusSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data."""
         self.async_write_ha_state()
+
+
+class BoschComK40EHeaterStatusSensor(CoordinatorEntity, SensorEntity):
+    """What the auxiliary electric heater is doing.
+
+    /heatSources/Source/eHeater/status, the app's "auxiliary heater" tile; the
+    vocabulary is the compressor's (off, heating, dhw, pool, pool_heat,
+    defrost, alarm). Options come from allowedValues when the device sends
+    them, so an unlisted value never becomes an invalid state.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_icon = "mdi:radiator"
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize the electric heater status sensor."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "eheater_status"
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-eheater_status"
+        self._attr_suggested_object_id = "eheater_status"
+
+    def _node(self) -> dict:
+        node = (self.coordinator.data.heat_sources or {}).get("eHeaterStatus")
+        return node if isinstance(node, dict) else {}
+
+    @property
+    def options(self) -> list[str]:
+        """Return the device's allowed values, else the compressor vocabulary."""
+        allowed = self._node().get("allowedValues")
+        if isinstance(allowed, list) and allowed:
+            return [str(v) for v in allowed]
+        return COMPRESSOR_STATUS_OPTIONS
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the heater state, or None for a value we do not know."""
+        value = self._node().get("value")
+        return value if value in self.options else None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        self.async_write_ha_state()
+
+
+# Lifetime energy counters: heat_sources key -> mode name used in the keys.
+_LIFETIME_ENERGY_NODES: Final[dict[str, str]] = {
+    "consumption": "total",
+    "chConsumption": "ch",
+    "dhwConsumption": "dhw",
+    "coolingConsumption": "cooling",
+    "poolConsumption": "pool",
+}
+# emonValue part -> translation key prefix.
+_LIFETIME_ENERGY_PARTS: Final[dict[str, str]] = {
+    "compressor": "lifetime_compressor",
+    "eheater": "lifetime_eheater",
+    "outputProduced": "lifetime_heat_produced",
+}
+
+
+def _emon_part(node: Any, part: str) -> float | None:
+    """Return one part of an emonValue's ``values`` list, or None."""
+    if not isinstance(node, dict):
+        return None
+    for item in node.get("values") or []:
+        if isinstance(item, dict) and part in item:
+            value = item[part]
+            return float(value) if isinstance(value, (int, float)) else None
+    return None
+
+
+class BoschComK40LifetimeEnergySensor(CoordinatorEntity, SensorEntity):
+    """One part (compressor, electric heater, heat produced) of a lifetime counter.
+
+    /heatSources/emon/{total,ch,dhw,cooling,pool}Consumption are the device's
+    own lifetime kWh totals, split into compressor and electric heater input
+    and heat output (#58). Unlike the hourly recordings they are not rounded
+    into whole-kWh buckets and do not lag, so they suit the Energy dashboard.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        node_key: str,
+        part: str,
+        *,
+        enabled_default: bool,
+    ) -> None:
+        """Initialize one part of one mode's counter."""
+        super().__init__(coordinator)
+        mode = _LIFETIME_ENERGY_NODES[node_key]
+        key = f"{_LIFETIME_ENERGY_PARTS[part]}_{mode}"
+        self._node_key = node_key
+        self._part = part
+        self._attr_translation_key = key
+        self._attr_device_info = coordinator.device_info
+        self._attr_unique_id = f"{coordinator.unique_id}-{key}"
+        self._attr_suggested_object_id = key
+        self._attr_entity_registry_enabled_default = enabled_default
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the counter."""
+        hs = self.coordinator.data.heat_sources or {}
+        return _emon_part(hs.get(self._node_key), self._part)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data."""
+        self.async_write_ha_state()
+
+
+def _lifetime_energy_candidates(
+    coordinator: BoschComModuleCoordinatorK40,
+) -> list[_PendingSensor]:
+    """Return the lifetime energy sensors as pending candidates.
+
+    The totals are on by default; the per-mode split is diagnostics most
+    users enable per entity, as with the daily recordings.
+    """
+
+    def has_part(node_key: str, part: str) -> bool:
+        hs = getattr(coordinator.data, "heat_sources", None) or {}
+        return _emon_part(hs.get(node_key), part) is not None
+
+    return [
+        (
+            partial(has_part, node_key, part),
+            partial(
+                BoschComK40LifetimeEnergySensor,
+                coordinator,
+                node_key,
+                part,
+                enabled_default=node_key == "consumption",
+            ),
+        )
+        for node_key in _LIFETIME_ENERGY_NODES
+        for part in _LIFETIME_ENERGY_PARTS
+    ]
 
 
 class BoschComK40StartCountsSensor(CoordinatorEntity, SensorEntity):
