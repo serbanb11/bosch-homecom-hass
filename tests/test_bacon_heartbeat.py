@@ -6,6 +6,7 @@ from datetime import timedelta
 from unittest.mock import Mock
 
 from homeassistant.util import dt as dt_util
+from homecom_alt.const import BACON_USER_AGENT
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -27,7 +28,9 @@ def test_heartbeat_url_follows_the_region():
     assert heartbeat_url("use1").startswith("https://claiming.use1.")
 
 
-async def test_send_heartbeat_posts_an_empty_body_with_the_token(hass, aioclient_mock):
+async def test_send_heartbeat_posts_an_empty_json_object_with_the_token(
+    hass, aioclient_mock
+):
     aioclient_mock.post(URL, status=204)
     session = __import__(
         "homeassistant.helpers.aiohttp_client", fromlist=["x"]
@@ -38,8 +41,14 @@ async def test_send_heartbeat_posts_an_empty_body_with_the_token(hass, aioclient
     assert status == 204
     (request,) = aioclient_mock.mock_calls
     assert request[0] == "POST"
-    assert request[3]["Authorization"] == "Bearer tok"
-    assert not request[2]  # empty body
+    headers = request[3]
+    assert headers["Authorization"] == "Bearer tok"
+    # Without a JSON content type the backend answers 415 and ignores the
+    # report (#203); the other two match the library's claiming calls.
+    assert headers["Content-Type"] == "application/json"
+    assert headers["Accept"] == "application/json"
+    assert headers["User-Agent"] == BACON_USER_AGENT
+    assert request[2] == b"{}"
 
 
 async def test_send_heartbeat_reports_a_rejection_without_raising(

@@ -1,14 +1,15 @@
-"""Presence heartbeat for Matter (bacon) devices: an experiment for #203.
+"""Presence heartbeat for Matter (bacon) devices.
 
-The retained ``{serial}/topics/sensor`` message of an Air 4000i was eight days
-old while the device measured live. Reading the HomeCom app showed exactly one
-thing it does on the push channel that this integration did not: while its
-MQTT session is up it POSTs an empty body to ``v1/users/self/live`` on the
-claiming host every five minutes, a report that an active client is watching.
-The hypothesis is that the backend relays device telemetry more often while
-such a client is present. This module sends the same report so a reporter can
-tell whether the sensor topic starts refreshing. Every request is logged at
-INFO so the result can be read off the Home Assistant log.
+The retained ``{serial}/topics/sensor`` message of an Air 4000i sat unchanged
+for fourteen days while the device measured live. The HomeCom app does one
+thing on the push channel that this integration did not: while its MQTT session
+is up it POSTs ``{}`` to ``v1/users/self/live`` on the claiming host every five
+minutes, a report that an active client is watching. The backend relays device
+telemetry only while such a client is present: in the #203 test the first
+accepted report was followed by a fresh publish within a second, and the cloud
+sensor then tracked the local Matter sensor reading for reading, while a
+rejected report (415, no Content-Type) moved nothing. Requests are logged at
+DEBUG; a rejection at WARNING.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 from homecom_alt import BaconMqttClient, HomeComAlt
 from homecom_alt.bacon import bacon_host
+from homecom_alt.const import BACON_USER_AGENT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,16 +42,20 @@ async def async_send_heartbeat(
 ) -> int | None:
     """POST one presence report; return the HTTP status, None on a transport error."""
     url = heartbeat_url(region)
+    # The body must be JSON (an empty one is fine) or the backend answers 415
+    # and ignores the report. Accept and User-Agent match the library's other
+    # claiming calls, so this looks like the same client as the app.
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": BACON_USER_AGENT,
+    }
     try:
-        async with session.post(
-            url,
-            data=b"",
-            headers={"Authorization": f"Bearer {token}", "Content-Length": "0"},
-            timeout=15,
-        ) as resp:
+        async with session.post(url, data=b"{}", headers=headers, timeout=15) as resp:
             body = (await resp.text())[:200]
             if resp.status < 300:
-                _LOGGER.info("Bacon presence heartbeat: %s -> %s", url, resp.status)
+                _LOGGER.debug("Bacon presence heartbeat: %s -> %s", url, resp.status)
             else:
                 _LOGGER.warning(
                     "Bacon presence heartbeat: %s -> %s %s", url, resp.status, body

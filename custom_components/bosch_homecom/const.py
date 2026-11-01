@@ -71,9 +71,10 @@ CONF_BACON_REGION: Final = "bacon_region"
 CONF_BACON_TITLES: Final = "bacon_titles"
 DEFAULT_WB_LABEL: Final = "Wallbox"
 
-# Experiment for #203: report an active client to the bacon backend every five
-# minutes like the app does, to see whether the retained topics/sensor message
-# refreshes more often. Off on main; on in the experiment pre-release.
+# Report an active client to the bacon backend every five minutes like the app
+# does; without it the backend stops relaying topics/sensor and the Matter
+# sensors go stale for days (#203, confirmed with a rejected-vs-accepted
+# control). Kept as a flag so the behaviour can be switched off in one place.
 BACON_PRESENCE_HEARTBEAT: Final = True
 
 

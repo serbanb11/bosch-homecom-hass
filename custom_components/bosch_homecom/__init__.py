@@ -384,7 +384,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise ConfigEntryNotReady from err
         entry.async_on_unload(bacon_client.async_disconnect)
         if BACON_PRESENCE_HEARTBEAT:
-            # Experiment for #203, see bacon_heartbeat.py.
+            # Keeps the backend relaying the push topics (#203), see bacon_heartbeat.py.
             async_start_bacon_heartbeat(
                 hass, entry, websession, bhc, bacon_client, bacon_region
             )
