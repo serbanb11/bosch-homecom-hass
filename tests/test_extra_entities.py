@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
 from homecom_alt import ApiError, BHCDeviceK40
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -18,6 +19,7 @@ from custom_components.bosch_homecom.coordinator import (
     HC_TUNE_POLL_INTERVAL,
     ICOM_HC_TUNE_KEYS,
     K40_HC_TUNE_KEYS,
+    RECORDINGS_PREVIOUS_DAY_TRIES,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
@@ -548,6 +550,146 @@ async def test_icom_coordinator_aggregates_energy_monitoring_per_minute(
         "heat_produced_total": 8.0,
         "energy_eheater_total": 0.0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Issue #178: the day's last hour arrives after midnight
+# ---------------------------------------------------------------------------
+
+
+def _recordings_by_day(filled: dict[str, int], requested: list[str]):
+    """Bulk answers with ``filled[day]`` hourly compressor buckets of 0.5 kWh."""
+
+    def _bulk(dev_id, paths):
+        day = paths[0].rsplit("interval=", 1)[1]
+        requested.append(day)
+        return {
+            p: _make_recording_payload([0.5] * filled[day])
+            for p in paths
+            if "emon/total/compressor" in p
+        }
+
+    return _bulk
+
+
+def _recordings_coordinator(hass, entry, device, firmware, bulk):
+    bhc = MagicMock()
+    bhc.async_request_bulk = AsyncMock(side_effect=bulk)
+    return BoschComModuleCoordinatorK40(
+        hass, bhc, device, firmware, entry, auth_provider=False
+    )
+
+
+@pytest.mark.asyncio
+async def test_recordings_finish_the_previous_day_after_midnight(
+    hass, entry, device, firmware, freezer
+):
+    """The day's last hour arrives after midnight and still reaches HA."""
+    entry.add_to_hass(hass)
+    filled = {"2026-10-15": 23, "2026-10-16": 1}
+    requested: list[str] = []
+    coordinator = _recordings_coordinator(
+        hass, entry, device, firmware, _recordings_by_day(filled, requested)
+    )
+    midnight = dt_util.start_of_local_day(date(2026, 10, 16))
+
+    freezer.move_to(midnight - timedelta(minutes=20))
+    await coordinator._fetch_recordings()
+    assert coordinator.recordings["energy_compressor_total"] == 11.5
+
+    # 00:40: the 23:00 bucket is still missing, so the sensor keeps yesterday.
+    freezer.move_to(midnight + timedelta(minutes=40))
+    await coordinator._fetch_recordings()
+    assert requested[-1] == "2026-10-15"
+    assert coordinator.recordings["energy_compressor_total"] == 11.5
+
+    # 01:40: it has arrived, so the full day reaches HA ...
+    filled["2026-10-15"] = 24
+    freezer.move_to(midnight + timedelta(hours=1, minutes=40))
+    await coordinator._fetch_recordings()
+    assert requested[-1] == "2026-10-15"
+    assert coordinator.recordings["energy_compressor_total"] == 12.0
+
+    # ... and today's values follow on the next poll, not an hour later.
+    freezer.tick(timedelta(minutes=1))
+    await coordinator._fetch_recordings()
+    assert requested[-1] == "2026-10-16"
+    assert coordinator.recordings["energy_compressor_total"] == 0.5
+
+
+@pytest.mark.asyncio
+async def test_recordings_give_up_on_a_previous_day_that_never_completes(
+    hass, entry, device, firmware, freezer
+):
+    """A last hour that never fills holds yesterday's total only for a while."""
+    entry.add_to_hass(hass)
+    filled = {"2026-10-15": 23, "2026-10-16": 2}
+    requested: list[str] = []
+    coordinator = _recordings_coordinator(
+        hass, entry, device, firmware, _recordings_by_day(filled, requested)
+    )
+    midnight = dt_util.start_of_local_day(date(2026, 10, 16))
+
+    freezer.move_to(midnight - timedelta(minutes=20))
+    await coordinator._fetch_recordings()
+    for hour in range(RECORDINGS_PREVIOUS_DAY_TRIES):
+        freezer.move_to(midnight + timedelta(hours=hour, minutes=40))
+        await coordinator._fetch_recordings()
+        assert requested[-1] == "2026-10-15"
+
+    freezer.tick(timedelta(minutes=1))
+    await coordinator._fetch_recordings()
+    assert requested[-1] == "2026-10-16"
+    assert coordinator.recordings["energy_compressor_total"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_recordings_read_today_after_a_longer_gap(
+    hass, entry, device, firmware, freezer
+):
+    """Only the day right before is finished; an older one is left alone."""
+    entry.add_to_hass(hass)
+    requested: list[str] = []
+    coordinator = _recordings_coordinator(
+        hass,
+        entry,
+        device,
+        firmware,
+        _recordings_by_day({"2026-10-16": 1}, requested),
+    )
+    coordinator._recordings_day = date(2026, 10, 14)
+
+    freezer.move_to(dt_util.start_of_local_day(date(2026, 10, 16)))
+    await coordinator._fetch_recordings()
+
+    assert requested == ["2026-10-16"]
+
+
+@pytest.mark.asyncio
+async def test_recordings_day_needs_samples_in_its_last_hour(
+    hass, entry, device, firmware
+):
+    """A placeholder (``c: 0``) or a missing bucket leaves the day incomplete."""
+    entry.add_to_hass(hass)
+    coordinator = _recordings_coordinator(hass, entry, device, firmware, None)
+    day = date(2026, 10, 15)
+    path = f"/recordings/heatSources/emon/total/compressor?interval={day}"
+    placeholder = {
+        "type": "yRecording",
+        "recording": [{"y": 0.5, "c": 1}] * 23 + [{"y": 1.0, "c": 0}],
+    }
+
+    assert coordinator._store_recordings({path: placeholder}, day) is False
+    assert coordinator.recordings["energy_compressor_total"] == 11.5
+    assert (
+        coordinator._store_recordings({path: _make_recording_payload([0.5] * 23)}, day)
+        is False
+    )
+    assert (
+        coordinator._store_recordings({path: _make_recording_payload([0.5] * 24)}, day)
+        is True
+    )
+    assert coordinator._store_recordings({}, day) is False
 
 
 async def _k40_platform(hass, entry, device, firmware, recordings):

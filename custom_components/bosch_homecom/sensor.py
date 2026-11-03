@@ -4468,10 +4468,12 @@ class BoschComK40RecordingSensor(CoordinatorEntity, SensorEntity):
     For energy endpoints (``sum`` aggregation in RECORDING_PATHS), the state is
     the cumulative kWh for today so far. Bosch adds a new hourly bucket every
     ~1h with a 1-2h lag; the value is monotonically increasing within the day
-    and resets to 0 at midnight, matching HA's ``total_increasing`` reset
-    semantic. On fetch failure the previous value is kept
-    (see coordinator._fetch_recordings), so no spurious reset is reported to
-    HA statistics.
+    and resets once today's values are read, matching HA's ``total_increasing``
+    reset semantic. Because of the lag that happens only after the previous
+    day's last hour has arrived (#178), usually one to two hours after midnight,
+    so the day's final total reaches HA first. On fetch failure the previous
+    value is kept (see coordinator._fetch_recordings), so no spurious reset is
+    reported to HA statistics.
 
     For sensor endpoints (``avg`` aggregation), the state is today's running
     average across all hourly buckets so far — with ``state_class: measurement``
