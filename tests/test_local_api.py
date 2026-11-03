@@ -56,6 +56,8 @@ from custom_components.bosch_homecom.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.bosch_homecom.local_sensor import (
+    HC1_PUMP_VOLUME_FLOW,
+    LOCAL_EXTRA_RESOURCES,
     LOCAL_SENSORS,
     BoschComLocalSensor,
     BoschComLocalSourceSensor,
@@ -159,6 +161,8 @@ def _coordinator(hass, entry, device, firmware, *, local=True):
         setattr(bhc, getter, AsyncMock(return_value=None))
     bhc.async_request_bulk = AsyncMock(return_value={})
     local_client = Mock() if local else None
+    if local_client is not None:
+        local_client.async_get_resources = AsyncMock(return_value={})
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, False, local_client
     )
@@ -1127,6 +1131,89 @@ async def test_local_sensor_missing_resource_is_none(hass, entry, device, firmwa
     assert sensor.available is False
 
 
+def _flow(value, state):
+    return {
+        "type": "integerValue",
+        "value": value,
+        "unitOfMeasure": "l/h",
+        "state": state,
+    }
+
+
+@pytest.mark.asyncio
+async def test_pump_volume_flow_prefers_the_heating_circuit_signal(
+    hass, entry, device, firmware
+):
+    """The signal carries the measured flow; the heat source only LOW_FLOW."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={
+            HC1_PUMP_VOLUME_FLOW: _flow(1065, {"LOW_FLOW": 65535}),
+            "/heatSources/hs1/pumpVolumeFlow": _flow(65535, [{"lowflow": 65535}]),
+        }
+    )
+    coordinator.local_healthy = True
+
+    flow = {d.key: d for d in LOCAL_SENSORS}["local_pump_volume_flow"]
+    sensor = BoschComLocalSensor(coordinator, entry, flow)
+
+    assert sensor.native_value == 1065
+
+
+@pytest.mark.asyncio
+async def test_pump_volume_flow_falls_back_and_hides_the_low_flow_marker(
+    hass, entry, device, firmware
+):
+    """Without the signal the heat source is read, and 65535 is no reading."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    flow = {d.key: d for d in LOCAL_SENSORS}["local_pump_volume_flow"]
+
+    coordinator.local_data = _local_device(
+        resources={"/heatSources/hs1/pumpVolumeFlow": _flow(1980, [{"lowflow": 65535}])}
+    )
+    assert BoschComLocalSensor(coordinator, entry, flow).native_value == 1980
+
+    coordinator.local_data = _local_device(
+        resources={
+            "/heatSources/hs1/pumpVolumeFlow": _flow(65535, [{"lowflow": 65535}])
+        }
+    )
+    assert BoschComLocalSensor(coordinator, entry, flow).native_value is None
+
+    coordinator.local_data = _local_device(
+        resources={HC1_PUMP_VOLUME_FLOW: _flow(65535, {"LOW_FLOW": 65535})}
+    )
+    assert BoschComLocalSensor(coordinator, entry, flow).native_value is None
+
+
+@pytest.mark.asyncio
+async def test_local_update_merges_the_extra_resources(hass, entry, device, firmware):
+    """The coordinator reads what homecom_alt does not poll, best effort."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    signal = {HC1_PUMP_VOLUME_FLOW: _flow(1065, {"LOW_FLOW": 65535})}
+    coordinator.local_client.async_get_resources = AsyncMock(return_value=signal)
+    local = _local_device()
+
+    await coordinator._fetch_local_extra(local)
+
+    coordinator.local_client.async_get_resources.assert_awaited_once_with(
+        LOCAL_EXTRA_RESOURCES
+    )
+    assert local.resources[HC1_PUMP_VOLUME_FLOW]["value"] == 1065
+
+    coordinator.local_client.async_get_resources = AsyncMock(
+        side_effect=NotRespondingError("gone")
+    )
+    other = _local_device()
+    await coordinator._fetch_local_extra(other)
+    assert HC1_PUMP_VOLUME_FLOW not in other.resources
+
+    await coordinator._fetch_local_extra(None)
+
+
 @pytest.mark.asyncio
 async def test_local_source_sensor_reports_transport(hass, entry, device, firmware):
     """The diagnostic sensor exposes which transport served the last update."""
@@ -1528,6 +1615,10 @@ async def test_setup_without_the_cloud_uses_the_gateway(hass, cloud_error, reaut
         patch(
             "custom_components.bosch_homecom.HomeComK40Local.async_update",
             new=AsyncMock(return_value=local),
+        ),
+        patch(
+            "custom_components.bosch_homecom.HomeComK40Local.async_get_resources",
+            new=AsyncMock(return_value={}),
         ),
         patch.object(entry, "async_start_reauth") as start_reauth,
     ):

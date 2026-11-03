@@ -45,6 +45,11 @@ class LocalSensorDescription(SensorEntityDescription):
     ``numberOfStarts``); when it is ``None`` the payload's scalar ``value`` is
     used.
 
+    ``fallback_resources`` are read, in order, when ``resource`` is absent on
+    this appliance. With ``state_is_unknown`` a value the payload declares as a
+    named state (e.g. ``{"LOW_FLOW": 65535}``) is a marker, not a reading, and
+    the sensor reports unknown instead of the raw number.
+
     Must stay a SensorEntityDescription: it is the entity's
     ``entity_description``, from which Home Assistant reads fields such as
     ``suggested_unit_of_measurement`` while adding the entity (issue #184).
@@ -52,6 +57,14 @@ class LocalSensorDescription(SensorEntityDescription):
 
     resource: str
     field: str | None = None
+    fallback_resources: tuple[str, ...] = ()
+    state_is_unknown: bool = False
+
+
+# Local resources outside homecom_alt's poll set. The coordinator reads them
+# after each local update and merges them into ``local_data.resources``.
+HC1_PUMP_VOLUME_FLOW = "/signals/SRC.HC1.FlowCtrl.PumpVolumeFlow"
+LOCAL_EXTRA_RESOURCES: tuple[str, ...] = (HC1_PUMP_VOLUME_FLOW,)
 
 
 _TEMP = SensorDeviceClass.TEMPERATURE
@@ -147,7 +160,12 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
     LocalSensorDescription(
         key="local_pump_volume_flow",
         translation_key="local_pump_volume_flow",
-        resource="/heatSources/hs1/pumpVolumeFlow",
+        # The heating-circuit signal carries the measured flow. On a K 40 RF
+        # with a CS5800iAW the heat source resource reports its LOW_FLOW marker
+        # (65535) nearly all the time, while the signal matches the HMI.
+        resource=HC1_PUMP_VOLUME_FLOW,
+        fallback_resources=("/heatSources/hs1/pumpVolumeFlow",),
+        state_is_unknown=True,
         # The gateway reports l/h (API spec: unitOfMeasure "l/h").
         device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
         native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_HOUR,
@@ -207,6 +225,17 @@ def _emon_field(values: Any, field: str) -> Any | None:
     return None
 
 
+def _state_values(state: Any) -> set[Any]:
+    """Collect the values a payload declares as named states.
+
+    The gateway uses both ``{"LOW_FLOW": 65535}`` and ``[{"lowflow": 65535}]``.
+    """
+    items = state if isinstance(state, list) else [state]
+    return {
+        value for item in items if isinstance(item, dict) for value in item.values()
+    }
+
+
 class BoschComLocalSensor(CoordinatorEntity, SensorEntity):
     """A sensor backed by a single K 40 RF Local API resource."""
 
@@ -240,17 +269,30 @@ class BoschComLocalSensor(CoordinatorEntity, SensorEntity):
         """Read this sensor's value out of the local payload."""
         local = getattr(self.coordinator, "local_data", None)
         resources = getattr(local, "resources", None) or {}
-        payload = resources.get(self.entity_description.resource)
-        if not isinstance(payload, dict):
+        description = self.entity_description
+        payload = next(
+            (
+                resources[path]
+                for path in (description.resource, *description.fallback_resources)
+                if isinstance(resources.get(path), dict)
+            ),
+            None,
+        )
+        if payload is None:
             self._attr_native_value = None
             return
 
-        if self.entity_description.field is not None:
+        if description.field is not None:
             self._attr_native_value = _emon_field(
-                payload.get("values"), self.entity_description.field
+                payload.get("values"), description.field
             )
             return
-        self._attr_native_value = payload.get("value")
+        value = payload.get("value")
+        if description.state_is_unknown and value in _state_values(
+            payload.get("state")
+        ):
+            value = None
+        self._attr_native_value = value
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
