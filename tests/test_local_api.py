@@ -6,7 +6,7 @@ coordinator's local-first behaviour, and the local-only sensors.
 
 import dataclasses
 from dataclasses import replace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_TOKEN, CONF_USERNAME
@@ -34,6 +34,7 @@ from custom_components.bosch_homecom.binary_sensor import (
     async_setup_entry as binary_sensor_async_setup_entry,
 )
 from custom_components.bosch_homecom.const import (
+    CLOUD_AUTH_FAILURES_BEFORE_REFRESH,
     CONF_DEVICES,
     CONF_LOCAL,
     CONF_LOCAL_GATEWAY,
@@ -899,26 +900,6 @@ async def test_both_transports_failing_raises_update_failed(
         await coordinator._async_update_data()
 
 
-@pytest.mark.asyncio
-async def test_transient_cloud_401_does_not_trigger_reauth(
-    hass, entry, device, firmware
-):
-    """Mirrors the cloud-only contract: a 401 from the update propagates.
-
-    On a multi-device setup a non-auth-provider can see a transient 401 while the
-    shared token rotates; turning that into a reauth flow would be wrong.
-    """
-    entry.add_to_hass(hass)
-    coordinator, _ = _coordinator(hass, entry, device, firmware)
-    coordinator.local_first.async_update = AsyncMock(side_effect=AuthFailedError("401"))
-    entry.async_start_reauth = Mock()
-
-    with pytest.raises(AuthFailedError):
-        await coordinator._async_update_data()
-
-    entry.async_start_reauth.assert_not_called()
-
-
 # ---------------------------------------------------------------------------
 # Local-only sensors
 # ---------------------------------------------------------------------------
@@ -1389,6 +1370,154 @@ async def test_unusable_token_skips_a_parked_local_transport(
         await coordinator._async_update_data()
 
     coordinator.local_client.async_update.assert_not_awaited()
+
+
+def _cloud_401(hass, entry, device, firmware, *, auth_provider=True):
+    """A coordinator whose cloud answers 401 while the gateway is fine (#221)."""
+    coordinator, bhc = _coordinator(hass, entry, device, firmware)
+    coordinator.auth_provider = auth_provider
+    coordinator.data = _cloud_with_circuits()
+    coordinator.local_first.async_update = AsyncMock(side_effect=AuthFailedError("401"))
+    coordinator.local_client.async_update = AsyncMock(
+        return_value=_local_device(resources=_resource(OUTDOOR, 7.1))
+    )
+    entry.async_start_reauth = Mock()
+    return coordinator, bhc
+
+
+async def _polls(coordinator, count):
+    for _ in range(count):
+        data = await coordinator._async_update_data()
+    return data
+
+
+@pytest.mark.asyncio
+async def test_cloud_401_keeps_the_gateway_live_without_reauth(
+    hass, entry, device, firmware
+):
+    """A 401 from the update serves the gateway; one alone starts no reauth.
+
+    On a multi-device setup a 401 can be the shared token being rotated, so a
+    single one must not turn into a reauth flow. The local-only sensors must
+    not freeze on their last reading either.
+    """
+    entry.add_to_hass(hass)
+    coordinator, bhc = _cloud_401(hass, entry, device, firmware)
+    coordinator.local_healthy = False
+
+    data = await coordinator._async_update_data()
+
+    assert data.outdoor_temp["value"] == 7.1
+    assert data.heat_sources["actualSupplyTemperature"]["value"] == 30.0
+    assert coordinator.local_source == "local"
+    assert coordinator.local_healthy is True
+    entry.async_start_reauth.assert_not_called()
+    assert call(force=True) not in bhc.get_token.await_args_list
+
+
+@pytest.mark.asyncio
+async def test_cloud_401_run_forces_one_token_refresh(hass, entry, device, firmware):
+    """A revoked session is noticed: the token is refreshed by force, once."""
+    entry.add_to_hass(hass)
+    coordinator, bhc = _cloud_401(hass, entry, device, firmware)
+
+    async def _rotate(*, force=False):
+        if force:
+            bhc.token = "rotated-token"
+            bhc.refresh_token = "rotated-refresh"
+
+    bhc.get_token = AsyncMock(side_effect=_rotate)
+
+    await _polls(coordinator, CLOUD_AUTH_FAILURES_BEFORE_REFRESH - 1)
+    assert call(force=True) not in bhc.get_token.await_args_list
+
+    await _polls(coordinator, 2)
+
+    assert bhc.get_token.await_args_list.count(call(force=True)) == 1
+    assert entry.data[CONF_TOKEN] == "rotated-token"
+    assert entry.data[CONF_REFRESH] == "rotated-refresh"
+    entry.async_start_reauth.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rejected_forced_refresh_starts_reauth_and_parks_the_cloud(
+    hass, entry, device, firmware
+):
+    """A dead login starts the reauth; the cloud is not asked until it is done."""
+    entry.add_to_hass(hass)
+    coordinator, bhc = _cloud_401(hass, entry, device, firmware)
+
+    async def _refresh(*, force=False):
+        if force:
+            raise AuthFailedError("Failed to refresh")
+
+    bhc.get_token = AsyncMock(side_effect=_refresh)
+
+    await _polls(coordinator, CLOUD_AUTH_FAILURES_BEFORE_REFRESH)
+    entry.async_start_reauth.assert_called_once_with(hass)
+
+    coordinator.local_first.async_update.reset_mock()
+    data = await _polls(coordinator, 2)
+
+    coordinator.local_first.async_update.assert_not_awaited()
+    entry.async_start_reauth.assert_called_once_with(hass)
+    assert data.outdoor_temp["value"] == 7.1
+
+
+@pytest.mark.asyncio
+async def test_cloud_401_after_a_good_refresh_starts_reauth(
+    hass, entry, device, firmware
+):
+    """If a fresh token is refused as well, the login itself is unusable."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _cloud_401(hass, entry, device, firmware)
+
+    await _polls(coordinator, 2 * CLOUD_AUTH_FAILURES_BEFORE_REFRESH - 1)
+    entry.async_start_reauth.assert_not_called()
+
+    await _polls(coordinator, 1)
+    entry.async_start_reauth.assert_called_once_with(hass)
+
+
+@pytest.mark.asyncio
+async def test_good_cloud_read_resets_the_401_count(hass, entry, device, firmware):
+    """Scattered 401s from token rotation never add up to a forced refresh."""
+    entry.add_to_hass(hass)
+    coordinator, bhc = _cloud_401(hass, entry, device, firmware)
+    good = K40Update(
+        local=_local_device(),
+        cloud=_cloud_with_circuits(),
+        source="both",
+        local_healthy=True,
+        local_error=None,
+        cloud_error=None,
+    )
+    side_effects = [AuthFailedError("401")] * (CLOUD_AUTH_FAILURES_BEFORE_REFRESH - 1)
+    coordinator.local_first.async_update = AsyncMock(
+        side_effect=[*side_effects, good, *side_effects]
+    )
+
+    await _polls(coordinator, 2 * CLOUD_AUTH_FAILURES_BEFORE_REFRESH - 1)
+
+    assert call(force=True) not in bhc.get_token.await_args_list
+    entry.async_start_reauth.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cloud_401_on_a_gateway_that_is_not_the_auth_provider(
+    hass, entry, device, firmware
+):
+    """The entry's first device owns the token, e.g. a commodule listed first."""
+    entry.add_to_hass(hass)
+    coordinator, bhc = _cloud_401(hass, entry, device, firmware, auth_provider=False)
+    provider, provider_bhc = _coordinator(hass, entry, device, firmware, local=False)
+    provider.auth_provider = True
+    entry.runtime_data = [provider, coordinator]
+
+    await _polls(coordinator, CLOUD_AUTH_FAILURES_BEFORE_REFRESH)
+
+    provider_bhc.get_token.assert_awaited_once_with(force=True)
+    bhc.get_token.assert_not_awaited()
 
 
 @pytest.mark.asyncio

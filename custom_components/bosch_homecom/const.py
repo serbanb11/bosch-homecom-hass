@@ -198,3 +198,11 @@ MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 # shows. The first refresh is never held: without data there is nothing to
 # serve, and setup must still fail with ConfigEntryNotReady.
 MAX_CLOUD_FAILURES_HELD: Final = 2
+
+# How many consecutive cloud 401s a gateway with local access rides out before
+# the shared cloud token is refreshed by force (#221). A single 401 can be the
+# token being rotated; a run of them means SingleKey revoked the session while
+# the token still looks valid, which the expiry check never notices. If that
+# refresh is rejected, or the cloud keeps answering 401 for as many polls
+# again, the reauth flow starts. The gateway readings stay live throughout.
+CLOUD_AUTH_FAILURES_BEFORE_REFRESH: Final = 3
