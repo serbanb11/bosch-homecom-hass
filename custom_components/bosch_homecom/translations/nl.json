@@ -622,6 +622,39 @@
       "local_data_source": {
         "name": "Gegevensbron"
       },
+      "local_system_type": {
+        "name": "Systeemtype"
+      },
+      "local_system_bus": {
+        "name": "EMS-bus"
+      },
+      "local_power_limitation": {
+        "name": "Vermogensbegrenzing"
+      },
+      "local_silent_mode_status": {
+        "name": "Status stille modus"
+      },
+      "local_em_status": {
+        "name": "Energiemanagerstatus"
+      },
+      "local_additional_heater_flow_temp": {
+        "name": "Aanvoertemperatuur extra verwarming"
+      },
+      "local_refrigerant_status": {
+        "name": "Status koelcircuit"
+      },
+      "local_dhw_current_setpoint": {
+        "name": "Actuele warmwaterinstelling"
+      },
+      "local_dhw_thermal_disinfection": {
+        "name": "Thermische desinfectie"
+      },
+      "local_system_info": {
+        "name": "Gatewaymodule-informatie"
+      },
+      "local_module_details": {
+        "name": "Gatewaymodule {module}"
+      },
       "bacon_air_quality": {
         "name": "Luchtkwaliteit",
         "state": {
@@ -645,6 +678,9 @@
       },
       "hc_supply_temp_setpoint": {
         "name": "{circuit} aanvoertemperatuur instelpunt"
+      },
+      "heat_source_supply_setpoint": {
+        "name": "Aanvoersetpoint warmtebron"
       },
       "dhw_fan_speed": {
         "name": "Ventilatorsnelheid"

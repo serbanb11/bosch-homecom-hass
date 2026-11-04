@@ -624,6 +624,39 @@
       "local_data_source": {
         "name": "Datenquelle"
       },
+      "local_system_type": {
+        "name": "Systemtyp"
+      },
+      "local_system_bus": {
+        "name": "EMS-Bus"
+      },
+      "local_power_limitation": {
+        "name": "Leistungsbegrenzung"
+      },
+      "local_silent_mode_status": {
+        "name": "Status Leisemodus"
+      },
+      "local_em_status": {
+        "name": "Energiemanagerstatus"
+      },
+      "local_additional_heater_flow_temp": {
+        "name": "Vorlauftemperatur Zusatzheizer"
+      },
+      "local_refrigerant_status": {
+        "name": "Kältekreisstatus"
+      },
+      "local_dhw_current_setpoint": {
+        "name": "Warmwasser-Solltemperatur"
+      },
+      "local_dhw_thermal_disinfection": {
+        "name": "Thermische Desinfektion"
+      },
+      "local_system_info": {
+        "name": "Gateway-Modulinformationen"
+      },
+      "local_module_details": {
+        "name": "Gateway-Modul {module}"
+      },
       "bacon_air_quality": {
         "name": "Luftqualität",
         "state": {
@@ -647,6 +680,9 @@
       },
       "hc_supply_temp_setpoint": {
         "name": "{circuit} Vorlauftemperatur-Sollwert"
+      },
+      "heat_source_supply_setpoint": {
+        "name": "Wärmeerzeuger-Solltemperatur"
       },
       "dhw_fan_speed": {
         "name": "Lüfterdrehzahl"

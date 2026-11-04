@@ -623,6 +623,39 @@
       "local_data_source": {
         "name": "Data source"
       },
+      "local_system_type": {
+        "name": "System type"
+      },
+      "local_system_bus": {
+        "name": "EMS bus"
+      },
+      "local_power_limitation": {
+        "name": "Power limitation"
+      },
+      "local_silent_mode_status": {
+        "name": "Silent mode status"
+      },
+      "local_em_status": {
+        "name": "Energy manager status"
+      },
+      "local_additional_heater_flow_temp": {
+        "name": "Additional heater flow temperature"
+      },
+      "local_refrigerant_status": {
+        "name": "Refrigerant circuit status"
+      },
+      "local_dhw_current_setpoint": {
+        "name": "Hot water current setpoint"
+      },
+      "local_dhw_thermal_disinfection": {
+        "name": "Thermal disinfection status"
+      },
+      "local_system_info": {
+        "name": "Gateway module information"
+      },
+      "local_module_details": {
+        "name": "Gateway module {module}"
+      },
       "bacon_air_quality": {
         "name": "Air quality",
         "state": {
@@ -646,6 +679,9 @@
       },
       "hc_supply_temp_setpoint": {
         "name": "{circuit} supply temperature setpoint"
+      },
+      "heat_source_supply_setpoint": {
+        "name": "Heat source supply setpoint"
       },
       "dhw_fan_speed": {
         "name": "Fan Speed"
