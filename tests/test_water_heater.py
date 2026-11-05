@@ -32,7 +32,7 @@ def test_null_circuit_fields_do_not_crash_setup():
     entity = BoschComK40WaterHeater(coordinator=_coordinator(circuits), field="wh")
 
     assert entity.current_operation is None
-    assert entity.current_temperature is None
+    assert entity.native_current_temperature is None
 
 
 def test_non_dict_and_missing_value_fields_are_skipped():
@@ -47,7 +47,7 @@ def test_non_dict_and_missing_value_fields_are_skipped():
     entity = BoschComK40WaterHeater(coordinator=_coordinator(circuits), field="wh")
 
     assert entity.current_operation is None
-    assert entity.current_temperature is None
+    assert entity.native_current_temperature is None
 
 
 def test_none_circuits_list_does_not_crash():
@@ -69,7 +69,7 @@ def test_valid_circuit_populates_attributes():
     entity = BoschComK40WaterHeater(coordinator=_coordinator(circuits), field="wh")
 
     assert entity.current_operation == "Eco+"
-    assert entity.current_temperature == 51.5
+    assert entity.native_current_temperature == 51.5
 
 
 def test_unknown_operation_mode_does_not_crash():
