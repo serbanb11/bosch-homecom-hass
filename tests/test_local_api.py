@@ -1465,18 +1465,61 @@ async def test_rejected_forced_refresh_starts_reauth_and_parks_the_cloud(
 
 
 @pytest.mark.asyncio
-async def test_cloud_401_after_a_good_refresh_starts_reauth(
+async def test_cloud_401_after_a_good_refresh_is_a_cloud_outage(
+    hass, entry, device, firmware, caplog
+):
+    """A fresh token refused as well is the HomeCom API, not the login.
+
+    No reauth: a browser re-login would only hand back the same kind of
+    token, and parking the cloud would stop the retries exactly when they are
+    right. The gateway stays live, the cloud keeps being asked, the cloud-only
+    values expire through the usual hold, one warning is logged, and the
+    refresh is forced again every threshold polls.
+    """
+    entry.add_to_hass(hass)
+    coordinator, bhc = _cloud_401(hass, entry, device, firmware)
+    polls = 4 * CLOUD_AUTH_FAILURES_BEFORE_REFRESH
+    assert polls > MAX_CLOUD_FAILURES_WITH_LOCAL + 1
+
+    for _ in range(polls):
+        data = await coordinator._async_update_data()
+        coordinator.data = data
+
+    entry.async_start_reauth.assert_not_called()
+    assert coordinator.local_first.async_update.await_count == polls
+    assert bhc.get_token.await_args_list.count(call(force=True)) == 4
+    assert caplog.text.count("refuses a freshly refreshed token") == 1
+    assert data.outdoor_temp["value"] == 7.1
+    assert data.heat_sources.get("pumpType") is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_rejected_later_in_a_401_run_starts_reauth(
     hass, entry, device, firmware
 ):
-    """If a fresh token is refused as well, the login itself is unusable."""
+    """Once SingleKey turns the refresh down, the login is gone after all."""
     entry.add_to_hass(hass)
-    coordinator, _ = _cloud_401(hass, entry, device, firmware)
+    coordinator, bhc = _cloud_401(hass, entry, device, firmware)
+    forced = 0
+
+    async def _refresh(*, force=False):
+        nonlocal forced
+        if force:
+            forced += 1
+            if forced > 1:
+                raise AuthFailedError("Failed to refresh")
+
+    bhc.get_token = AsyncMock(side_effect=_refresh)
 
     await _polls(coordinator, 2 * CLOUD_AUTH_FAILURES_BEFORE_REFRESH - 1)
     entry.async_start_reauth.assert_not_called()
 
     await _polls(coordinator, 1)
     entry.async_start_reauth.assert_called_once_with(hass)
+
+    coordinator.local_first.async_update.reset_mock()
+    await _polls(coordinator, 1)
+    coordinator.local_first.async_update.assert_not_awaited()
 
 
 @pytest.mark.asyncio

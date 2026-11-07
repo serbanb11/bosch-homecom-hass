@@ -200,9 +200,11 @@ MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 MAX_CLOUD_FAILURES_HELD: Final = 2
 
 # How many consecutive cloud 401s a gateway with local access rides out before
-# the shared cloud token is refreshed by force (#221). A single 401 can be the
-# token being rotated; a run of them means SingleKey revoked the session while
-# the token still looks valid, which the expiry check never notices. If that
-# refresh is rejected, or the cloud keeps answering 401 for as many polls
-# again, the reauth flow starts. The gateway readings stay live throughout.
+# the shared cloud token is refreshed by force (#221), and how often that is
+# repeated while the 401s go on. A single 401 can be the token being rotated; a
+# run of them can mean SingleKey revoked the session while the token still
+# looks valid, which the expiry check never notices. Only a rejected refresh
+# starts the reauth flow. If the refresh is accepted and the 401s continue, it
+# is a cloud outage, not a login problem. The gateway readings stay live
+# throughout.
 CLOUD_AUTH_FAILURES_BEFORE_REFRESH: Final = 3
