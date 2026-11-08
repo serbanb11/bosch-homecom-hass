@@ -562,6 +562,87 @@ async def test_async_update_data_no_persist_when_unchanged(
     assert entry.data[CONF_REFRESH] == "mock_refresh"
 
 
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancelled"])
+async def test_tokens_rotated_during_poll_are_persisted(
+    hass, entry, bhc, device, firmware, outcome
+):
+    """A later request failure or cancellation must not lose rotated tokens."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    bhc.get_token = AsyncMock()
+
+    async def update(_device_id):
+        bhc.token = "rotated_token"
+        bhc.refresh_token = "rotated_refresh"
+        if outcome == "failure":
+            raise ApiError("request failed after refresh")
+        if outcome == "cancelled":
+            raise asyncio.CancelledError
+        return _make_rac_data(device, firmware)
+
+    bhc.async_update = AsyncMock(side_effect=update)
+    if outcome == "success":
+        await coordinator._async_update_data()
+    else:
+        error = UpdateFailed if outcome == "failure" else asyncio.CancelledError
+        with pytest.raises(error):
+            await coordinator._async_update_data()
+
+    assert entry.data[CONF_TOKEN] == "rotated_token"
+    assert entry.data[CONF_REFRESH] == "rotated_refresh"
+
+
+async def test_non_owner_poll_does_not_overwrite_persisted_tokens(
+    hass, entry, bhc, device, firmware
+):
+    """A peer's stale client must never replace the token owner's credentials."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorRac(
+        hass, bhc, device, firmware, entry, False
+    )
+    bhc.token = "stale_token"
+    bhc.refresh_token = "stale_refresh"
+    bhc.async_update = AsyncMock(return_value=_make_rac_data(device, firmware))
+
+    await coordinator._async_update_data()
+
+    assert entry.data[CONF_TOKEN] == "mock_token"
+    assert entry.data[CONF_REFRESH] == "mock_refresh"
+
+
+@pytest.mark.parametrize("local_first", [False, True])
+async def test_k40_late_rotation_persisted_on_failure(
+    hass, entry, bhc, device, firmware, local_first
+):
+    """Both K40 policy polling and standalone getters save late rotations."""
+    entry.add_to_hass(hass)
+    coordinator = BoschComModuleCoordinatorK40(hass, bhc, device, firmware, entry, True)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    bhc.get_token = AsyncMock()
+    bhc.async_update = AsyncMock(return_value=_make_k40_data(device, firmware))
+
+    async def rotate_and_fail(*args):
+        bhc.token = "rotated_token"
+        bhc.refresh_token = "rotated_refresh"
+        raise ApiError("request failed after refresh")
+
+    if local_first:
+        coordinator.local_first = Mock(
+            async_update=AsyncMock(side_effect=rotate_and_fail), local_healthy=False
+        )
+    else:
+        coordinator._fetch_extra_endpoints = AsyncMock(side_effect=rotate_and_fail)
+
+    with pytest.raises((ApiError, UpdateFailed)):
+        await coordinator._async_update_data()
+
+    assert entry.data[CONF_TOKEN] == "rotated_token"
+    assert entry.data[CONF_REFRESH] == "rotated_refresh"
+
+
 # ===================================================================
 # Regression tests for issue #112: AuthFailedError from async_update()
 #
