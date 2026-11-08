@@ -198,7 +198,7 @@ async def test_set_temperature_heating_uses_manual_setpoint():
         "k40123", "hc1", 21
     )
     coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_not_awaited()
-    assert climate._attr_target_temperature == 21
+    assert climate._attr_native_target_temperature == 21
     coordinator.async_request_refresh.assert_awaited_once()
 
 
@@ -213,7 +213,7 @@ async def test_set_temperature_cooling_uses_cooling_setpoint():
         "k40123", "hc1", 23
     )
     coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
-    assert climate._attr_target_temperature == 23
+    assert climate._attr_native_target_temperature == 23
     coordinator.async_request_refresh.assert_awaited_once()
 
 
@@ -246,7 +246,7 @@ async def test_set_temperature_icom_cooling_uses_cooling_setpoint():
     )
     coordinator.bhc.async_set_hc_temporary_room_setpoint.assert_not_awaited()
     coordinator.bhc.async_set_hc_manual_room_setpoint.assert_not_awaited()
-    assert climate._attr_target_temperature == 24
+    assert climate._attr_native_target_temperature == 24
     coordinator.async_request_refresh.assert_awaited_once()
 
 
@@ -280,7 +280,7 @@ async def test_set_temperature_icom_manual_uses_manual_setpoint():
     )
     coordinator.bhc.async_set_hc_temporary_room_setpoint.assert_not_awaited()
     coordinator.bhc.async_set_hc_cooling_room_temp_setpoint.assert_not_awaited()
-    assert climate._attr_target_temperature == 22
+    assert climate._attr_native_target_temperature == 22
     coordinator.async_request_refresh.assert_awaited_once()
 
 
@@ -346,7 +346,7 @@ def test_icom_room_temperature_reaches_the_climate_entity():
 
     climate.set_attr()
 
-    assert climate.current_temperature == 21.2
+    assert climate.native_current_temperature == 21.2
 
 
 def test_k40_room_temperature_still_uses_room_temp_key():
@@ -357,7 +357,7 @@ def test_k40_room_temperature_still_uses_room_temp_key():
 
     climate.set_attr()
 
-    assert climate.current_temperature == 20.5
+    assert climate.native_current_temperature == 20.5
 
 
 def test_icom_room_temperature_reaches_the_status_sensor_attribute():
@@ -392,7 +392,7 @@ def test_rac_slider_bounds_follow_the_setpoint_range():
 
     assert climate.min_temp == 16.0
     assert climate.max_temp == 30.0
-    assert climate.target_temperature == 21.0
+    assert climate.native_target_temperature == 21.0
     assert ClimateEntityFeature.TARGET_TEMPERATURE_RANGE not in (
         climate.supported_features
     )
@@ -424,7 +424,7 @@ def test_rac_slider_bounds_default_then_survive_setback():
     ]
     climate.set_attr()
     assert (climate.min_temp, climate.max_temp) == (18.0, 28.0)
-    assert climate.target_temperature == 10.0
+    assert climate.native_target_temperature == 10.0
 
 
 def test_rac_without_setpoint_keeps_a_target_to_render():
@@ -434,7 +434,7 @@ def test_rac_without_setpoint_keeps_a_target_to_render():
         field="clima",
     )
 
-    assert climate.target_temperature == 22
+    assert climate.native_target_temperature == 22
     assert (climate.min_temp, climate.max_temp) == (16.0, 30.0)
 
 
@@ -505,7 +505,7 @@ async def test_rrc2_clock_mode_setpoint_writes_the_clock_override():
         "rrc2123", "zn1", 22
     )
     coordinator.bhc.async_set_zone_manual_temp_heating.assert_not_awaited()
-    assert climate._attr_target_temperature == 22
+    assert climate._attr_native_target_temperature == 22
     coordinator.async_request_refresh.assert_awaited_once()
 
 
@@ -526,7 +526,7 @@ def test_rrc2_clock_mode_target_is_the_program_setpoint_without_override():
     climate = _make_zone_climate(_make_rrc2_coordinator(user_mode="clock"))
 
     assert climate.hvac_mode == HVACMode.AUTO
-    assert climate.target_temperature == 15.0
+    assert climate.native_target_temperature == 15.0
     assert climate.extra_state_attributes == {
         "zone_name": None,
         "zone_icon": None,
@@ -542,7 +542,7 @@ def test_rrc2_clock_mode_target_is_the_override_while_active():
         _make_rrc2_coordinator(user_mode="clock", override=22.0)
     )
 
-    assert climate.target_temperature == 22.0
+    assert climate.native_target_temperature == 22.0
     assert climate.extra_state_attributes == {
         "zone_name": None,
         "zone_icon": None,
@@ -559,7 +559,7 @@ def test_rrc2_manual_mode_ignores_a_stale_override():
     )
 
     assert climate.hvac_mode == HVACMode.HEAT
-    assert climate.target_temperature == 21.5
+    assert climate.native_target_temperature == 21.5
 
 
 def test_rrc2_gateway_without_the_override_resource_behaves_as_before():
@@ -568,7 +568,7 @@ def test_rrc2_gateway_without_the_override_resource_behaves_as_before():
         _make_rrc2_coordinator(user_mode="clock", override=None)
     )
 
-    assert climate.target_temperature == 15.0
+    assert climate.native_target_temperature == 15.0
     assert climate.extra_state_attributes["clock_override_active"] is False
 
 
