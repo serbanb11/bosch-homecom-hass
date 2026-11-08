@@ -46,6 +46,7 @@ from custom_components.bosch_homecom.const import (
     CONF_LOCAL_TOKEN_ID,
     CONF_REFRESH,
     DOMAIN,
+    HC1_PUMP_VOLUME_FLOW,
     HC_TUNE_ENDPOINTS,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
@@ -1106,6 +1107,63 @@ async def test_local_sensor_missing_resource_is_none(hass, entry, device, firmwa
 
     assert sensor.native_value is None
     assert sensor.available is False
+
+
+def _flow(value, state):
+    return {
+        "type": "integerValue",
+        "value": value,
+        "unitOfMeasure": "l/h",
+        "state": state,
+    }
+
+
+@pytest.mark.asyncio
+async def test_pump_volume_flow_prefers_the_heating_circuit_signal(
+    hass, entry, device, firmware
+):
+    """The signal carries the measured flow; the heat source only LOW_FLOW."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={
+            HC1_PUMP_VOLUME_FLOW: _flow(1065, {"LOW_FLOW": 65535}),
+            "/heatSources/hs1/pumpVolumeFlow": _flow(65535, [{"lowflow": 65535}]),
+        }
+    )
+    coordinator.local_healthy = True
+
+    flow = {d.key: d for d in LOCAL_SENSORS}["local_pump_volume_flow"]
+    sensor = BoschComLocalSensor(coordinator, entry, flow)
+
+    assert sensor.native_value == 1065
+
+
+@pytest.mark.asyncio
+async def test_pump_volume_flow_falls_back_and_hides_the_low_flow_marker(
+    hass, entry, device, firmware
+):
+    """Without the signal the heat source is read, and 65535 is no reading."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    flow = {d.key: d for d in LOCAL_SENSORS}["local_pump_volume_flow"]
+
+    coordinator.local_data = _local_device(
+        resources={"/heatSources/hs1/pumpVolumeFlow": _flow(1980, [{"lowflow": 65535}])}
+    )
+    assert BoschComLocalSensor(coordinator, entry, flow).native_value == 1980
+
+    coordinator.local_data = _local_device(
+        resources={
+            "/heatSources/hs1/pumpVolumeFlow": _flow(65535, [{"lowflow": 65535}])
+        }
+    )
+    assert BoschComLocalSensor(coordinator, entry, flow).native_value is None
+
+    coordinator.local_data = _local_device(
+        resources={HC1_PUMP_VOLUME_FLOW: _flow(65535, {"LOW_FLOW": 65535})}
+    )
+    assert BoschComLocalSensor(coordinator, entry, flow).native_value is None
 
 
 @pytest.mark.asyncio
