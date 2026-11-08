@@ -6,8 +6,12 @@ coordinator's local-first behaviour, and the local-only sensors.
 
 import dataclasses
 from dataclasses import replace
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, call, patch
 
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_TOKEN, CONF_USERNAME
 from homeassistant.helpers import entity_registry as er
@@ -30,6 +34,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.bosch_homecom import _local_only_devices
 from custom_components.bosch_homecom.binary_sensor import (
+    BoschComK40LocalOnOffSensor,
     BoschComK40LocalPumpStatusSensor,
     async_setup_entry as binary_sensor_async_setup_entry,
 )
@@ -58,12 +63,19 @@ from custom_components.bosch_homecom.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.bosch_homecom.local_sensor import (
+    LOCAL_OPTIONAL_SENSORS,
     LOCAL_SENSORS,
     BoschComLocalSensor,
     BoschComLocalSourceSensor,
     _emon_field,
 )
-from custom_components.bosch_homecom.sensor import _emon_part, _notifications_state
+from custom_components.bosch_homecom.sensor import (
+    _add_or_defer,
+    _add_pending_sensors_later,
+    _emon_part,
+    _local_optional_candidates,
+    _notifications_state,
+)
 
 _FLOW_CLIENT = "custom_components.bosch_homecom.config_flow.HomeComK40Local"
 HOST = "192.0.2.10"
@@ -1189,6 +1201,206 @@ async def test_local_sensors_absent_without_local_config(hass, entry, device, fi
     coordinator, _ = _coordinator(hass, entry, device, firmware, local=False)
 
     assert getattr(coordinator, "local_first", None) is None
+
+
+def _optional(key):
+    return next(d for d in LOCAL_OPTIONAL_SENSORS if d.key == key)
+
+
+@pytest.mark.asyncio
+async def test_optional_local_sensors_appear_once_the_gateway_serves_them(
+    hass, entry, device, firmware
+):
+    """No permanently unavailable entity for a resource the system lacks."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={"/heatSources/emStatus": {"value": "inactive"}}
+    )
+    entities, pending = [], []
+
+    for candidate in _local_optional_candidates(coordinator, entry):
+        _add_or_defer(candidate, entities, pending)
+    assert [e.entity_description.key for e in entities] == ["local_em_status"]
+
+    added = []
+    _add_pending_sensors_later(coordinator, entry, pending, added.extend)
+    coordinator.local_data = _local_device(
+        resources={
+            "/heatSources/emStatus": {"value": "inactive"},
+            "/heatSources/currentSupplySetpoint": {"value": 23, "unitOfMeasure": "C"},
+        }
+    )
+    coordinator.async_update_listeners()
+    coordinator.async_update_listeners()
+
+    assert [e.entity_description.key for e in added] == ["local_supply_setpoint"]
+
+
+@pytest.mark.parametrize(
+    ("key", "raw", "state"),
+    [
+        ("local_em_status", "activeDHW", "active_dhw"),
+        ("local_system_type", "eHybrid", "e_hybrid"),
+        ("local_system_bus", "EMS2_0", "ems2_0"),
+        ("local_refrigerant_status", "passive_defrost", "passive_defrost"),
+        # A value the spec does not list is no reading, not an invalid enum state.
+        ("local_em_status", "somethingNew", None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_enum_sensors_map_raw_values_to_state_keys(
+    hass, entry, device, firmware, key, raw, state
+):
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    description = _optional(key)
+    coordinator.local_data = _local_device(
+        resources={description.resource: {"type": "stringValue", "value": raw}}
+    )
+
+    sensor = BoschComLocalSensor(coordinator, entry, description)
+
+    assert sensor.device_class == SensorDeviceClass.ENUM
+    assert set(sensor.options) == set(description.states.values())
+    assert sensor.native_value == state
+
+
+def test_every_enum_state_and_name_is_translated() -> None:
+    """hassfest rejects untranslated enum states; check all three languages."""
+    root = Path(__file__).parent.parent / "custom_components" / "bosch_homecom"
+    for path in [
+        root / "strings.json",
+        *sorted((root / "translations").glob("*.json")),
+    ]:
+        sensors = json.loads(path.read_text())["entity"]["sensor"]
+        for description in LOCAL_OPTIONAL_SENSORS:
+            entry = sensors[description.translation_key]
+            assert entry["name"], (path.name, description.key)
+            if description.states:
+                assert set(entry["state"]) == set(description.states.values()), (
+                    path.name,
+                    description.key,
+                )
+
+
+@pytest.mark.parametrize(
+    ("resources", "expected"),
+    [
+        # The aggregate wins when present.
+        (
+            {
+                "/heatSources/compressor/powerElecActual": {"value": 65.0},
+                "/heatSources/hs1/refrigerant/compressorElecPowerActual": {
+                    "value": 712.0
+                },
+            },
+            65.0,
+        ),
+        (
+            {
+                "/heatSources/hs1/refrigerant/compressorElecPowerActual": {
+                    "value": 712.0
+                }
+            },
+            712.0,
+        ),
+        # The spec's sentinel for an absent reading.
+        (
+            {
+                "/heatSources/hs1/refrigerant/compressorElecPowerActual": {
+                    "value": -3276.8
+                }
+            },
+            None,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_compressor_power_falls_back_without_the_sentinel(
+    hass, entry, device, firmware, resources, expected
+):
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = BHCDeviceK40Local(
+        device=GATEWAY, firmware="15.00.01", resources=resources
+    )
+    description = {d.key: d for d in LOCAL_SENSORS}["local_compressor_power"]
+
+    assert BoschComLocalSensor(coordinator, entry, description).native_value == expected
+
+
+@pytest.mark.asyncio
+async def test_heater_flow_temperature_hides_the_sensor_markers(
+    hass, entry, device, firmware
+):
+    """The spec declares open/short markers on the electric heater flow sensor."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    description = _optional("local_additional_heater_flow_temp")
+    payload = {
+        "type": "floatValue",
+        "unitOfMeasure": "C",
+        "state": [{"open": -32768}, {"short": 32768}],
+    }
+
+    coordinator.local_data = _local_device(
+        resources={description.resource: {**payload, "value": 54.1}}
+    )
+    assert BoschComLocalSensor(coordinator, entry, description).native_value == 54.1
+    coordinator.local_data = _local_device(
+        resources={description.resource: {**payload, "value": -32768}}
+    )
+    assert BoschComLocalSensor(coordinator, entry, description).native_value is None
+
+
+@pytest.mark.asyncio
+async def test_local_on_off_sensors_wait_for_the_resource(
+    hass, entry, device, firmware
+):
+    """Power limitation and thermal disinfection appear once served."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.async_set_updated_data(_cloud_device())
+    coordinator.local_data = _local_device(
+        resources={"/system/powerLimitation/active": {"value": "on"}}
+    )
+    coordinator.local_healthy = True
+    entry.runtime_data = [coordinator]
+    entities = []
+
+    await binary_sensor_async_setup_entry(hass, entry, entities.extend)
+    on_off = [e for e in entities if isinstance(e, BoschComK40LocalOnOffSensor)]
+    assert [(e.translation_key, e.is_on) for e in on_off] == [
+        ("local_power_limitation", True)
+    ]
+
+    coordinator.local_data = _local_device(
+        resources={
+            "/system/powerLimitation/active": {"value": "on"},
+            "/dhwCircuits/dhw1/tdrunningStatus": {"value": "off"},
+        }
+    )
+    coordinator.async_update_listeners()
+    coordinator.async_update_listeners()
+    on_off = [e for e in entities if isinstance(e, BoschComK40LocalOnOffSensor)]
+    assert [(e.translation_key, e.is_on) for e in on_off] == [
+        ("local_power_limitation", True),
+        ("local_thermal_disinfection", False),
+    ]
+    assert on_off[1].device_class == BinarySensorDeviceClass.RUNNING
+
+    coordinator.local_data = _local_device(
+        resources={"/system/powerLimitation/active": {"value": "unexpected"}}
+    )
+    on_off[0]._attr_is_on = on_off[0]._read()
+    assert on_off[0].available is False
+
+
+def test_every_optional_local_key_is_unique() -> None:
+    """New keys must not collide with each other or the always-on sensors."""
+    keys = [d.key for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)]
+    assert len(keys) == len(set(keys))
 
 
 def test_every_local_sensor_has_a_unique_key() -> None:

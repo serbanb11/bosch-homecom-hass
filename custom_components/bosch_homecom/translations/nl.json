@@ -730,6 +730,58 @@
       },
       "lifetime_burner_pool": {
         "name": "Brander gasenergie totaalteller (zwembad)"
+      },
+      "local_refrigerant_status": {
+        "name": "Koelcircuit",
+        "state": {
+          "idle": "Inactief",
+          "startup": "Opstarten",
+          "heating": "Verwarmen",
+          "cooling": "Koelen",
+          "defrost": "Ontdooien",
+          "passive_defrost": "Passief ontdooien",
+          "shutoff": "Uitgeschakeld",
+          "alarm": "Alarm",
+          "test_mode": "Testmodus"
+        }
+      },
+      "local_supply_setpoint": {
+        "name": "Aanvoertemperatuur-setpoint"
+      },
+      "local_dhw_current_setpoint": {
+        "name": "Huidig warmwater-setpoint"
+      },
+      "local_additional_heater_flow_temp": {
+        "name": "Aanvoertemperatuur elektrisch element"
+      },
+      "local_em_status": {
+        "name": "Energiemanager",
+        "state": {
+          "not_connected": "Niet verbonden",
+          "inactive": "Inactief",
+          "active_ch": "Actief (verwarming)",
+          "active_dhw": "Actief (warm water)"
+        }
+      },
+      "local_system_type": {
+        "name": "Systeemtype",
+        "state": {
+          "unknown": "Onbekend",
+          "heatpump_cascade": "Warmtepompcascade",
+          "heatpump_single": "Enkele warmtepomp",
+          "e_hybrid": "eHybrid",
+          "hybman": "Hybride manager",
+          "hybrid_boiler": "Hybride ketel",
+          "boiler": "Ketel"
+        }
+      },
+      "local_system_bus": {
+        "name": "Systeembus",
+        "state": {
+          "no_bus": "Geen bus",
+          "ems2_0": "EMS 2.0",
+          "detecting": "Detecteren"
+        }
       }
     },
     "binary_sensor": {
@@ -759,6 +811,12 @@
       },
       "hs_pv_contact": {
         "name": "PV-contact"
+      },
+      "local_power_limitation": {
+        "name": "Vermogensbegrenzing"
+      },
+      "local_thermal_disinfection": {
+        "name": "Thermische desinfectie"
       }
     },
     "number": {

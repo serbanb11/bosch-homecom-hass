@@ -732,6 +732,58 @@
       },
       "lifetime_burner_pool": {
         "name": "Brenner Gasenergie Gesamtzähler (Pool)"
+      },
+      "local_refrigerant_status": {
+        "name": "Kältekreis",
+        "state": {
+          "idle": "Bereit",
+          "startup": "Anlauf",
+          "heating": "Heizen",
+          "cooling": "Kühlen",
+          "defrost": "Abtauen",
+          "passive_defrost": "Passives Abtauen",
+          "shutoff": "Abgeschaltet",
+          "alarm": "Alarm",
+          "test_mode": "Testbetrieb"
+        }
+      },
+      "local_supply_setpoint": {
+        "name": "Vorlauftemperatur-Sollwert"
+      },
+      "local_dhw_current_setpoint": {
+        "name": "Aktueller Warmwasser-Sollwert"
+      },
+      "local_additional_heater_flow_temp": {
+        "name": "Vorlauftemperatur Elektroheizer"
+      },
+      "local_em_status": {
+        "name": "Energiemanager",
+        "state": {
+          "not_connected": "Nicht verbunden",
+          "inactive": "Inaktiv",
+          "active_ch": "Aktiv (Heizung)",
+          "active_dhw": "Aktiv (Warmwasser)"
+        }
+      },
+      "local_system_type": {
+        "name": "Systemtyp",
+        "state": {
+          "unknown": "Unbekannt",
+          "heatpump_cascade": "Wärmepumpenkaskade",
+          "heatpump_single": "Einzelne Wärmepumpe",
+          "e_hybrid": "eHybrid",
+          "hybman": "Hybridmanager",
+          "hybrid_boiler": "Hybridkessel",
+          "boiler": "Kessel"
+        }
+      },
+      "local_system_bus": {
+        "name": "Systembus",
+        "state": {
+          "no_bus": "Kein Bus",
+          "ems2_0": "EMS 2.0",
+          "detecting": "Erkennung läuft"
+        }
       }
     },
     "binary_sensor": {
@@ -761,6 +813,12 @@
       },
       "hs_pv_contact": {
         "name": "PV-Kontakt"
+      },
+      "local_power_limitation": {
+        "name": "Leistungsbegrenzung"
+      },
+      "local_thermal_disinfection": {
+        "name": "Thermische Desinfektion"
       }
     },
     "number": {

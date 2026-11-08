@@ -90,6 +90,13 @@ async def async_setup_entry(
                     pending.add(circuit_id)
             if pending:
                 pending_pumps.append((coordinator, pending))
+            local_pending: list = []
+            for candidate in _local_on_off_candidates(coordinator):
+                _add_or_defer(candidate, entities, local_pending)
+            if local_pending:
+                _add_pending_sensors_later(
+                    coordinator, config_entry, local_pending, async_add_entities
+                )
         if coordinator.data.device["deviceType"] in BACON_DEVICE_TYPES:
             # Comfort features are switch entities (see switch.py); only the
             # connectivity sensor lives here.
@@ -265,6 +272,80 @@ class BoschComK40LocalPumpStatusSensor(CoordinatorEntity, BinarySensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         self._attr_is_on = self._read_status()
+        self.async_write_ha_state()
+
+
+# Gateway resources that report on/off, as (key, resource, device class).
+# Created once the gateway serves them, like the optional local sensors.
+LOCAL_ON_OFF_SENSORS: tuple[tuple[str, str, BinarySensorDeviceClass | None], ...] = (
+    ("local_power_limitation", "/system/powerLimitation/active", None),
+    (
+        "local_thermal_disinfection",
+        "/dhwCircuits/dhw1/tdrunningStatus",
+        BinarySensorDeviceClass.RUNNING,
+    ),
+)
+
+
+def _local_on_off_candidates(coordinator: BoschComModuleCoordinatorK40) -> list:
+    """Return the on/off gateway sensors as candidates, built once served."""
+
+    def served(resource: str) -> bool:
+        resources = getattr(getattr(coordinator, "local_data", None), "resources", None)
+        return isinstance(resources, dict) and resource in resources
+
+    return [
+        (
+            lambda resource=resource: served(resource),
+            lambda key=key, resource=resource, device_class=device_class: (
+                BoschComK40LocalOnOffSensor(coordinator, key, resource, device_class)
+            ),
+        )
+        for key, resource, device_class in LOCAL_ON_OFF_SENSORS
+    ]
+
+
+class BoschComK40LocalOnOffSensor(CoordinatorEntity, BinarySensorEntity):
+    """An on/off stringValue from the read-only Local API.
+
+    Anything but ``on``/``off``, a missing resource or a local outage is
+    unavailable rather than falsely off.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorK40,
+        key: str,
+        resource: str,
+        device_class: BinarySensorDeviceClass | None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._resource = resource
+        self._attr_translation_key = key
+        self._attr_device_class = device_class
+        self._attr_unique_id = f"{coordinator.unique_id}-{key}"
+        self._attr_device_info = coordinator.device_info
+        self._attr_is_on = self._read()
+
+    def _read(self) -> bool | None:
+        local = getattr(self.coordinator, "local_data", None)
+        payload = (getattr(local, "resources", None) or {}).get(self._resource)
+        value = payload.get("value") if isinstance(payload, dict) else None
+        return {"on": True, "off": False}.get(value)
+
+    @property
+    def available(self) -> bool:
+        return bool(
+            getattr(self.coordinator, "local_healthy", False)
+            and self._attr_is_on is not None
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._attr_is_on = self._read()
         self.async_write_ha_state()
 
 

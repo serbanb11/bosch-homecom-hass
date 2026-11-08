@@ -63,7 +63,12 @@ from .coordinator import (
     BoschComModuleCoordinatorRrc2,
     BoschComModuleCoordinatorWddw2,
 )
-from .local_sensor import LOCAL_SENSORS, BoschComLocalSensor, BoschComLocalSourceSensor
+from .local_sensor import (
+    LOCAL_OPTIONAL_SENSORS,
+    LOCAL_SENSORS,
+    BoschComLocalSensor,
+    BoschComLocalSourceSensor,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,7 +98,11 @@ async def async_setup_entry(
         # ---- Local API sensors (only when local access is configured) ----
         # Read coordinator.local_data, so they survive a cloud outage. Absent
         # local config -> local_first is None -> no entities created at all.
-        if getattr(coordinator, "local_first", None) is not None:
+        # Only the K40 coordinator has a local transport.
+        if (
+            isinstance(coordinator, BoschComModuleCoordinatorK40)
+            and coordinator.local_first is not None
+        ):
             entities.extend(
                 BoschComLocalSensor(
                     coordinator=coordinator,
@@ -107,6 +116,13 @@ async def async_setup_entry(
                     coordinator=coordinator, config_entry=config_entry
                 )
             )
+            local_pending: list[_PendingSensor] = []
+            for candidate in _local_optional_candidates(coordinator, config_entry):
+                _add_or_defer(candidate, entities, local_pending)
+            if local_pending:
+                _add_pending_sensors_later(
+                    coordinator, config_entry, local_pending, async_add_entities
+                )
 
         # ---- Notifications per device type (existing) ----
         if device_type == "rac":
@@ -4078,6 +4094,22 @@ def _add_pending_sensors_later(
             async_add_entities(new)
 
     config_entry.async_on_unload(coordinator.async_add_listener(_async_add_present))
+
+
+def _local_optional_candidates(coordinator, config_entry) -> list[_PendingSensor]:
+    """Return the gateway-only sensors as candidates, built once served."""
+
+    def served(resource: str) -> bool:
+        resources = getattr(getattr(coordinator, "local_data", None), "resources", None)
+        return isinstance(resources, dict) and resource in resources
+
+    return [
+        (
+            partial(served, description.resource),
+            partial(BoschComLocalSensor, coordinator, config_entry, description),
+        )
+        for description in LOCAL_OPTIONAL_SENSORS
+    ]
 
 
 # ===================================================================

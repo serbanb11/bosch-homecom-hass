@@ -731,6 +731,58 @@
       },
       "lifetime_burner_pool": {
         "name": "Burner gas energy lifetime (pool)"
+      },
+      "local_refrigerant_status": {
+        "name": "Refrigerant circuit",
+        "state": {
+          "idle": "Idle",
+          "startup": "Starting up",
+          "heating": "Heating",
+          "cooling": "Cooling",
+          "defrost": "Defrosting",
+          "passive_defrost": "Passive defrost",
+          "shutoff": "Shut off",
+          "alarm": "Alarm",
+          "test_mode": "Test mode"
+        }
+      },
+      "local_supply_setpoint": {
+        "name": "Supply temperature setpoint"
+      },
+      "local_dhw_current_setpoint": {
+        "name": "Hot water current setpoint"
+      },
+      "local_additional_heater_flow_temp": {
+        "name": "Electric heater flow temperature"
+      },
+      "local_em_status": {
+        "name": "Energy manager",
+        "state": {
+          "not_connected": "Not connected",
+          "inactive": "Inactive",
+          "active_ch": "Active (heating)",
+          "active_dhw": "Active (hot water)"
+        }
+      },
+      "local_system_type": {
+        "name": "System type",
+        "state": {
+          "unknown": "Unknown",
+          "heatpump_cascade": "Heat pump cascade",
+          "heatpump_single": "Single heat pump",
+          "e_hybrid": "eHybrid",
+          "hybman": "Hybrid manager",
+          "hybrid_boiler": "Hybrid boiler",
+          "boiler": "Boiler"
+        }
+      },
+      "local_system_bus": {
+        "name": "System bus",
+        "state": {
+          "no_bus": "No bus",
+          "ems2_0": "EMS 2.0",
+          "detecting": "Detecting"
+        }
       }
     },
     "binary_sensor": {
@@ -760,6 +812,12 @@
       },
       "hs_pv_contact": {
         "name": "PV contact"
+      },
+      "local_power_limitation": {
+        "name": "Power limitation"
+      },
+      "local_thermal_disinfection": {
+        "name": "Thermal disinfection"
       }
     },
     "number": {
