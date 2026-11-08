@@ -2276,8 +2276,10 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "kWh"
-
-        self._attr_device_class = SensorDeviceClass.GAS
+        # The boiler's gas input in kWh. ENERGY, not GAS: GAS only allows
+        # volume units, and the Energy dashboard takes an ENERGY sensor in kWh
+        # as a gas source.
+        self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def state(self):
@@ -2350,8 +2352,10 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "kWh"
-
-        self._attr_device_class = SensorDeviceClass.GAS
+        # The boiler's gas input in kWh. ENERGY, not GAS: GAS only allows
+        # volume units, and the Energy dashboard takes an ENERGY sensor in kWh
+        # as a gas source.
+        self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def state(self):
