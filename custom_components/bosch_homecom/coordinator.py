@@ -52,6 +52,7 @@ from tenacity import RetryError
 
 from .bacon import humanize_appliance_type
 from .const import (
+    CLOUD_AUTH_FAILURES_BEFORE_REFRESH,
     CONF_BACON_TITLES,
     CONF_REFRESH,
     DEFAULT_UPDATE_INTERVAL,
@@ -172,6 +173,11 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
             # (e.g. a DNS timeout or a 5xx), so the refresh token was not spent. A normal failed refresh, retried on
             # the next poll -- not an "unexpected error" with a traceback.
             raise UpdateFailed(f"Token refresh failed: {error}") from error
+        self._async_persist_tokens()
+
+    @callback
+    def _async_persist_tokens(self) -> None:
+        """Store a rotated token pair on the entry."""
         if self.bhc.token != self.entry.data.get(
             CONF_TOKEN
         ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
@@ -770,11 +776,11 @@ class BoschComModuleCoordinatorK40(
       the gateway, everything else from the cloud, in the same entities.
     * ``self.local_data`` carries the local payload and powers the local-only
       entities, which therefore stay live through a cloud outage.
-    * When the cloud fails, or its token cannot be refreshed, **and** the local
-      transport answers, the overlaid values stay live; the cloud-only ones
-      keep their last state for ``MAX_CLOUD_FAILURES_WITH_LOCAL`` refreshes and
-      are empty after that. Without a local transport the behaviour is
-      unchanged: the refresh fails immediately.
+    * When the cloud fails, rejects its token or the token cannot be refreshed,
+      **and** the local transport answers, the overlaid values stay live; the
+      cloud-only ones keep their last state for ``MAX_CLOUD_FAILURES_WITH_LOCAL``
+      refreshes and are empty after that. Without a local transport the
+      behaviour is unchanged: the refresh fails immediately.
     """
 
     HC_TUNE_KEYS = K40_HC_TUNE_KEYS
@@ -799,6 +805,16 @@ class BoschComModuleCoordinatorK40(
         self.local_source: str | None = None
         self.local_healthy = False
         self._cloud_failures = 0
+        # Consecutive cloud 401s from the update itself, see
+        # _async_cloud_auth_failed.
+        self._cloud_auth_failures = 0
+        # A forced refresh was accepted during the current run of 401s, and
+        # whether the resulting cloud-outage warning was logged already.
+        self._cloud_auth_refreshed = False
+        self._cloud_auth_outage_warned = False
+        # Set once this coordinator started the reauth flow. The login stays
+        # unusable until the user re-authenticates, which reloads the entry.
+        self._cloud_auth_rejected = False
         # True when the entry was set up without the cloud (see __init__).
         self.cloud_setup_pending = False
 
@@ -806,6 +822,8 @@ class BoschComModuleCoordinatorK40(
         """Update from the cloud, and from the local gateway when configured."""
         if self.local_first is None:
             return await super()._async_update_data()
+        if self._cloud_auth_rejected:
+            return await self._async_update_local_only()
 
         try:
             await self._async_refresh_tokens()
@@ -818,6 +836,8 @@ class BoschComModuleCoordinatorK40(
 
         try:
             update = await self.local_first.async_update(self.unique_id)
+        except AuthFailedError:
+            return await self._async_cloud_auth_failed()
         except (
             ApiError,
             InvalidSensorDataError,
@@ -828,15 +848,14 @@ class BoschComModuleCoordinatorK40(
             # take the health from the policy object or the local-only sensors
             # would keep presenting their last reading as live.
             self._cloud_failures += 1
+            self._cloud_auth_failures = 0
             self.local_healthy = self.local_first.local_healthy
             self._async_notify_local_listeners()
             raise UpdateFailed(error) from error
-        # A cloud AuthFailedError from the update itself is deliberately NOT
-        # caught, matching the base coordinator: on a multi-device setup a
-        # non-auth-provider can see a transient 401 while the shared token is
-        # being rotated, and that must not trigger a reauth flow. Only a failed
-        # token *refresh* does, which _async_refresh_tokens handles above.
 
+        self._cloud_auth_failures = 0
+        self._cloud_auth_refreshed = False
+        self._cloud_auth_outage_warned = False
         self.local_data = update.local
         self.local_source = update.source
         self.local_healthy = update.local_healthy
@@ -866,6 +885,94 @@ class BoschComModuleCoordinatorK40(
         await self._fetch_hc_tune()
         await self._fetch_recordings()
         return data
+
+    async def _async_cloud_auth_failed(self) -> BHCDeviceK40:
+        """Serve the gateway while the cloud rejects the token (#221).
+
+        A single 401 can be the shared token being rotated, so it starts no
+        reauth. A run of them can mean SingleKey revoked the session while the
+        token still looks valid, so every ``CLOUD_AUTH_FAILURES_BEFORE_REFRESH``
+        polls the token is refreshed by force. Only a rejected refresh starts
+        the reauth flow, as in the base coordinator.
+
+        If SingleKey accepts the refresh, the login is fine and the 401s are
+        the HomeCom API refusing a valid token; a browser re-login would only
+        hand back the same kind of token. That is treated as a cloud outage:
+        the gateway keeps being served, the cloud-only values expire through
+        the usual hold, a warning is logged once, and the refresh is forced
+        again every ``CLOUD_AUTH_FAILURES_BEFORE_REFRESH`` polls.
+
+        The gateway is read again here because the local-first update drops
+        its local result when it raises the cloud's auth error. That costs one
+        extra local read per poll while the 401s last.
+        """
+        self._cloud_auth_failures += 1
+        if self._cloud_auth_refreshed and not self._cloud_auth_outage_warned:
+            self._cloud_auth_outage_warned = True
+            _LOGGER.warning(
+                "Device_Id: %s, the cloud refuses a freshly refreshed token; "
+                "treating it as a cloud outage and serving the gateway's local "
+                "readings until the cloud accepts it again",
+                self.unique_id,
+            )
+        if self._cloud_auth_failures % CLOUD_AUTH_FAILURES_BEFORE_REFRESH == 0:
+            if await self._async_force_token_refresh():
+                self._cloud_auth_refreshed = True
+        return await self._async_update_local_only()
+
+    async def _async_force_token_refresh(self) -> bool:
+        """Have the auth provider refresh the shared cloud token by force.
+
+        The provider is the entry's first device, which need not be this
+        gateway: a commodule listed before it, for instance. Returns whether
+        SingleKey issued a new token pair.
+        """
+        provider: BoschComModuleCoordinatorBase | None = self
+        if not self.auth_provider:
+            provider = next(
+                (
+                    coordinator
+                    for coordinator in getattr(self.entry, "runtime_data", None) or []
+                    if isinstance(coordinator, BoschComModuleCoordinatorBase)
+                    and coordinator.auth_provider
+                ),
+                None,
+            )
+        if provider is None:
+            return False
+        try:
+            await provider.bhc.get_token(force=True)
+        except AuthFailedError:
+            self._async_reject_cloud_auth()
+            return False
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            RetryError,
+            TimeoutError,
+        ) as error:
+            _LOGGER.debug(
+                "Device_Id: %s, forced token refresh failed: %s",
+                self.unique_id,
+                error,
+            )
+            return False
+        provider._async_persist_tokens()
+        return True
+
+    @callback
+    def _async_reject_cloud_auth(self) -> None:
+        """Start the reauth flow and stop asking the cloud until it is done."""
+        if self._cloud_auth_rejected:
+            return
+        self._cloud_auth_rejected = True
+        _LOGGER.warning(
+            "Device_Id: %s, SingleKey rejected the token refresh; serving the "
+            "gateway's local readings until you re-authenticate",
+            self.unique_id,
+        )
+        self.entry.async_start_reauth(self.hass)
 
     async def _async_update_local_only(self) -> BHCDeviceK40:
         """Serve an update from the gateway alone while the cloud token is unusable.
