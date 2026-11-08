@@ -190,6 +190,11 @@ CONF_LOCAL_REMOVE: Final = "local_remove"
 # throughout, in the same entities.
 MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 
+# The heating-circuit pump flow signal, part of homecom_alt's local poll set
+# since 1.9.2 (#225). Read first by the pump volume flow sensor, which falls
+# back to /heatSources/hs1/pumpVolumeFlow on gateways that do not have it.
+HC1_PUMP_VOLUME_FLOW: Final = "/signals/SRC.HC1.FlowCtrl.PumpVolumeFlow"
+
 # How many consecutive failed cloud refreshes to ride out on the last good data
 # before the entities go unavailable, on every device type. The Bosch cloud
 # times out a single /bulk call roughly once an hour (#193), and each blip took
