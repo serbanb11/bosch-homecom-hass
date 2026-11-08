@@ -68,6 +68,7 @@ from .local_sensor import (
     LOCAL_SENSORS,
     BoschComLocalSensor,
     BoschComLocalSourceSensor,
+    _state_values,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -366,6 +367,14 @@ async def async_setup_entry(
         if device_type == "rrc2":
             for sensor in _build_rrc2_sensors(coordinator, config_entry):
                 entities.append(sensor)
+            # Not every RRC2 gateway serves the pressure: create it once it is
+            # reported, so a missing resource leaves no unavailable entity.
+            rrc2_pending: list[_PendingSensor] = []
+            _add_or_defer(_rrc2_pressure_candidate(coordinator), entities, rrc2_pending)
+            if rrc2_pending:
+                _add_pending_sensors_later(
+                    coordinator, config_entry, rrc2_pending, async_add_entities
+                )
 
         # ---- WDDW2 (existing DHW sensor + NEW generic + NEW derived) ----
         elif device_type == "wddw2":
@@ -2986,12 +2995,23 @@ class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
         unit: str | None = None,
         icon: str | None = None,
         diagnostic: bool = False,
+        translation_key: str | None = None,
+        hide_markers: bool = False,
     ) -> None:
-        """Initialize one RRC2 sensor."""
+        """Initialize one RRC2 sensor.
+
+        With ``translation_key`` the entity takes its name from the translations
+        instead of ``name_suffix``. With ``hide_markers`` a value the payload
+        declares as a named state (e.g. ``{"invalid": 255}``) is no reading.
+        """
         super().__init__(coordinator)
         self._attr_device_info = coordinator.device_info
         self._attr_unique_id = f"{coordinator.unique_id}-{unique_suffix}"
-        self._attr_name = name_suffix
+        if translation_key is not None:
+            self._attr_translation_key = translation_key
+        else:
+            self._attr_name = name_suffix
+        self._hide_markers = hide_markers
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._attr_native_unit_of_measurement = unit
@@ -3039,7 +3059,10 @@ class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
 
         if not isinstance(node, dict):
             return None
-        return node.get("value")
+        value = node.get("value")
+        if self._hide_markers and value in _state_values(node.get("state")):
+            return None
+        return value
 
     @property
     def native_value(self) -> Any:
@@ -3059,6 +3082,37 @@ class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
             if isinstance(node, dict) and node.get("value") is not None:
                 attributes[name] = node["value"]
         return attributes
+
+
+def _rrc2_pressure_candidate(
+    coordinator: BoschComModuleCoordinatorRrc2,
+) -> _PendingSensor:
+    """Return the boiler water pressure sensor as a pending candidate (#230)."""
+
+    def has_pressure() -> bool:
+        data = coordinator.data
+        node = (getattr(data, "heat_sources", None) or {}).get("systemPressure")
+        return isinstance(node, dict) and node.get("value") is not None
+
+    return (
+        has_pressure,
+        partial(
+            BoschComRrc2Sensor,
+            coordinator,
+            scope="heat_sources",
+            circuit_id=None,
+            field="systemPressure",
+            name_suffix="hs_system_pressure",
+            unique_suffix="hs-system-pressure",
+            device_class=SensorDeviceClass.PRESSURE,
+            state_class=SensorStateClass.MEASUREMENT,
+            unit=UnitOfPressure.BAR,
+            translation_key="system_pressure",
+            # A failed pressure sensor reports a marker such as 255, which
+            # must not read as 255 bar (#222).
+            hide_markers=True,
+        ),
+    )
 
 
 def _build_rrc2_sensors(
