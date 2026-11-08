@@ -1,7 +1,7 @@
 # Bosch HomeCom Easy for Home Assistant
 
 [![version](https://img.shields.io/github/manifest-json/v/serbanb11/bosch-homecom-hass?filename=custom_components%2Fbosch_homecom%2Fmanifest.json&color=slateblue)](https://github.com/serbanb11/bosch-homecom-hass/releases/latest)
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg?logo=HomeAssistantCommunityStore&logoColor=white)](https://github.com/hacs/integration)
+[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?logo=HomeAssistantCommunityStore&logoColor=white)](https://github.com/hacs/integration)
 
 A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances. Cloud-polling, pure async, automatic token refresh, with optional read-only local network access for K 40 RF gateways.
 
@@ -24,12 +24,19 @@ A Home Assistant custom integration for Bosch HomeCom Easy-connected appliances.
 
 ## Installation
 
-### HACS (Recommended)
+### Marketplace / HACS (Recommended)
 
-1. In HACS, go to **Integrations** > **Custom repositories**
-2. Add `https://github.com/serbanb11/bosch-homecom-hass` as an **Integration**
-3. Search for **Bosch HomeCom** and download
-4. Restart Home Assistant
+[![Open your Home Assistant instance and open this repository in the Marketplace or HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=serbanb11&repository=bosch-homecom-hass&category=integration)
+
+1. Click the button above. It opens the repository in the Marketplace (Home Assistant 2026.11 and later) or in HACS, and offers to add it if it is not known yet.
+2. Download **Bosch HomeCom**.
+3. Restart Home Assistant if asked.
+
+[![Open your Home Assistant instance and start setting up Bosch HomeCom.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=bosch_homecom)
+
+<!-- ha-marketplace:exclude-start -->
+Without the button: in HACS, go to **Integrations** > **Custom repositories**, add `https://github.com/serbanb11/bosch-homecom-hass` as an **Integration**, then search for **Bosch HomeCom** and download it.
+<!-- ha-marketplace:exclude-end -->
 
 ### Manual
 
