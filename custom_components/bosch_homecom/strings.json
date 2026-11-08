@@ -681,6 +681,9 @@
       "lifetime_heat_produced_total": {
         "name": "Heat produced lifetime (total)"
       },
+      "lifetime_burner_total": {
+        "name": "Burner gas energy lifetime (total)"
+      },
       "lifetime_compressor_ch": {
         "name": "Compressor electricity lifetime (heating)"
       },
@@ -689,6 +692,9 @@
       },
       "lifetime_heat_produced_ch": {
         "name": "Heat produced lifetime (heating)"
+      },
+      "lifetime_burner_ch": {
+        "name": "Burner gas energy lifetime (heating)"
       },
       "lifetime_compressor_dhw": {
         "name": "Compressor electricity lifetime (hot water)"
@@ -699,6 +705,9 @@
       "lifetime_heat_produced_dhw": {
         "name": "Heat produced lifetime (hot water)"
       },
+      "lifetime_burner_dhw": {
+        "name": "Burner gas energy lifetime (hot water)"
+      },
       "lifetime_compressor_cooling": {
         "name": "Compressor electricity lifetime (cooling)"
       },
@@ -708,6 +717,9 @@
       "lifetime_heat_produced_cooling": {
         "name": "Heat produced lifetime (cooling)"
       },
+      "lifetime_burner_cooling": {
+        "name": "Burner gas energy lifetime (cooling)"
+      },
       "lifetime_compressor_pool": {
         "name": "Compressor electricity lifetime (pool)"
       },
@@ -716,6 +728,9 @@
       },
       "lifetime_heat_produced_pool": {
         "name": "Heat produced lifetime (pool)"
+      },
+      "lifetime_burner_pool": {
+        "name": "Burner gas energy lifetime (pool)"
       }
     },
     "binary_sensor": {

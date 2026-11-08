@@ -356,13 +356,13 @@ def test_online_sensor_none_before_info():
 def test_climate_current_temperature_from_sensor_channel():
     """current_temperature reads roomTemperature regardless of its age."""
     climate = BoschComBaconRacClimate(coordinator=_coordinator(sensor=SAMPLE_SENSOR))
-    assert climate.current_temperature == 23.5
+    assert climate.native_current_temperature == 23.5
 
 
 def test_climate_current_temperature_none_before_reading():
     """No topics/sensor yet -> current_temperature is None."""
     climate = BoschComBaconRacClimate(coordinator=_coordinator(sensor=None))
-    assert climate.current_temperature is None
+    assert climate.native_current_temperature is None
 
 
 # --- sensor -------------------------------------------------------------------

@@ -51,10 +51,10 @@ from .const import (
     BOSCH_SENSOR_DESCRIPTORS,
     DOMAIN,
     WDDW2_NOTIFICATION_CODES,
+    WDDW2_WATER_TODAY_KEY,
     api_value_to_state_key,
 )
 from .coordinator import (
-    WDDW2_WATER_TODAY_KEY,
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
@@ -2276,8 +2276,10 @@ class BoschComSensorEnergyHistory(BoschComSensorBase):
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "kWh"
-
-        self._attr_device_class = SensorDeviceClass.GAS
+        # The boiler's gas input in kWh. ENERGY, not GAS: GAS only allows
+        # volume units, and the Energy dashboard takes an ENERGY sensor in kWh
+        # as a gas source.
+        self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def state(self):
@@ -2350,8 +2352,10 @@ class BoschComSensorEnergyHistoryHourly(BoschComSensorBase):
         self._attr_should_poll = False
         self._attr_state_class = SensorStateClass.TOTAL
         self._attr_native_unit_of_measurement = "kWh"
-
-        self._attr_device_class = SensorDeviceClass.GAS
+        # The boiler's gas input in kWh. ENERGY, not GAS: GAS only allows
+        # volume units, and the Energy dashboard takes an ENERGY sensor in kWh
+        # as a gas source.
+        self._attr_device_class = SensorDeviceClass.ENERGY
 
     @property
     def state(self):
@@ -4291,6 +4295,11 @@ _LIFETIME_ENERGY_PARTS: Final[dict[str, str]] = {
     "compressor": "lifetime_compressor",
     "eheater": "lifetime_eheater",
     "outputProduced": "lifetime_heat_produced",
+    # Gas boilers (e.g. Condens 8700i W on a K30) report the burner's
+    # energy input under this key instead of the heat pump parts. It stays
+    # device_class ENERGY: GAS only allows volume units, and the Energy
+    # dashboard accepts an ENERGY sensor in kWh as a gas source anyway.
+    "burner": "lifetime_burner",
 }
 
 
@@ -4306,7 +4315,7 @@ def _emon_part(node: Any, part: str) -> float | None:
 
 
 class BoschComK40LifetimeEnergySensor(CoordinatorEntity, SensorEntity):
-    """One part (compressor, electric heater, heat produced) of a lifetime counter.
+    """One part (compressor, electric heater, heat produced, burner) of a lifetime counter.
 
     /heatSources/emon/{total,ch,dhw,cooling,pool}Consumption are the device's
     own lifetime kWh totals, split into compressor and electric heater input

@@ -52,13 +52,38 @@ from tenacity import RetryError
 
 from .bacon import humanize_appliance_type
 from .const import (
+    BACON_MODE_FIELDS,
+    BACON_RECONNECT_MARGIN,
+    BACON_RECONNECT_MIN_DELAY,
+    BACON_TOPIC_META,
+    BACON_TOPICS_PREFIX,
+    CLOUD_AUTH_FAILURES_BEFORE_REFRESH,
     CONF_BACON_TITLES,
     CONF_REFRESH,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    HC_TUNE_ENDPOINTS,
+    HC_TUNE_POLL_INTERVAL,
+    ICOM_HC_TUNE_KEYS,
+    K40_HC_TUNE_KEYS,
+    LAST_KNOWN_GOOD_MAX_AGE,
+    LAST_KNOWN_GOOD_SKIP,
+    LOCAL_DHW_CIRCUIT,
+    LOCAL_DHW_KEYS,
+    LOCAL_HC_CIRCUIT,
+    LOCAL_HC_KEYS,
+    LOCAL_HC_STATUS_TO_MODE,
+    LOCAL_HEAT_SOURCES,
+    LOCAL_OUTDOOR_TEMP,
     MANUFACTURER,
     MAX_CLOUD_FAILURES_HELD,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
+    RECORDING_PATHS,
+    RECORDINGS_POLL_INTERVAL,
+    RECORDINGS_PREVIOUS_DAY_TRIES,
+    WDDW2_HEALTH_STATUS_PATH,
+    WDDW2_RECORDINGS_POLL_INTERVAL,
+    WDDW2_WATER_TODAY_KEY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -172,6 +197,11 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
             # (e.g. a DNS timeout or a 5xx), so the refresh token was not spent. A normal failed refresh, retried on
             # the next poll -- not an "unexpected error" with a traceback.
             raise UpdateFailed(f"Token refresh failed: {error}") from error
+        self._async_persist_tokens()
+
+    @callback
+    def _async_persist_tokens(self) -> None:
+        """Store a rotated token pair on the entry."""
         if self.bhc.token != self.entry.data.get(
             CONF_TOKEN
         ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
@@ -213,142 +243,6 @@ class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
             advanced_functions=data.advanced_functions,
             switch_programs=data.switch_programs,
         )
-
-
-RECORDINGS_POLL_INTERVAL = timedelta(hours=1)
-
-# After midnight the recordings fetch first finishes the previous day, whose last
-# hourly bucket arrives with a 1-2 h lag (#178). It gives up after this many
-# reads, so a recording that never fills its last hour cannot hold the sensors
-# on yesterday's total for longer than about that many hours.
-RECORDINGS_PREVIOUS_DAY_TRIES = 3
-
-# The WDDW2 coordinator re-reads today's water recording and the health status
-# at this cadence. Both move slowly (the recording gains a bucket per hour, the
-# health status changes on a fault), and five minutes keeps the daily figure
-# close to the app's while adding two requests per interval, not per poll.
-WDDW2_RECORDINGS_POLL_INTERVAL = timedelta(minutes=5)
-WDDW2_WATER_TODAY_KEY = "dhw_water_today"
-WDDW2_HEALTH_STATUS_PATH = "/system/healthStatus"
-HC_TUNE_POLL_INTERVAL = timedelta(minutes=15)
-
-# Weather-compensation / underfloor-heating settings of heating circuit hc1,
-# as extra_data key -> (homecom_alt getter, setter). Exposed as number and
-# select entities; each coordinator reads only its HC_TUNE_KEYS.
-# Requires homecom_alt>=1.8.2.
-HC_TUNE_ENDPOINTS: dict[str, tuple[str, str]] = {
-    "hc1_max_flow_temp": ("async_get_hc_max_flow_temp", "async_set_hc_max_flow_temp"),
-    "hc1_suwi_threshold": (
-        "async_get_hc_suwi_threshold",
-        "async_set_hc_suwi_threshold",
-    ),
-    "hc1_control_type": ("async_get_hc_control_type", "async_put_hc_control_type"),
-    "hc1_comfort2": (
-        "async_get_hc_temp_level_comfort2",
-        "async_set_hc_temp_level_comfort2",
-    ),
-    "hc1_eco": ("async_get_hc_temp_level_eco", "async_set_hc_temp_level_eco"),
-    "hc1_heat_curve_min": (
-        "async_get_hc_heat_curve_min",
-        "async_set_hc_heat_curve_min",
-    ),
-    "hc1_heat_curve_max": (
-        "async_get_hc_heat_curve_max",
-        "async_set_hc_heat_curve_max",
-    ),
-}
-
-K40_HC_TUNE_KEYS = (
-    "hc1_max_flow_temp",
-    "hc1_suwi_threshold",
-    "hc1_control_type",
-    "hc1_comfort2",
-    "hc1_eco",
-)
-
-# icom gateways are quick to rate-limit (#110, #120), so they read only what an
-# outdoor-reset heat pump without a room sensor needs to be adjusted: its heat
-# curve and the summer/winter threshold. Three requests per HC_TUNE_POLL_INTERVAL.
-ICOM_HC_TUNE_KEYS = ("hc1_suwi_threshold", "hc1_heat_curve_min", "hc1_heat_curve_max")
-
-# Maps (path_suffix under /recordings/heatSources/) -> {key, agg} for the
-# local coordinator.recordings dict. Discovered via refEnum browsability
-# at GET /resource/recordings/heatSources on a K40 (Bosch Compress 5800iAW).
-# Endpoints the device does not support silently drop out of the bulk
-# response (existing _log_endpoint_status handling) and the previous good
-# value is kept.
-#
-# ``agg`` selects the aggregation of the hourly bucket values:
-#   ``sum`` -> sum of ``y`` values (Bosch's kWh energy counters, c=1 each).
-#   ``avg`` -> ``sum(y) / sum(c)``. Bosch stores some sensor recordings as
-#             per-hour sample-sums; the count is the number of samples that
-#             went into the sum. Used for temperature time-series such as
-#             ``actualSupplyTemperature``.
-#   ``minute_sum`` -> ``sum(y) / 60``. The icom ``total/energyMonitoring/*``
-#             branch stores each hour as a sum of per-minute samples (``c``
-#             is the sample count, 59 or 60). ``y`` is a multiple of 60 even
-#             when ``c`` is 59, so the hour's energy is ``y / 60`` kWh (#178).
-#
-# An icom has the ``total/energyMonitoring/*`` branch and no ``emon`` branch,
-# a K40 the reverse, so both are requested in the same bulk call and the
-# unsupported family simply drops out. Both map onto the same keys, hence the
-# same entities. A device serving both (none known) would keep the later entry.
-RECORDING_PATHS: dict[str, dict] = {
-    # Energy counters — /recordings/heatSources/emon/*, unit kWh
-    "emon/total/compressor": {"key": "energy_compressor_total", "agg": "sum"},
-    "emon/total/eheater": {"key": "energy_eheater_total", "agg": "sum"},
-    "emon/total/ventilation": {"key": "energy_ventilation_total", "agg": "sum"},
-    "emon/total/outputProduced": {"key": "heat_produced_total", "agg": "sum"},
-    "emon/ventilation/heatRecovered": {
-        "key": "heat_recovered_ventilation",
-        "agg": "sum",
-    },
-    "emon/ch/compressor": {"key": "energy_compressor_ch", "agg": "sum"},
-    "emon/ch/eheater": {"key": "energy_eheater_ch", "agg": "sum"},
-    "emon/ch/outputProduced": {"key": "heat_produced_ch", "agg": "sum"},
-    "emon/dhw/compressor": {"key": "energy_compressor_dhw", "agg": "sum"},
-    "emon/dhw/eheater": {"key": "energy_eheater_dhw", "agg": "sum"},
-    "emon/dhw/outputProduced": {"key": "heat_produced_dhw", "agg": "sum"},
-    "emon/cooling/compressor": {"key": "energy_compressor_cooling", "agg": "sum"},
-    "emon/cooling/outputProduced": {"key": "heat_produced_cooling", "agg": "sum"},
-    "emon/pool/compressor": {"key": "energy_compressor_pool", "agg": "sum"},
-    "emon/pool/eheater": {"key": "energy_eheater_pool", "agg": "sum"},
-    "emon/pool/outputProduced": {"key": "heat_produced_pool", "agg": "sum"},
-    # Sensor time-series — direct leaves under /recordings/heatSources/*,
-    # per-hour sample-sum with count -> averaging.
-    "actualSupplyTemperature": {"key": "supply_temp_avg_today", "agg": "avg"},
-    # icom heat pumps (#178): the same totals under a different branch, with
-    # per-minute sample sums. consumedEnergy has no emon counterpart.
-    "total/energyMonitoring/compressor": {
-        "key": "energy_compressor_total",
-        "agg": "minute_sum",
-    },
-    "total/energyMonitoring/eheater": {
-        "key": "energy_eheater_total",
-        "agg": "minute_sum",
-    },
-    "total/energyMonitoring/outputProduced": {
-        "key": "heat_produced_total",
-        "agg": "minute_sum",
-    },
-    "total/energyMonitoring/consumedEnergy": {
-        "key": "energy_consumed_total",
-        "agg": "minute_sum",
-    },
-}
-
-
-# How long a field the cloud stopped delivering is served from its last known
-# value. The cloud has been seen answering 200 with single fields nulled
-# (dhw1 operationMode, the per-level setpoints) for 90 minutes while everything
-# around them stayed fresh (#182). These are settings that rarely change, so a
-# bounded hold beats flipping the entity to unknown; past the bound the null is
-# passed on so staleness cannot go unnoticed.
-LAST_KNOWN_GOOD_MAX_AGE = timedelta(minutes=15)
-
-# Never held: an empty notifications list is a real value (they were cleared),
-# and device/firmware are set by the coordinator itself.
-_LAST_KNOWN_GOOD_SKIP = frozenset({"device", "firmware", "notifications"})
 
 
 class _LastKnownGoodMixin:
@@ -393,7 +287,7 @@ class _LastKnownGoodMixin:
         changes = {}
         for field in dataclasses.fields(new):
             name = field.name
-            if name in _LAST_KNOWN_GOOD_SKIP:
+            if name in LAST_KNOWN_GOOD_SKIP:
                 continue
             new_value = getattr(new, name)
             prev_value = getattr(prev, name, None)
@@ -624,10 +518,12 @@ class _K40ExtraEndpointsMixin:
         samples in the day's last hour. Depending on the device an unpopulated
         hour is either missing or carries ``c: 0``, so both are checked.
         """
+        # Compare in UTC: two datetimes in the same zone subtract by wall clock,
+        # which would make every day 24 hours, DST changes included.
         hours = round(
             (
-                dt_util.start_of_local_day(day + timedelta(days=1))
-                - dt_util.start_of_local_day(day)
+                dt_util.as_utc(dt_util.start_of_local_day(day + timedelta(days=1)))
+                - dt_util.as_utc(dt_util.start_of_local_day(day))
             ).total_seconds()
             / 3600
         )
@@ -678,33 +574,6 @@ def _has_samples(bucket: dict) -> bool:
     return isinstance(c, (int, float)) and c > 0
 
 
-# Values the K 40 RF Local API serves in the same payload format as the cloud.
-# Cloud resource paths are the local ones prefixed with ``/resource``.
-_LOCAL_OUTDOOR_TEMP = "/system/sensors/temperatures/outdoor_t1"
-_LOCAL_HEAT_SOURCES: dict[str, str] = {
-    "actualSupplyTemperature": "/heatSources/actualSupplyTemperature",
-    "returnTemperature": "/heatSources/returnTemperature",
-    "actualModulation": "/heatSources/actualModulation",
-    "actualHeatDemand": "/heatSources/actualHeatDemand",
-    "systemPressure": "/heatSources/systemPressure",
-    "starts": "/heatSources/hs1/numberOfStarts",
-    "totalWorkingTime": "/heatSources/workingTime/totalSystem",
-}
-# Per-circuit keys, read from ``{circuit id}/{key}``, e.g. /dhwCircuits/dhw1/actualTemp.
-_LOCAL_DHW_KEYS = ("actualTemp", "currentTemperatureLevel", "chargeRemainingTime")
-_LOCAL_HC_KEYS = ("currentSuWiMode", "currentRoomSetpoint")
-# The Local API has no operationMode resource. The library derives the DHW one
-# from overallStatus (``dhw_mode``); the heating circuit's is derived the same
-# way here. Statuses without a mode (away, holiday, boost, ...) map to nothing.
-_LOCAL_HC_STATUS_TO_MODE: dict[str, str] = {
-    "heating_auto": "auto",
-    "heating_manual_on": "manual",
-    "heating_manual_off": "off",
-}
-_LOCAL_DHW_CIRCUIT = "/dhwCircuits/dhw1"
-_LOCAL_HC_CIRCUIT = "/heatingCircuits/hc1"
-
-
 def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
     """Return ``data`` with every value the gateway also served replaced by it.
 
@@ -722,8 +591,8 @@ def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDe
         return {**node, **payload} if isinstance(node, dict) else dict(payload)
 
     modes = {
-        _LOCAL_DHW_CIRCUIT: getattr(local, "dhw_mode", None),
-        _LOCAL_HC_CIRCUIT: _LOCAL_HC_STATUS_TO_MODE.get(
+        LOCAL_DHW_CIRCUIT: getattr(local, "dhw_mode", None),
+        LOCAL_HC_CIRCUIT: LOCAL_HC_STATUS_TO_MODE.get(
             getattr(local, "hc_status", None)
         ),
     }
@@ -747,15 +616,15 @@ def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDe
         return result
 
     heat_sources = dict(data.heat_sources or {})
-    for key, path in _LOCAL_HEAT_SOURCES.items():
+    for key, path in LOCAL_HEAT_SOURCES.items():
         heat_sources[key] = merged(heat_sources.get(key) or {}, path)
 
     return dataclasses.replace(
         data,
-        outdoor_temp=merged(data.outdoor_temp, _LOCAL_OUTDOOR_TEMP),
+        outdoor_temp=merged(data.outdoor_temp, LOCAL_OUTDOOR_TEMP),
         heat_sources=heat_sources,
-        dhw_circuits=circuits(data.dhw_circuits, _LOCAL_DHW_KEYS),
-        heating_circuits=circuits(data.heating_circuits, _LOCAL_HC_KEYS),
+        dhw_circuits=circuits(data.dhw_circuits, LOCAL_DHW_KEYS),
+        heating_circuits=circuits(data.heating_circuits, LOCAL_HC_KEYS),
     )
 
 
@@ -823,11 +692,11 @@ class BoschComModuleCoordinatorK40(
       the gateway, everything else from the cloud, in the same entities.
     * ``self.local_data`` carries the local payload and powers the local-only
       entities, which therefore stay live through a cloud outage.
-    * When the cloud fails, or its token cannot be refreshed, **and** the local
-      transport answers, the overlaid values stay live; the cloud-only ones
-      keep their last state for ``MAX_CLOUD_FAILURES_WITH_LOCAL`` refreshes and
-      are empty after that. Without a local transport the behaviour is
-      unchanged: the refresh fails immediately.
+    * When the cloud fails, rejects its token or the token cannot be refreshed,
+      **and** the local transport answers, the overlaid values stay live; the
+      cloud-only ones keep their last state for ``MAX_CLOUD_FAILURES_WITH_LOCAL``
+      refreshes and are empty after that. Without a local transport the
+      behaviour is unchanged: the refresh fails immediately.
     """
 
     HC_TUNE_KEYS = K40_HC_TUNE_KEYS
@@ -852,6 +721,16 @@ class BoschComModuleCoordinatorK40(
         self.local_source: str | None = None
         self.local_healthy = False
         self._cloud_failures = 0
+        # Consecutive cloud 401s from the update itself, see
+        # _async_cloud_auth_failed.
+        self._cloud_auth_failures = 0
+        # A forced refresh was accepted during the current run of 401s, and
+        # whether the resulting cloud-outage warning was logged already.
+        self._cloud_auth_refreshed = False
+        self._cloud_auth_outage_warned = False
+        # Set once this coordinator started the reauth flow. The login stays
+        # unusable until the user re-authenticates, which reloads the entry.
+        self._cloud_auth_rejected = False
         # True when the entry was set up without the cloud (see __init__).
         self.cloud_setup_pending = False
 
@@ -859,6 +738,8 @@ class BoschComModuleCoordinatorK40(
         """Update from the cloud, and from the local gateway when configured."""
         if self.local_first is None:
             return await super()._async_update_data()
+        if self._cloud_auth_rejected:
+            return await self._async_update_local_only()
 
         try:
             await self._async_refresh_tokens()
@@ -871,6 +752,8 @@ class BoschComModuleCoordinatorK40(
 
         try:
             update = await self.local_first.async_update(self.unique_id)
+        except AuthFailedError:
+            return await self._async_cloud_auth_failed()
         except (
             ApiError,
             InvalidSensorDataError,
@@ -881,15 +764,14 @@ class BoschComModuleCoordinatorK40(
             # take the health from the policy object or the local-only sensors
             # would keep presenting their last reading as live.
             self._cloud_failures += 1
+            self._cloud_auth_failures = 0
             self.local_healthy = self.local_first.local_healthy
             self._async_notify_local_listeners()
             raise UpdateFailed(error) from error
-        # A cloud AuthFailedError from the update itself is deliberately NOT
-        # caught, matching the base coordinator: on a multi-device setup a
-        # non-auth-provider can see a transient 401 while the shared token is
-        # being rotated, and that must not trigger a reauth flow. Only a failed
-        # token *refresh* does, which _async_refresh_tokens handles above.
 
+        self._cloud_auth_failures = 0
+        self._cloud_auth_refreshed = False
+        self._cloud_auth_outage_warned = False
         self.local_data = update.local
         self.local_source = update.source
         self.local_healthy = update.local_healthy
@@ -919,6 +801,94 @@ class BoschComModuleCoordinatorK40(
         await self._fetch_hc_tune()
         await self._fetch_recordings()
         return data
+
+    async def _async_cloud_auth_failed(self) -> BHCDeviceK40:
+        """Serve the gateway while the cloud rejects the token (#221).
+
+        A single 401 can be the shared token being rotated, so it starts no
+        reauth. A run of them can mean SingleKey revoked the session while the
+        token still looks valid, so every ``CLOUD_AUTH_FAILURES_BEFORE_REFRESH``
+        polls the token is refreshed by force. Only a rejected refresh starts
+        the reauth flow, as in the base coordinator.
+
+        If SingleKey accepts the refresh, the login is fine and the 401s are
+        the HomeCom API refusing a valid token; a browser re-login would only
+        hand back the same kind of token. That is treated as a cloud outage:
+        the gateway keeps being served, the cloud-only values expire through
+        the usual hold, a warning is logged once, and the refresh is forced
+        again every ``CLOUD_AUTH_FAILURES_BEFORE_REFRESH`` polls.
+
+        The gateway is read again here because the local-first update drops
+        its local result when it raises the cloud's auth error. That costs one
+        extra local read per poll while the 401s last.
+        """
+        self._cloud_auth_failures += 1
+        if self._cloud_auth_refreshed and not self._cloud_auth_outage_warned:
+            self._cloud_auth_outage_warned = True
+            _LOGGER.warning(
+                "Device_Id: %s, the cloud refuses a freshly refreshed token; "
+                "treating it as a cloud outage and serving the gateway's local "
+                "readings until the cloud accepts it again",
+                self.unique_id,
+            )
+        if self._cloud_auth_failures % CLOUD_AUTH_FAILURES_BEFORE_REFRESH == 0:
+            if await self._async_force_token_refresh():
+                self._cloud_auth_refreshed = True
+        return await self._async_update_local_only()
+
+    async def _async_force_token_refresh(self) -> bool:
+        """Have the auth provider refresh the shared cloud token by force.
+
+        The provider is the entry's first device, which need not be this
+        gateway: a commodule listed before it, for instance. Returns whether
+        SingleKey issued a new token pair.
+        """
+        provider: BoschComModuleCoordinatorBase | None = self
+        if not self.auth_provider:
+            provider = next(
+                (
+                    coordinator
+                    for coordinator in getattr(self.entry, "runtime_data", None) or []
+                    if isinstance(coordinator, BoschComModuleCoordinatorBase)
+                    and coordinator.auth_provider
+                ),
+                None,
+            )
+        if provider is None:
+            return False
+        try:
+            await provider.bhc.get_token(force=True)
+        except AuthFailedError:
+            self._async_reject_cloud_auth()
+            return False
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            RetryError,
+            TimeoutError,
+        ) as error:
+            _LOGGER.debug(
+                "Device_Id: %s, forced token refresh failed: %s",
+                self.unique_id,
+                error,
+            )
+            return False
+        provider._async_persist_tokens()
+        return True
+
+    @callback
+    def _async_reject_cloud_auth(self) -> None:
+        """Start the reauth flow and stop asking the cloud until it is done."""
+        if self._cloud_auth_rejected:
+            return
+        self._cloud_auth_rejected = True
+        _LOGGER.warning(
+            "Device_Id: %s, SingleKey rejected the token refresh; serving the "
+            "gateway's local readings until you re-authenticate",
+            self.unique_id,
+        )
+        self.entry.async_start_reauth(self.hass)
 
     async def _async_update_local_only(self) -> BHCDeviceK40:
         """Serve an update from the gateway alone while the cloud token is unusable.
@@ -1230,25 +1200,6 @@ class BoschComModuleCoordinatorCommodule(
         )
 
 
-# Reconnect this far ahead of the access token's expiry. The MQTT password *is*
-# the access token, so the broker drops the session when it expires. The margin
-# must exceed homecom_alt's 5-minute check_jwt() window, otherwise the forced
-# refresh would hand back the same soon-to-expire token.
-BACON_RECONNECT_MARGIN = timedelta(minutes=10)
-
-# Never schedule a reconnect closer than this, so a short-lived or already
-# expiring token cannot spin up a tight reconnect loop.
-BACON_RECONNECT_MIN_DELAY = timedelta(minutes=1)
-
-# Shadow fields whose change makes the cached topics/meta describe the wrong
-# mode: the device republishes meta with new ``ro`` flags after either moves.
-BACON_MODE_FIELDS: tuple[str, ...] = ("powerEnabled", "opMode")
-
-# The push-only channel; its payloads are never polled, only pushed (#164).
-_BACON_TOPICS_PREFIX = "topics/"
-_BACON_TOPIC_META = "topics/meta"
-
-
 class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
     """Coordinator for a Matter/Bacon-commissioned device (MQTT shadow).
 
@@ -1343,9 +1294,9 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
         after a mode change (#164). The library has already cached the payload
         when this runs, so a rebuild from the unchanged shadow picks it up.
         """
-        if serial != self.unique_id or not path.startswith(_BACON_TOPICS_PREFIX):
+        if serial != self.unique_id or not path.startswith(BACON_TOPICS_PREFIX):
             return
-        if path == _BACON_TOPIC_META:
+        if path == BACON_TOPIC_META:
             self.meta_stale = False
         if self.data is None:
             # Before the first refresh there is no shadow to rebuild from; the

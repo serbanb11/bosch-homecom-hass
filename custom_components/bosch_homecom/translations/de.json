@@ -682,6 +682,9 @@
       "lifetime_heat_produced_total": {
         "name": "Erzeugte Wärme Gesamtzähler (gesamt)"
       },
+      "lifetime_burner_total": {
+        "name": "Brenner Gasenergie Gesamtzähler (gesamt)"
+      },
       "lifetime_compressor_ch": {
         "name": "Kompressor Strom Gesamtzähler (Heizung)"
       },
@@ -690,6 +693,9 @@
       },
       "lifetime_heat_produced_ch": {
         "name": "Erzeugte Wärme Gesamtzähler (Heizung)"
+      },
+      "lifetime_burner_ch": {
+        "name": "Brenner Gasenergie Gesamtzähler (Heizung)"
       },
       "lifetime_compressor_dhw": {
         "name": "Kompressor Strom Gesamtzähler (Warmwasser)"
@@ -700,6 +706,9 @@
       "lifetime_heat_produced_dhw": {
         "name": "Erzeugte Wärme Gesamtzähler (Warmwasser)"
       },
+      "lifetime_burner_dhw": {
+        "name": "Brenner Gasenergie Gesamtzähler (Warmwasser)"
+      },
       "lifetime_compressor_cooling": {
         "name": "Kompressor Strom Gesamtzähler (Kühlung)"
       },
@@ -709,6 +718,9 @@
       "lifetime_heat_produced_cooling": {
         "name": "Erzeugte Wärme Gesamtzähler (Kühlung)"
       },
+      "lifetime_burner_cooling": {
+        "name": "Brenner Gasenergie Gesamtzähler (Kühlung)"
+      },
       "lifetime_compressor_pool": {
         "name": "Kompressor Strom Gesamtzähler (Pool)"
       },
@@ -717,6 +729,9 @@
       },
       "lifetime_heat_produced_pool": {
         "name": "Erzeugte Wärme Gesamtzähler (Pool)"
+      },
+      "lifetime_burner_pool": {
+        "name": "Brenner Gasenergie Gesamtzähler (Pool)"
       }
     },
     "binary_sensor": {

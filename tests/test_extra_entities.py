@@ -13,13 +13,17 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.bosch_homecom.button import BoschComK40DhwChargeButton
-from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DOMAIN
-from custom_components.bosch_homecom.coordinator import (
+from custom_components.bosch_homecom.const import (
+    CONF_DEVICES,
+    CONF_REFRESH,
+    DOMAIN,
     HC_TUNE_ENDPOINTS,
     HC_TUNE_POLL_INTERVAL,
     ICOM_HC_TUNE_KEYS,
     K40_HC_TUNE_KEYS,
     RECORDINGS_PREVIOUS_DAY_TRIES,
+)
+from custom_components.bosch_homecom.coordinator import (
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
@@ -690,6 +694,37 @@ async def test_recordings_day_needs_samples_in_its_last_hour(
         is True
     )
     assert coordinator._store_recordings({}, day) is False
+
+
+@pytest.mark.asyncio
+async def test_recordings_day_length_follows_dst(hass, entry, device, firmware):
+    """A DST day has 23 or 25 buckets; the test harness runs in US/Pacific."""
+    entry.add_to_hass(hass)
+    coordinator = _recordings_coordinator(hass, entry, device, firmware, None)
+
+    long_day = date(2026, 11, 1)  # clocks go back: 25 hours
+    path = f"/recordings/heatSources/emon/total/compressor?interval={long_day}"
+    assert (
+        coordinator._store_recordings(
+            {path: _make_recording_payload([0.5] * 24)}, long_day
+        )
+        is False
+    )
+    assert (
+        coordinator._store_recordings(
+            {path: _make_recording_payload([0.5] * 25)}, long_day
+        )
+        is True
+    )
+
+    short_day = date(2026, 3, 8)  # clocks go forward: 23 hours
+    path = f"/recordings/heatSources/emon/total/compressor?interval={short_day}"
+    assert (
+        coordinator._store_recordings(
+            {path: _make_recording_payload([0.5] * 23)}, short_day
+        )
+        is True
+    )
 
 
 async def _k40_platform(hass, entry, device, firmware, recordings):

@@ -15,11 +15,9 @@ from custom_components.bosch_homecom.const import (
     BOSCH_SENSOR_DESCRIPTORS,
     CONF_DEVICES,
     DOMAIN,
-)
-from custom_components.bosch_homecom.coordinator import (
     WDDW2_WATER_TODAY_KEY,
-    BoschComModuleCoordinatorWddw2,
 )
+from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorWddw2
 from custom_components.bosch_homecom.sensor import (
     BoschComHeatingActiveBinarySensor,
     BoschComSensorNotificationsWddw2,
@@ -189,7 +187,7 @@ def test_water_heater_readonly_disables_features():
     # raw operation value preserved (localized via translations, not in Python)
     assert entity.current_operation == "eco"
     # current temperature read from the outlet sensor
-    assert entity.current_temperature == 45.0
+    assert entity.native_current_temperature == 45.0
 
 
 def test_water_heater_writable_enables_features():
@@ -198,14 +196,14 @@ def test_water_heater_writable_enables_features():
 
     assert WaterHeaterEntityFeature.TARGET_TEMPERATURE in entity.supported_features
     assert WaterHeaterEntityFeature.OPERATION_MODE in entity.supported_features
-    assert entity.target_temperature == 57.0
+    assert entity.native_target_temperature == 57.0
     assert entity.operation_list == ["off", "manual", "high"]
 
 
 def test_water_heater_ignores_other_circuit():
     coord = _coordinator(dhw_circuits=_DHW_READ_ONLY)
     entity = BoschComWddw2WaterHeater(coordinator=coord, field="dhw2")
-    assert entity.current_temperature is None
+    assert entity.native_current_temperature is None
     assert entity.supported_features == WaterHeaterEntityFeature(0)
 
 
@@ -264,7 +262,7 @@ def test_water_heater_presets_use_state_keys():
         "dish_wash",
     ]
     assert entity.current_operation == "hand_wash"
-    assert entity.target_temperature == 35
+    assert entity.native_target_temperature == 35
 
 
 async def test_water_heater_set_preset_writes_api_value():
@@ -692,7 +690,7 @@ def test_tronic_tr4001_panel_stays_read_only():
     assert entity.supported_features == WaterHeaterEntityFeature(0)
     assert entity.operation_list is None
     assert entity.current_operation == "bath"
-    assert entity.target_temperature == 42
+    assert entity.native_target_temperature == 42
 
 
 def test_tronic_tr7001_panel_with_safety_temperature():
@@ -718,7 +716,7 @@ def test_tronic_tr7001_panel_without_safety_temperature():
     ]
     assert (entity.min_temp, entity.max_temp) == (20, 60)
     assert entity.current_operation == "manual"
-    assert entity.target_temperature == 41
+    assert entity.native_target_temperature == 41
 
 
 # ---------------------------------------------------------------------------
