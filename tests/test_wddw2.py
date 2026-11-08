@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from homecom_alt import ApiError, BHCDeviceWddw2
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -770,7 +771,9 @@ def _real_coordinator(hass, bulk):
 
 
 def _today():
-    return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")
+    # The coordinator dates the recording in Home Assistant's time zone (US/Pacific
+    # in the test harness), not the runner's, so build the date the same way.
+    return dt_util.now().strftime("%Y-%m-%d")
 
 
 async def test_recordings_fetch_fills_water_today_and_health(hass):
