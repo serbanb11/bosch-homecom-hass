@@ -49,8 +49,9 @@ class LocalSensorDescription(SensorEntityDescription):
 
     ``fallback_resources`` are read, in order, when ``resource`` is absent on
     this appliance. With ``state_is_unknown`` a value the payload declares as a
-    named state (e.g. ``{"LOW_FLOW": 65535}``) is a marker, not a reading, and
-    the sensor reports unknown instead of the raw number.
+    named state (e.g. ``{"LOW_FLOW": 65535}``) is a marker, not a reading: the
+    value becomes None, which makes the entity unavailable (see ``available``)
+    instead of showing the raw number.
 
     Must stay a SensorEntityDescription: it is the entity's
     ``entity_description``, from which Home Assistant reads fields such as
@@ -228,7 +229,11 @@ def _state_values(state: Any) -> set[Any]:
     """
     items = state if isinstance(state, list) else [state]
     return {
-        value for item in items if isinstance(item, dict) for value in item.values()
+        value
+        for item in items
+        if isinstance(item, dict)
+        for value in item.values()
+        if isinstance(value, (int, float, str))
     }
 
 

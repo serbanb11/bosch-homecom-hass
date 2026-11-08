@@ -27,6 +27,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tenacity import RetryError
 
 from custom_components.bosch_homecom.const import (
+    BACON_RECONNECT_MARGIN,
+    BACON_RECONNECT_MIN_DELAY,
     CONF_BACON_TITLES,
     CONF_DEVICES,
     CONF_REFRESH,
@@ -36,8 +38,6 @@ from custom_components.bosch_homecom.const import (
     MAX_CLOUD_FAILURES_HELD,
 )
 from custom_components.bosch_homecom.coordinator import (
-    BACON_RECONNECT_MARGIN,
-    BACON_RECONNECT_MIN_DELAY,
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorGeneric,

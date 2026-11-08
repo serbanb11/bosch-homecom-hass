@@ -238,3 +238,40 @@ def test_lifetime_sensor_reads_none_for_a_malformed_counter():
     )
     assert sensor.native_value is None
     assert sensor.translation_key == "lifetime_compressor_total"
+
+
+async def test_lifetime_burner_counter_for_a_gas_boiler(hass):
+    """A K30 gas boiler reports its burner input as emon totalConsumption."""
+    hs = {
+        "actualHeatDemand": {"values": ["ch"]},
+        "consumption": {
+            "id": "/heatSources/emon/totalConsumption",
+            "type": "emonValue",
+            "writeable": 0,
+            "values": [{"burner": 42794.0}],
+            "unit": "kWh",
+        },
+    }
+    added, _listener = await _setup(hass, sensor_async_setup_entry, _coordinator(hs))
+    lifetime = {
+        e.unique_id: e for e in added if isinstance(e, BoschComK40LifetimeEnergySensor)
+    }
+    # Only the burner part exists; no heat pump parts are created.
+    assert set(lifetime) == {"k40123-lifetime_burner_total"}
+
+    burner = lifetime["k40123-lifetime_burner_total"]
+    assert burner.native_value == 42794.0
+    assert burner.translation_key == "lifetime_burner_total"
+    # kWh is not a valid GAS unit; ENERGY in kWh is what the Energy dashboard
+    # accepts as a gas source.
+    assert burner.device_class is SensorDeviceClass.ENERGY
+    assert burner.state_class is SensorStateClass.TOTAL_INCREASING
+    assert burner.native_unit_of_measurement == "kWh"
+    assert burner.entity_registry_enabled_default is True
+
+
+def test_heat_pump_parts_keep_the_energy_device_class():
+    sensor = BoschComK40LifetimeEnergySensor(
+        _coordinator(), "consumption", "compressor", enabled_default=True
+    )
+    assert sensor.device_class is SensorDeviceClass.ENERGY

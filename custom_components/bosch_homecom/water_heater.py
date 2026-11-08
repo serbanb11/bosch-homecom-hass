@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, api_value_to_state_key
 from .coordinator import BoschComModuleCoordinatorK40, BoschComModuleCoordinatorWddw2
+from .temperature_compat import WaterHeaterTemperatureCompat
 
 
 def _parse_temp_unit(unit_str: str | None) -> str:
@@ -78,11 +79,13 @@ def _migrate_unique_id(
     entity_registry.async_update_entity(entity_id, new_unique_id=new_unique_id)
 
 
-class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
+class BoschComK40WaterHeater(
+    CoordinatorEntity, WaterHeaterTemperatureCompat, WaterHeaterEntity
+):
     """Representation of a BoschComK40 water heater entity."""
 
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
     _attr_operation_list = ["Eco+", "Eco", "Comfort", "Program", "Off"]
 
@@ -151,8 +154,8 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
                             val["value"]
                         )
                     case "actualTemp":
-                        self._attr_current_temperature = val["value"]
-                        self._attr_temperature_unit = _parse_temp_unit(
+                        self._attr_native_current_temperature = val["value"]
+                        self._attr_native_temperature_unit = _parse_temp_unit(
                             val.get("unitOfMeasure")
                         )
 
@@ -161,7 +164,9 @@ class BoschComK40WaterHeater(CoordinatorEntity, WaterHeaterEntity):
         self._set_domestic_hot_water_circuits(self.coordinator.data.dhw_circuits)
 
 
-class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
+class BoschComWddw2WaterHeater(
+    CoordinatorEntity, WaterHeaterTemperatureCompat, WaterHeaterEntity
+):
     """Representation of a BoschComWddw2 water heater entity.
 
     Operation modes are exposed as lowercase state keys derived from the API
@@ -180,7 +185,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = WaterHeaterEntityFeature(0)
     _attr_target_temperature_step = 1
 
@@ -201,8 +206,8 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
         self._attr_min_temp = 36
         self._attr_max_temp = 60
-        self._attr_target_temperature = None
-        self._attr_current_temperature = None
+        self._attr_native_target_temperature = None
+        self._attr_native_current_temperature = None
         # State key -> raw API value, so writes use the device vocabulary.
         self._api_modes: dict[str, str] = {}
         # Last setpoint seen while the device reported ``manual``.
@@ -309,14 +314,14 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
 
             unit_str = manual.get("unitOfMeasure")
             if unit_str:
-                self._attr_temperature_unit = _parse_temp_unit(unit_str)
+                self._attr_native_temperature_unit = _parse_temp_unit(unit_str)
 
             if op == "manual" and isinstance(manual.get("value"), (int, float)):
                 self._last_manual_temp = manual["value"]
 
             set_for_mode = (temp_level.get(op) or {}).get("value")
             if isinstance(set_for_mode, (int, float)):
-                self._attr_target_temperature = set_for_mode
+                self._attr_native_target_temperature = set_for_mode
 
             # Only offer temperature control when the setpoint is writable.
             if manual.get("writeable"):
@@ -326,7 +331,7 @@ class BoschComWddw2WaterHeater(CoordinatorEntity, WaterHeaterEntity):
             if isinstance(outlet, dict) and isinstance(
                 outlet.get("value"), (int, float)
             ):
-                self._attr_current_temperature = outlet["value"]
+                self._attr_native_current_temperature = outlet["value"]
 
             self._attr_supported_features = features
 

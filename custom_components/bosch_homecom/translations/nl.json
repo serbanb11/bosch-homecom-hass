@@ -680,6 +680,9 @@
       "lifetime_heat_produced_total": {
         "name": "Geproduceerde warmte totaalteller (totaal)"
       },
+      "lifetime_burner_total": {
+        "name": "Brander gasenergie totaalteller (totaal)"
+      },
       "lifetime_compressor_ch": {
         "name": "Compressor elektriciteit totaalteller (verwarming)"
       },
@@ -688,6 +691,9 @@
       },
       "lifetime_heat_produced_ch": {
         "name": "Geproduceerde warmte totaalteller (verwarming)"
+      },
+      "lifetime_burner_ch": {
+        "name": "Brander gasenergie totaalteller (verwarming)"
       },
       "lifetime_compressor_dhw": {
         "name": "Compressor elektriciteit totaalteller (warm water)"
@@ -698,6 +704,9 @@
       "lifetime_heat_produced_dhw": {
         "name": "Geproduceerde warmte totaalteller (warm water)"
       },
+      "lifetime_burner_dhw": {
+        "name": "Brander gasenergie totaalteller (warm water)"
+      },
       "lifetime_compressor_cooling": {
         "name": "Compressor elektriciteit totaalteller (koeling)"
       },
@@ -707,6 +716,9 @@
       "lifetime_heat_produced_cooling": {
         "name": "Geproduceerde warmte totaalteller (koeling)"
       },
+      "lifetime_burner_cooling": {
+        "name": "Brander gasenergie totaalteller (koeling)"
+      },
       "lifetime_compressor_pool": {
         "name": "Compressor elektriciteit totaalteller (zwembad)"
       },
@@ -715,6 +727,9 @@
       },
       "lifetime_heat_produced_pool": {
         "name": "Geproduceerde warmte totaalteller (zwembad)"
+      },
+      "lifetime_burner_pool": {
+        "name": "Brander gasenergie totaalteller (zwembad)"
       }
     },
     "binary_sensor": {

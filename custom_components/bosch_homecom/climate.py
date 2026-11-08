@@ -35,6 +35,7 @@ from .coordinator import (
     BoschComModuleCoordinatorRac,
     BoschComModuleCoordinatorRrc2,
 )
+from .temperature_compat import ClimateTemperatureCompat
 
 PARALLEL_UPDATES = 1
 
@@ -84,12 +85,12 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
+class BoschComRacClimate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEntity):
     """Representation of a BoschCom climate entity."""
 
     _attr_has_entity_name = True
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_fan_modes = [FAN_AUTO, FAN_DIFFUSE, FAN_LOW, FAN_MEDIUM, FAN_HIGH]
     _attr_hvac_modes = [
         HVACMode.OFF,
@@ -344,23 +345,23 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
                         self._attr_swing_mode = SWING_OFF
                 case "temperatureSetpoint":
                     saw_setpoint = True
-                    self._attr_target_temperature = ref["value"]
+                    self._attr_native_target_temperature = ref["value"]
                     # Absent while setback mode holds the unit at 10 °C; the
                     # last known bounds then stay in place.
                     if ref.get("minValue") is not None:
                         self._attr_min_temp = ref["minValue"]
                     if ref.get("maxValue") is not None:
                         self._attr_max_temp = ref["maxValue"]
-                    self._attr_temperature_unit = _parse_temp_unit(
+                    self._attr_native_temperature_unit = _parse_temp_unit(
                         ref.get("unitOfMeasure")
                     )
                 case "roomTemperature":
-                    self._attr_current_temperature = ref["value"]
+                    self._attr_native_current_temperature = ref["value"]
                 case _:
                     pass
 
-        if not saw_setpoint and self._attr_target_temperature is None:
-            self._attr_target_temperature = 22
+        if not saw_setpoint and self._attr_native_target_temperature is None:
+            self._attr_native_target_temperature = 22
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""
@@ -381,11 +382,11 @@ class BoschComRacClimate(CoordinatorEntity, ClimateEntity):
                     pass
 
 
-class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
+class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEntity):
     """Representation of a BoschComK40 climate entity."""
 
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [
         HVACMode.OFF,
         HVACMode.AUTO,
@@ -451,7 +452,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
 
         # Optimistically reflect the new setpoint immediately — the Bosch cloud
         # API may lag before the updated value appears in GET responses.
-        self._attr_target_temperature = temperature
+        self._attr_native_target_temperature = temperature
         self.async_write_ha_state()
 
         await self.coordinator.async_request_refresh()
@@ -516,18 +517,19 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
                         case "cooling":
                             self._attr_hvac_action = HVACAction.COOLING
                 case "currentRoomSetpoint":
-                    self._attr_target_temperature = heating_circuits[key]["value"]
-                    self._attr_temperature_unit = _parse_temp_unit(
-                        heating_circuits[key].get("unitOfMeasure")
+                    setpoint = heating_circuits[key]
+                    self._attr_native_target_temperature = setpoint["value"]
+                    self._attr_native_temperature_unit = _parse_temp_unit(
+                        setpoint.get("unitOfMeasure")
                     )
                 # homecom_alt names the /roomtemperature reading roomTemp on a
                 # K40 circuit but keeps the raw name on an icom circuit (#194).
                 case "roomTemp" | "roomtemperature":
                     room_temp = heating_circuits[key]["value"]
                     if isinstance(room_temp, (int, float)) and -40 <= room_temp <= 60:
-                        self._attr_current_temperature = room_temp
+                        self._attr_native_current_temperature = room_temp
                     else:
-                        self._attr_current_temperature = None
+                        self._attr_native_current_temperature = None
                 case "actualHumidity":
                     self._attr_current_humidity = heating_circuits[key]["value"]
 
@@ -599,11 +601,11 @@ class BoschComK40Climate(CoordinatorEntity, ClimateEntity):
         return {}
 
 
-class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
+class BoschComZoneClimate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEntity):
     """Representation of a BoschCom zone climate entity."""
 
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
@@ -638,7 +640,7 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
-        self._attr_target_temperature = temperature
+        self._attr_native_target_temperature = temperature
         self.async_write_ha_state()
 
         await self.coordinator.bhc.async_set_zone_manual_temp_heating(
@@ -656,9 +658,9 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
 
         self._attr_hvac_mode = hvac_mode
         if hvac_mode == HVACMode.HEAT and self._manual_temp is not None:
-            self._attr_target_temperature = self._manual_temp
+            self._attr_native_target_temperature = self._manual_temp
         elif hvac_mode == HVACMode.AUTO and self._clock_temp is not None:
-            self._attr_target_temperature = self._clock_temp
+            self._attr_native_target_temperature = self._clock_temp
         self.async_write_ha_state()
 
         await self.coordinator.bhc.async_set_zone_user_mode(
@@ -679,8 +681,8 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
                 temp_actual_node = entry.get("temperatureActual") or {}
                 temp_actual = temp_actual_node.get("value")
                 if temp_actual is not None:
-                    self._attr_current_temperature = temp_actual
-                    self._attr_temperature_unit = _parse_temp_unit(
+                    self._attr_native_current_temperature = temp_actual
+                    self._attr_native_temperature_unit = _parse_temp_unit(
                         temp_actual_node.get("unitOfMeasure")
                     )
 
@@ -695,7 +697,7 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
                     self._clock_temp = clock_data["value"]
 
                 self._attr_hvac_mode = hvac_mode
-                self._attr_target_temperature = temp_data.get("value")
+                self._attr_native_target_temperature = temp_data.get("value")
                 self._attr_min_temp = temp_data.get("minValue", 5)
                 self._attr_max_temp = temp_data.get("maxValue", 30)
                 self._attr_target_temperature_step = temp_data.get("stepSize", 0.5)
@@ -718,11 +720,13 @@ class BoschComZoneClimate(CoordinatorEntity, ClimateEntity):
         return entry.get("tempSetpoint") or {}
 
 
-class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
+class BoschComRrc2ZoneClimate(
+    CoordinatorEntity, ClimateTemperatureCompat, ClimateEntity
+):
     """Climate entity for an RRC2 zone."""
 
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO, HVACMode.OFF]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
@@ -763,7 +767,7 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
-        self._attr_target_temperature = temperature
+        self._attr_native_target_temperature = temperature
         self.async_write_ha_state()
 
         # The device keeps two setpoints. In clock mode it follows the
@@ -794,9 +798,9 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
             return
 
         if hvac_mode == HVACMode.HEAT and self._manual_temp is not None:
-            self._attr_target_temperature = self._manual_temp
+            self._attr_native_target_temperature = self._manual_temp
         elif hvac_mode == HVACMode.AUTO and self._clock_temp is not None:
-            self._attr_target_temperature = self._clock_temp
+            self._attr_native_target_temperature = self._clock_temp
         self.async_write_ha_state()
 
         mode: Literal["manual", "clock"] = "manual"
@@ -830,8 +834,8 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
             actual_node = entry.get("temperatureActual") or {}
             actual = actual_node.get("value")
             if actual is not None:
-                self._attr_current_temperature = actual
-                self._attr_temperature_unit = _parse_temp_unit(
+                self._attr_native_current_temperature = actual
+                self._attr_native_temperature_unit = _parse_temp_unit(
                     actual_node.get("unitOfMeasure")
                 )
 
@@ -859,7 +863,7 @@ class BoschComRrc2ZoneClimate(CoordinatorEntity, ClimateEntity):
 
             target_node = self._get_temperature_data(entry)
             if target_node.get("value") is not None:
-                self._attr_target_temperature = target_node["value"]
+                self._attr_native_target_temperature = target_node["value"]
             self._attr_min_temp = manual.get("minValue", 5)
             self._attr_max_temp = manual.get("maxValue", 30)
             self._attr_target_temperature_step = manual.get("stepSize", 0.5)
@@ -926,13 +930,15 @@ def _clean_bacon_title(title: str | None) -> str | None:
 
 
 class BoschComBaconRacClimate(
-    CoordinatorEntity[BoschComModuleCoordinatorBaconRac], ClimateEntity
+    CoordinatorEntity[BoschComModuleCoordinatorBaconRac],
+    ClimateTemperatureCompat,
+    ClimateEntity,
 ):
     """Climate entity for a Matter/Bacon-commissioned RAC controlled over MQTT."""
 
     _attr_has_entity_name = True
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_swing_modes = [SWING_OFF, SWING_ON]
     _attr_swing_horizontal_modes = [SWING_OFF, SWING_ON]
     _attr_hvac_modes = [
@@ -1024,7 +1030,7 @@ class BoschComBaconRacClimate(
         return self._setpoint_bound("step", 1.0)
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the room temperature from the push-only topics/sensor channel.
 
         Reported regardless of age: on current firmware it updates live, and the
@@ -1045,7 +1051,7 @@ class BoschComBaconRacClimate(
         return BACON_OP_MODE_TO_HVAC.get(reported.get("opMode"), HVACMode.AUTO)
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the target temperature."""
         return self._reported.get("tempSetpoint")
 
