@@ -12,12 +12,16 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.bosch_homecom.button import BoschComK40DhwChargeButton
-from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DOMAIN
-from custom_components.bosch_homecom.coordinator import (
+from custom_components.bosch_homecom.const import (
+    CONF_DEVICES,
+    CONF_REFRESH,
+    DOMAIN,
     HC_TUNE_ENDPOINTS,
     HC_TUNE_POLL_INTERVAL,
     ICOM_HC_TUNE_KEYS,
     K40_HC_TUNE_KEYS,
+)
+from custom_components.bosch_homecom.coordinator import (
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )

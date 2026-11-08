@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 import asyncio
 import dataclasses
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from typing import Any, TypeVar
 
@@ -52,14 +52,37 @@ from tenacity import RetryError
 
 from .bacon import humanize_appliance_type
 from .const import (
+    BACON_MODE_FIELDS,
+    BACON_RECONNECT_MARGIN,
+    BACON_RECONNECT_MIN_DELAY,
+    BACON_TOPIC_META,
+    BACON_TOPICS_PREFIX,
     CLOUD_AUTH_FAILURES_BEFORE_REFRESH,
     CONF_BACON_TITLES,
     CONF_REFRESH,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    HC_TUNE_ENDPOINTS,
+    HC_TUNE_POLL_INTERVAL,
+    ICOM_HC_TUNE_KEYS,
+    K40_HC_TUNE_KEYS,
+    LAST_KNOWN_GOOD_MAX_AGE,
+    LAST_KNOWN_GOOD_SKIP,
+    LOCAL_DHW_CIRCUIT,
+    LOCAL_DHW_KEYS,
+    LOCAL_HC_CIRCUIT,
+    LOCAL_HC_KEYS,
+    LOCAL_HC_STATUS_TO_MODE,
+    LOCAL_HEAT_SOURCES,
+    LOCAL_OUTDOOR_TEMP,
     MANUFACTURER,
     MAX_CLOUD_FAILURES_HELD,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
+    RECORDING_PATHS,
+    RECORDINGS_POLL_INTERVAL,
+    WDDW2_HEALTH_STATUS_PATH,
+    WDDW2_RECORDINGS_POLL_INTERVAL,
+    WDDW2_WATER_TODAY_KEY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -221,136 +244,6 @@ class BoschComModuleCoordinatorRac(BoschComModuleCoordinatorBase[BHCDeviceRac]):
         )
 
 
-RECORDINGS_POLL_INTERVAL = timedelta(hours=1)
-
-# The WDDW2 coordinator re-reads today's water recording and the health status
-# at this cadence. Both move slowly (the recording gains a bucket per hour, the
-# health status changes on a fault), and five minutes keeps the daily figure
-# close to the app's while adding two requests per interval, not per poll.
-WDDW2_RECORDINGS_POLL_INTERVAL = timedelta(minutes=5)
-WDDW2_WATER_TODAY_KEY = "dhw_water_today"
-WDDW2_HEALTH_STATUS_PATH = "/system/healthStatus"
-HC_TUNE_POLL_INTERVAL = timedelta(minutes=15)
-
-# Weather-compensation / underfloor-heating settings of heating circuit hc1,
-# as extra_data key -> (homecom_alt getter, setter). Exposed as number and
-# select entities; each coordinator reads only its HC_TUNE_KEYS.
-# Requires homecom_alt>=1.8.2.
-HC_TUNE_ENDPOINTS: dict[str, tuple[str, str]] = {
-    "hc1_max_flow_temp": ("async_get_hc_max_flow_temp", "async_set_hc_max_flow_temp"),
-    "hc1_suwi_threshold": (
-        "async_get_hc_suwi_threshold",
-        "async_set_hc_suwi_threshold",
-    ),
-    "hc1_control_type": ("async_get_hc_control_type", "async_put_hc_control_type"),
-    "hc1_comfort2": (
-        "async_get_hc_temp_level_comfort2",
-        "async_set_hc_temp_level_comfort2",
-    ),
-    "hc1_eco": ("async_get_hc_temp_level_eco", "async_set_hc_temp_level_eco"),
-    "hc1_heat_curve_min": (
-        "async_get_hc_heat_curve_min",
-        "async_set_hc_heat_curve_min",
-    ),
-    "hc1_heat_curve_max": (
-        "async_get_hc_heat_curve_max",
-        "async_set_hc_heat_curve_max",
-    ),
-}
-
-K40_HC_TUNE_KEYS = (
-    "hc1_max_flow_temp",
-    "hc1_suwi_threshold",
-    "hc1_control_type",
-    "hc1_comfort2",
-    "hc1_eco",
-)
-
-# icom gateways are quick to rate-limit (#110, #120), so they read only what an
-# outdoor-reset heat pump without a room sensor needs to be adjusted: its heat
-# curve and the summer/winter threshold. Three requests per HC_TUNE_POLL_INTERVAL.
-ICOM_HC_TUNE_KEYS = ("hc1_suwi_threshold", "hc1_heat_curve_min", "hc1_heat_curve_max")
-
-# Maps (path_suffix under /recordings/heatSources/) -> {key, agg} for the
-# local coordinator.recordings dict. Discovered via refEnum browsability
-# at GET /resource/recordings/heatSources on a K40 (Bosch Compress 5800iAW).
-# Endpoints the device does not support silently drop out of the bulk
-# response (existing _log_endpoint_status handling) and the previous good
-# value is kept.
-#
-# ``agg`` selects the aggregation of the hourly bucket values:
-#   ``sum`` -> sum of ``y`` values (Bosch's kWh energy counters, c=1 each).
-#   ``avg`` -> ``sum(y) / sum(c)``. Bosch stores some sensor recordings as
-#             per-hour sample-sums; the count is the number of samples that
-#             went into the sum. Used for temperature time-series such as
-#             ``actualSupplyTemperature``.
-#   ``minute_sum`` -> ``sum(y) / 60``. The icom ``total/energyMonitoring/*``
-#             branch stores each hour as a sum of per-minute samples (``c``
-#             is the sample count, 59 or 60). ``y`` is a multiple of 60 even
-#             when ``c`` is 59, so the hour's energy is ``y / 60`` kWh (#178).
-#
-# An icom has the ``total/energyMonitoring/*`` branch and no ``emon`` branch,
-# a K40 the reverse, so both are requested in the same bulk call and the
-# unsupported family simply drops out. Both map onto the same keys, hence the
-# same entities. A device serving both (none known) would keep the later entry.
-RECORDING_PATHS: dict[str, dict] = {
-    # Energy counters — /recordings/heatSources/emon/*, unit kWh
-    "emon/total/compressor": {"key": "energy_compressor_total", "agg": "sum"},
-    "emon/total/eheater": {"key": "energy_eheater_total", "agg": "sum"},
-    "emon/total/ventilation": {"key": "energy_ventilation_total", "agg": "sum"},
-    "emon/total/outputProduced": {"key": "heat_produced_total", "agg": "sum"},
-    "emon/ventilation/heatRecovered": {
-        "key": "heat_recovered_ventilation",
-        "agg": "sum",
-    },
-    "emon/ch/compressor": {"key": "energy_compressor_ch", "agg": "sum"},
-    "emon/ch/eheater": {"key": "energy_eheater_ch", "agg": "sum"},
-    "emon/ch/outputProduced": {"key": "heat_produced_ch", "agg": "sum"},
-    "emon/dhw/compressor": {"key": "energy_compressor_dhw", "agg": "sum"},
-    "emon/dhw/eheater": {"key": "energy_eheater_dhw", "agg": "sum"},
-    "emon/dhw/outputProduced": {"key": "heat_produced_dhw", "agg": "sum"},
-    "emon/cooling/compressor": {"key": "energy_compressor_cooling", "agg": "sum"},
-    "emon/cooling/outputProduced": {"key": "heat_produced_cooling", "agg": "sum"},
-    "emon/pool/compressor": {"key": "energy_compressor_pool", "agg": "sum"},
-    "emon/pool/eheater": {"key": "energy_eheater_pool", "agg": "sum"},
-    "emon/pool/outputProduced": {"key": "heat_produced_pool", "agg": "sum"},
-    # Sensor time-series — direct leaves under /recordings/heatSources/*,
-    # per-hour sample-sum with count -> averaging.
-    "actualSupplyTemperature": {"key": "supply_temp_avg_today", "agg": "avg"},
-    # icom heat pumps (#178): the same totals under a different branch, with
-    # per-minute sample sums. consumedEnergy has no emon counterpart.
-    "total/energyMonitoring/compressor": {
-        "key": "energy_compressor_total",
-        "agg": "minute_sum",
-    },
-    "total/energyMonitoring/eheater": {
-        "key": "energy_eheater_total",
-        "agg": "minute_sum",
-    },
-    "total/energyMonitoring/outputProduced": {
-        "key": "heat_produced_total",
-        "agg": "minute_sum",
-    },
-    "total/energyMonitoring/consumedEnergy": {
-        "key": "energy_consumed_total",
-        "agg": "minute_sum",
-    },
-}
-
-
-# How long a field the cloud stopped delivering is served from its last known
-# value. The cloud has been seen answering 200 with single fields nulled
-# (dhw1 operationMode, the per-level setpoints) for 90 minutes while everything
-# around them stayed fresh (#182). These are settings that rarely change, so a
-# bounded hold beats flipping the entity to unknown; past the bound the null is
-# passed on so staleness cannot go unnoticed.
-LAST_KNOWN_GOOD_MAX_AGE = timedelta(minutes=15)
-
-# Never held: an empty notifications list is a real value (they were cleared),
-# and device/firmware are set by the coordinator itself.
-_LAST_KNOWN_GOOD_SKIP = frozenset({"device", "firmware", "notifications"})
-
-
 class _LastKnownGoodMixin:
     """Fill fields the cloud nulled with their last known value, for a while.
 
@@ -393,7 +286,7 @@ class _LastKnownGoodMixin:
         changes = {}
         for field in dataclasses.fields(new):
             name = field.name
-            if name in _LAST_KNOWN_GOOD_SKIP:
+            if name in LAST_KNOWN_GOOD_SKIP:
                 continue
             new_value = getattr(new, name)
             prev_value = getattr(prev, name, None)
@@ -631,33 +524,6 @@ class _K40ExtraEndpointsMixin:
                 self.recordings[meta["key"]] = round(y_sum, 3)
 
 
-# Values the K 40 RF Local API serves in the same payload format as the cloud.
-# Cloud resource paths are the local ones prefixed with ``/resource``.
-_LOCAL_OUTDOOR_TEMP = "/system/sensors/temperatures/outdoor_t1"
-_LOCAL_HEAT_SOURCES: dict[str, str] = {
-    "actualSupplyTemperature": "/heatSources/actualSupplyTemperature",
-    "returnTemperature": "/heatSources/returnTemperature",
-    "actualModulation": "/heatSources/actualModulation",
-    "actualHeatDemand": "/heatSources/actualHeatDemand",
-    "systemPressure": "/heatSources/systemPressure",
-    "starts": "/heatSources/hs1/numberOfStarts",
-    "totalWorkingTime": "/heatSources/workingTime/totalSystem",
-}
-# Per-circuit keys, read from ``{circuit id}/{key}``, e.g. /dhwCircuits/dhw1/actualTemp.
-_LOCAL_DHW_KEYS = ("actualTemp", "currentTemperatureLevel", "chargeRemainingTime")
-_LOCAL_HC_KEYS = ("currentSuWiMode", "currentRoomSetpoint")
-# The Local API has no operationMode resource. The library derives the DHW one
-# from overallStatus (``dhw_mode``); the heating circuit's is derived the same
-# way here. Statuses without a mode (away, holiday, boost, ...) map to nothing.
-_LOCAL_HC_STATUS_TO_MODE: dict[str, str] = {
-    "heating_auto": "auto",
-    "heating_manual_on": "manual",
-    "heating_manual_off": "off",
-}
-_LOCAL_DHW_CIRCUIT = "/dhwCircuits/dhw1"
-_LOCAL_HC_CIRCUIT = "/heatingCircuits/hc1"
-
-
 def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
     """Return ``data`` with every value the gateway also served replaced by it.
 
@@ -675,8 +541,8 @@ def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDe
         return {**node, **payload} if isinstance(node, dict) else dict(payload)
 
     modes = {
-        _LOCAL_DHW_CIRCUIT: getattr(local, "dhw_mode", None),
-        _LOCAL_HC_CIRCUIT: _LOCAL_HC_STATUS_TO_MODE.get(
+        LOCAL_DHW_CIRCUIT: getattr(local, "dhw_mode", None),
+        LOCAL_HC_CIRCUIT: LOCAL_HC_STATUS_TO_MODE.get(
             getattr(local, "hc_status", None)
         ),
     }
@@ -700,15 +566,15 @@ def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDe
         return result
 
     heat_sources = dict(data.heat_sources or {})
-    for key, path in _LOCAL_HEAT_SOURCES.items():
+    for key, path in LOCAL_HEAT_SOURCES.items():
         heat_sources[key] = merged(heat_sources.get(key) or {}, path)
 
     return dataclasses.replace(
         data,
-        outdoor_temp=merged(data.outdoor_temp, _LOCAL_OUTDOOR_TEMP),
+        outdoor_temp=merged(data.outdoor_temp, LOCAL_OUTDOOR_TEMP),
         heat_sources=heat_sources,
-        dhw_circuits=circuits(data.dhw_circuits, _LOCAL_DHW_KEYS),
-        heating_circuits=circuits(data.heating_circuits, _LOCAL_HC_KEYS),
+        dhw_circuits=circuits(data.dhw_circuits, LOCAL_DHW_KEYS),
+        heating_circuits=circuits(data.heating_circuits, LOCAL_HC_KEYS),
     )
 
 
@@ -1284,25 +1150,6 @@ class BoschComModuleCoordinatorCommodule(
         )
 
 
-# Reconnect this far ahead of the access token's expiry. The MQTT password *is*
-# the access token, so the broker drops the session when it expires. The margin
-# must exceed homecom_alt's 5-minute check_jwt() window, otherwise the forced
-# refresh would hand back the same soon-to-expire token.
-BACON_RECONNECT_MARGIN = timedelta(minutes=10)
-
-# Never schedule a reconnect closer than this, so a short-lived or already
-# expiring token cannot spin up a tight reconnect loop.
-BACON_RECONNECT_MIN_DELAY = timedelta(minutes=1)
-
-# Shadow fields whose change makes the cached topics/meta describe the wrong
-# mode: the device republishes meta with new ``ro`` flags after either moves.
-BACON_MODE_FIELDS: tuple[str, ...] = ("powerEnabled", "opMode")
-
-# The push-only channel; its payloads are never polled, only pushed (#164).
-_BACON_TOPICS_PREFIX = "topics/"
-_BACON_TOPIC_META = "topics/meta"
-
-
 class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
     """Coordinator for a Matter/Bacon-commissioned device (MQTT shadow).
 
@@ -1397,9 +1244,9 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
         after a mode change (#164). The library has already cached the payload
         when this runs, so a rebuild from the unchanged shadow picks it up.
         """
-        if serial != self.unique_id or not path.startswith(_BACON_TOPICS_PREFIX):
+        if serial != self.unique_id or not path.startswith(BACON_TOPICS_PREFIX):
             return
-        if path == _BACON_TOPIC_META:
+        if path == BACON_TOPIC_META:
             self.meta_stale = False
         if self.data is None:
             # Before the first refresh there is no shadow to rebuild from; the

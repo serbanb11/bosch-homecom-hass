@@ -16,11 +16,8 @@ from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.bosch_homecom.const import DOMAIN
-from custom_components.bosch_homecom.coordinator import (
-    LAST_KNOWN_GOOD_MAX_AGE,
-    BoschComModuleCoordinatorK40,
-)
+from custom_components.bosch_homecom.const import DOMAIN, LAST_KNOWN_GOOD_MAX_AGE
+from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorK40
 
 from .test_coordinator import _make_k40_data
 

@@ -46,10 +46,10 @@ from custom_components.bosch_homecom.const import (
     CONF_LOCAL_TOKEN_ID,
     CONF_REFRESH,
     DOMAIN,
+    HC_TUNE_ENDPOINTS,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
 from custom_components.bosch_homecom.coordinator import (
-    HC_TUNE_ENDPOINTS,
     BoschComModuleCoordinatorK40,
     _overlay_local,
 )

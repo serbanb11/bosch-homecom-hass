@@ -51,10 +51,10 @@ from .const import (
     BOSCH_SENSOR_DESCRIPTORS,
     DOMAIN,
     WDDW2_NOTIFICATION_CODES,
+    WDDW2_WATER_TODAY_KEY,
     api_value_to_state_key,
 )
 from .coordinator import (
-    WDDW2_WATER_TODAY_KEY,
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,

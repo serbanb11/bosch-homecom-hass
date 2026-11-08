@@ -15,11 +15,9 @@ from custom_components.bosch_homecom.const import (
     BOSCH_SENSOR_DESCRIPTORS,
     CONF_DEVICES,
     DOMAIN,
-)
-from custom_components.bosch_homecom.coordinator import (
     WDDW2_WATER_TODAY_KEY,
-    BoschComModuleCoordinatorWddw2,
 )
+from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorWddw2
 from custom_components.bosch_homecom.sensor import (
     BoschComHeatingActiveBinarySensor,
     BoschComSensorNotificationsWddw2,
