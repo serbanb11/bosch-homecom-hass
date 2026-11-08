@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -47,6 +48,9 @@ TO_REDACT_RAW = {
     CONF_TOKEN,
     CONF_REFRESH,
 }
+
+# The gateway's module inventory names each module's serial numbers.
+TO_REDACT_MODULES = {"product_serial", "module_serial"}
 
 # Leading characters of a serial kept in a raw-capture key, enough to tell two
 # devices apart in a dump without publishing either serial.
@@ -192,6 +196,15 @@ async def async_get_config_entry_diagnostics(
                 attr, key = field if isinstance(field, tuple) else (field, field)
                 if hasattr(data, attr):
                     entry[key] = getattr(data, attr)
+            # K 40 RF with local access: the appliance's modules (model and
+            # firmware of the indoor unit, the outdoor unit, the gateway...).
+            modules = getattr(coordinator, "local_modules", None)
+            if isinstance(modules, tuple):
+                entry["local_modules"] = [
+                    async_redact_data(dataclasses.asdict(module), TO_REDACT_MODULES)
+                    for module in modules
+                    if dataclasses.is_dataclass(module)
+                ]
             data_out.append(entry)
 
     coordinators = config_entry.runtime_data

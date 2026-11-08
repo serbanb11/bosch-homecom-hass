@@ -37,6 +37,7 @@ from homecom_alt import (
     BHCDeviceRac,
     BHCDeviceRrc2,
     BHCDeviceWddw2,
+    BHCLocalModule,
     HomeComAlt,
     HomeComBaconDevice,
     HomeComK40Local,
@@ -76,6 +77,7 @@ from .const import (
     LOCAL_HC_KEYS,
     LOCAL_HC_STATUS_TO_MODE,
     LOCAL_HEAT_SOURCES,
+    LOCAL_MODULES_POLL_INTERVAL,
     LOCAL_NOTIFICATIONS,
     LOCAL_OUTDOOR_TEMP,
     MANUFACTURER,
@@ -749,6 +751,9 @@ class BoschComModuleCoordinatorK40(
         self.local_data = None
         self.local_source: str | None = None
         self.local_healthy = False
+        # The gateway's module inventory, see _fetch_local_modules.
+        self.local_modules: tuple[BHCLocalModule, ...] | None = None
+        self._last_local_modules_fetch: datetime | None = None
         self._cloud_failures = 0
         # Consecutive cloud 401s from the update itself, see
         # _async_cloud_auth_failed.
@@ -804,6 +809,7 @@ class BoschComModuleCoordinatorK40(
         self.local_data = update.local
         self.local_source = update.source
         self.local_healthy = update.local_healthy
+        await self._fetch_local_modules()
 
         if update.cloud is not None:
             self._cloud_failures = 0
@@ -948,7 +954,58 @@ class BoschComModuleCoordinatorK40(
         self.local_data = local
         self.local_source = "local" if local is not None else None
         self.local_healthy = local is not None
+        await self._fetch_local_modules()
         return self._local_data_or_fail(local, "No usable cloud token")
+
+    async def _fetch_local_modules(self) -> None:
+        """Read the gateway's module inventory, at most once a day.
+
+        Only while local access works: an unhealthy gateway would fail the read
+        anyway. A failed read is retried on the next poll; a gateway without the
+        resource counts as read, so it is not asked again for a day.
+        """
+        if self.local_client is None or not self.local_healthy:
+            return
+        now = dt_util.utcnow()
+        if (
+            self._last_local_modules_fetch is not None
+            and now - self._last_local_modules_fetch < LOCAL_MODULES_POLL_INTERVAL
+        ):
+            return
+        try:
+            modules = await self.local_client.async_get_modules()
+        except (ApiError, AuthFailedError, NotRespondingError, TimeoutError) as error:
+            _LOGGER.debug(
+                "Device_Id: %s, reading the gateway's module inventory failed: %s",
+                self.unique_id,
+                error,
+            )
+            return
+        self._last_local_modules_fetch = now
+        if modules is None:
+            return
+        self.local_modules = modules
+        self._apply_appliance_model(modules)
+
+    @callback
+    def _apply_appliance_model(self, modules: tuple[BHCLocalModule, ...]) -> None:
+        """Name the appliance the gateway reports as the device's model.
+
+        The appliance is the first module with a product name that is not the
+        gateway itself, e.g. "Compress CS6800iAW 12 E". Entities created later
+        read device_info; an existing registry entry is updated in place.
+        """
+        model = next(
+            (m.product_name for m in modules if m.product_name and not m.is_gateway),
+            None,
+        )
+        if model is None or self.device_info.get("model") == model:
+            return
+        self.device_info["model"] = model
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, self.unique_id)})
+        if device is not None:
+            registry.async_update_device(device.id, model=model)
 
     def _local_data_or_fail(
         self, local: BHCDeviceK40Local | None, cloud_error: str

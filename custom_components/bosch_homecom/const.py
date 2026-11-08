@@ -398,6 +398,10 @@ LOCAL_HC_STATUS_TO_MODE: dict[str, str] = {
     "heating_manual_off": "off",
 }
 LOCAL_DHW_CIRCUIT = "/dhwCircuits/dhw1"
+# The gateway's module inventory (/system/basicInfo) only changes with the
+# hardware, so it is read at setup and then once a day, while local access
+# works. It names the appliance for the device registry's model.
+LOCAL_MODULES_POLL_INTERVAL = timedelta(hours=24)
 LOCAL_HC_CIRCUIT = "/heatingCircuits/hc1"
 
 

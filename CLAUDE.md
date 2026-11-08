@@ -44,6 +44,7 @@ The REST coordinator classes (`Generic`, `Rac`, `K40`, `Wddw2`, `Icom`, `Rrc2`, 
 - Catches `ApiError`, `InvalidSensorDataError`, `RetryError`, `NotRespondingError` -> `UpdateFailed`; `AuthFailedError` triggers reauth
 - Up to `MAX_CLOUD_FAILURES_HELD` consecutive failed refreshes are served from the last good data (`_hold_last_data`) before entities go unavailable; never on the first refresh
 - K40 with local access: a failed token refresh starts the reauth but still reads the gateway (`_overlay_local` merges its payloads over the cloud data); cloud-only values are held for `MAX_CLOUD_FAILURES_WITH_LOCAL` polls. Without the cloud at startup, `_local_only_devices` builds the gateways from the entry
+- K40 with local access also reads the gateway's module inventory (`_fetch_local_modules`, `/system/basicInfo`) at setup and then daily; the first named non-gateway module becomes the device registry model, and the inventory goes into diagnostics with serials redacted. Local payload shapes are documented in the official K 40 RF OpenAPI spec (github.com/bosch-home-comfort/api-docs)
 
 ### Entity Pattern
 

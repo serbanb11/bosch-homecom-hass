@@ -6,6 +6,7 @@ coordinator's local-first behaviour, and the local-only sensors.
 
 import dataclasses
 from dataclasses import replace
+from datetime import timedelta
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, call, patch
@@ -14,13 +15,14 @@ from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_TOKEN, CONF_USERNAME
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homecom_alt import (
     ApiError,
     AuthFailedError,
     BHCDeviceK40,
     BHCDeviceK40Local,
+    BHCLocalModule,
     K40Update,
     NotRespondingError,
     ProximityRequiredError,
@@ -174,6 +176,8 @@ def _coordinator(hass, entry, device, firmware, *, local=True):
         setattr(bhc, getter, AsyncMock(return_value=None))
     bhc.async_request_bulk = AsyncMock(return_value={})
     local_client = Mock() if local else None
+    if local_client is not None:
+        local_client.async_get_modules = AsyncMock(return_value=None)
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, False, local_client
     )
@@ -1403,6 +1407,156 @@ def test_every_optional_local_key_is_unique() -> None:
     assert len(keys) == len(set(keys))
 
 
+def _module(**fields):
+    base = dict(
+        bus_id=None,
+        token=None,
+        version=None,
+        product_name=None,
+        hw_ident=None,
+        product_serial=None,
+        module_serial=None,
+    )
+    return BHCLocalModule(**{**base, **fields})
+
+
+# The module inventory of the K 40 RF OpenAPI spec's basicInfo example.
+_SPEC_MODULES = (
+    _module(
+        bus_id="8",
+        token="8",
+        version="23.06.02-5.33-d510f849",
+        product_name="Compress CS6800iAW 12 E",
+        hw_ident="XCU_THH",
+        product_serial="83703740000878738215205",
+    ),
+    _module(
+        bus_id="65281",
+        token="8",
+        version="3.06.02-5.33-d510f849",
+        product_name="AW 4 OR-S",
+        hw_ident="XCU_SRH",
+        product_serial="83703740000968738215209",
+    ),
+    _module(
+        bus_id="17",
+        token="72",
+        version="10.02.00",
+        hw_ident="K40RF",
+        module_serial="25302791000098738806125",
+    ),
+)
+
+
+@pytest.mark.asyncio
+async def test_module_inventory_names_the_appliance_model(
+    hass, entry, device, firmware
+):
+    """The first non-gateway module with a name becomes the device's model."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    registry = dr.async_get(hass)
+    registry_device = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_client.async_get_modules = AsyncMock(return_value=_SPEC_MODULES)
+    coordinator.local_healthy = True
+
+    await coordinator._fetch_local_modules()
+
+    assert coordinator.local_modules == _SPEC_MODULES
+    assert coordinator.device_info["model"] == "Compress CS6800iAW 12 E"
+    assert registry.async_get(registry_device.id).model == "Compress CS6800iAW 12 E"
+
+
+@pytest.mark.asyncio
+async def test_module_inventory_is_read_daily_and_only_while_local_works(
+    hass, entry, device, firmware, freezer
+):
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    read = coordinator.local_client.async_get_modules = AsyncMock(
+        return_value=_SPEC_MODULES
+    )
+
+    coordinator.local_healthy = False
+    await coordinator._fetch_local_modules()
+    read.assert_not_awaited()
+
+    coordinator.local_healthy = True
+    await coordinator._fetch_local_modules()
+    freezer.tick(timedelta(hours=23))
+    await coordinator._fetch_local_modules()
+    assert read.await_count == 1
+
+    freezer.tick(timedelta(hours=2))
+    await coordinator._fetch_local_modules()
+    assert read.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_module_inventory_failure_retries_and_absence_does_not(
+    hass, entry, device, firmware
+):
+    """A failed read is retried next poll; a gateway without it is not asked."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+
+    read = coordinator.local_client.async_get_modules = AsyncMock(
+        side_effect=NotRespondingError("timeout")
+    )
+    await coordinator._fetch_local_modules()
+    await coordinator._fetch_local_modules()
+    assert read.await_count == 2
+    assert coordinator.local_modules is None
+
+    read = coordinator.local_client.async_get_modules = AsyncMock(return_value=None)
+    await coordinator._fetch_local_modules()
+    await coordinator._fetch_local_modules()
+    assert read.await_count == 1
+    assert "model" not in coordinator.device_info
+
+
+@pytest.mark.asyncio
+async def test_module_inventory_without_a_named_appliance_leaves_the_model(
+    hass, entry, device, firmware
+):
+    """Only the gateway listed, or no names: nothing to call the appliance."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+
+    coordinator._apply_appliance_model(
+        (_module(hw_ident="K40RF", product_name="K 40 RF"), _module(bus_id="8"))
+    )
+
+    assert "model" not in coordinator.device_info
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_list_the_modules_without_serials(
+    hass, entry, device, firmware
+):
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.async_set_updated_data(_cloud_device())
+    coordinator.local_modules = _SPEC_MODULES
+    entry.runtime_data = [coordinator]
+
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+
+    modules = dump["data"][0]["local_modules"]
+    assert [m["product_name"] for m in modules] == [
+        "Compress CS6800iAW 12 E",
+        "AW 4 OR-S",
+        None,
+    ]
+    assert modules[0]["version"] == "23.06.02-5.33-d510f849"
+    assert modules[0]["product_serial"] == "**REDACTED**"
+    assert "83703740000878738215205" not in str(dump)
+    assert "25302791000098738806125" not in str(dump)
+
+
 def test_every_local_sensor_has_a_unique_key() -> None:
     """Duplicate keys would collide in the entity registry."""
     keys = [d.key for d in LOCAL_SENSORS]
@@ -2100,10 +2254,20 @@ async def test_setup_without_the_cloud_uses_the_gateway(hass, cloud_error, reaut
             "custom_components.bosch_homecom.HomeComK40Local.async_update",
             new=AsyncMock(return_value=local),
         ),
+        patch(
+            "custom_components.bosch_homecom.HomeComK40Local.async_get_modules",
+            new=AsyncMock(return_value=_SPEC_MODULES),
+        ),
         patch.object(entry, "async_start_reauth") as start_reauth,
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
+
+        # The gateway names the appliance even without the cloud.
+        (device_entry,) = dr.async_entries_for_config_entry(
+            dr.async_get(hass), entry.entry_id
+        )
+        assert device_entry.model == "Compress CS6800iAW 12 E"
 
         assert entry.state is ConfigEntryState.LOADED
         assert bool(start_reauth.call_count) is reauth
