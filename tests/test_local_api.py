@@ -1183,6 +1183,48 @@ async def test_pump_volume_flow_falls_back_and_hides_the_low_flow_marker(
     assert BoschComLocalSensor(coordinator, entry, flow).native_value is None
 
 
+def _temperature(value):
+    """A temperature payload as the K 40 RF serves it, with its sensor markers."""
+    return {
+        "type": "floatValue",
+        "writeable": 0,
+        "value": value,
+        "unitOfMeasure": "C",
+        "state": [{"short": 32767.0}, {"open": -32768.0}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        ("local_hot_gas_temp", 20.1, 20.1),
+        ("local_hot_gas_temp", 32767.0, None),
+        ("local_suction_gas_temp", -32768.0, None),
+        ("local_compressor_temp", 32767.0, None),
+        ("local_condenser_supply_temp", -32768.0, None),
+        ("local_additional_heater_flow_temp", 29.4, 29.4),
+        ("local_additional_heater_flow_temp", -32768.0, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_local_sensors_hide_the_markers_their_payload_declares(
+    hass, entry, device, firmware, key, value, expected
+):
+    """A value the payload lists as a named state is no reading (#222)."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+    description = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}[key]
+    coordinator.local_data = _local_device(
+        resources={description.resource: _temperature(value)}
+    )
+
+    sensor = BoschComLocalSensor(coordinator, entry, description)
+
+    assert sensor.native_value == expected
+    assert sensor.available is (expected is not None)
+
+
 @pytest.mark.asyncio
 async def test_local_source_sensor_reports_transport(hass, entry, device, firmware):
     """The diagnostic sensor exposes which transport served the last update."""
