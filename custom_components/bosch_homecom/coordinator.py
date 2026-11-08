@@ -158,6 +158,10 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
             UpdateFailed,
         ) as error:
             return self._hold_last_data(error)
+        finally:
+            # Library getters can rotate tokens after the pre-poll refresh,
+            # even when a subsequent request fails or the poll is cancelled.
+            self._async_persist_tokens()
 
         self._held_failures = 0
         return built
@@ -206,7 +210,9 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
 
     @callback
     def _async_persist_tokens(self) -> None:
-        """Store a rotated token pair on the entry."""
+        """Save the token owner's latest credentials without rewriting peers'."""
+        if not self.auth_provider:
+            return
         if self.bhc.token != self.entry.data.get(
             CONF_TOKEN
         ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
@@ -362,11 +368,14 @@ class _K40ExtraEndpointsMixin:
 
     async def _async_update_data(self):
         """Update via library, then fetch the standalone endpoints."""
-        data = await super()._async_update_data()
-        await self._fetch_extra_endpoints()
-        await self._fetch_hc_tune()
-        await self._fetch_recordings()
-        return data
+        try:
+            data = await super()._async_update_data()
+            await self._fetch_extra_endpoints()
+            await self._fetch_hc_tune()
+            await self._fetch_recordings()
+            return data
+        finally:
+            self._async_persist_tokens()
 
     async def _fetch_extra_endpoints(self) -> None:
         """Fetch standalone endpoints via the library, caching None on failure."""
@@ -775,6 +784,13 @@ class BoschComModuleCoordinatorK40(
         if self._cloud_auth_rejected:
             return await self._async_update_local_only()
 
+        try:
+            return await self._async_update_local_cloud_data()
+        finally:
+            self._async_persist_tokens()
+
+    async def _async_update_local_cloud_data(self) -> BHCDeviceK40:
+        """Poll the local/cloud policy and its standalone endpoints."""
         try:
             await self._async_refresh_tokens()
         except UpdateFailed:
