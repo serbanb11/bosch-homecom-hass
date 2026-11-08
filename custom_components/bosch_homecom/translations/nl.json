@@ -742,7 +742,11 @@
           "passive_defrost": "Passief ontdooien",
           "shutoff": "Uitgeschakeld",
           "alarm": "Alarm",
-          "test_mode": "Testmodus"
+          "test_mode": "Testmodus",
+          "off": "Uit",
+          "dhw": "Warm water",
+          "pool": "Zwembad",
+          "pool_heat": "Zwembadverwarming"
         }
       },
       "local_supply_setpoint": {

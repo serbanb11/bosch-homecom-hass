@@ -1248,6 +1248,10 @@ async def test_optional_local_sensors_appear_once_the_gateway_serves_them(
         ("local_system_type", "eHybrid", "e_hybrid"),
         ("local_system_bus", "EMS2_0", "ems2_0"),
         ("local_refrigerant_status", "passive_defrost", "passive_defrost"),
+        # What a K 40 RF on firmware 15.00.01 answers instead of the spec values.
+        ("local_refrigerant_status", "off", "off"),
+        ("local_refrigerant_status", "dhw", "dhw"),
+        ("local_em_status", "activeDhw", "active_dhw"),
         # A value the spec does not list is no reading, not an invalid enum state.
         ("local_em_status", "somethingNew", None),
     ],
@@ -1268,6 +1272,52 @@ async def test_enum_sensors_map_raw_values_to_state_keys(
     assert sensor.device_class == SensorDeviceClass.ENUM
     assert set(sensor.options) == set(description.states.values())
     assert sensor.native_value == state
+
+
+# allowedValues as a K 40 RF (firmware 15.00.01) serves them; both differ from
+# the OpenAPI spec.
+_GATEWAY_ALLOWED_VALUES = {
+    "local_refrigerant_status": [
+        "off",
+        "heating",
+        "cooling",
+        "dhw",
+        "pool",
+        "pool_heat",
+        "defrost",
+        "alarm",
+    ],
+    "local_em_status": ["notConnected", "inactive", "activeCh", "activeDhw"],
+}
+
+
+@pytest.mark.parametrize(("key", "allowed"), list(_GATEWAY_ALLOWED_VALUES.items()))
+@pytest.mark.asyncio
+async def test_enum_sensors_read_every_value_the_gateway_allows(
+    hass, entry, device, firmware, key, allowed
+):
+    """No value the gateway itself lists leaves the entity unavailable."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+    description = _optional(key)
+
+    for raw in allowed:
+        coordinator.local_data = _local_device(
+            resources={
+                description.resource: {
+                    "id": description.resource,
+                    "type": "stringValue",
+                    "writeable": 0,
+                    "value": raw,
+                    "allowedValues": allowed,
+                }
+            }
+        )
+        sensor = BoschComLocalSensor(coordinator, entry, description)
+
+        assert sensor.native_value in sensor.options, raw
+        assert sensor.available is True, raw
 
 
 def test_every_enum_state_and_name_is_translated() -> None:

@@ -743,7 +743,11 @@
           "passive_defrost": "Passive defrost",
           "shutoff": "Shut off",
           "alarm": "Alarm",
-          "test_mode": "Test mode"
+          "test_mode": "Test mode",
+          "off": "Off",
+          "dhw": "Hot water",
+          "pool": "Pool",
+          "pool_heat": "Pool heating"
         }
       },
       "local_supply_setpoint": {
