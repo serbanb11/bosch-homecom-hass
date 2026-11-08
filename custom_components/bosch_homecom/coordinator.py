@@ -56,11 +56,11 @@ from .const import (
     CONF_REFRESH,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    LOCAL_EXTRA_RESOURCES,
     MANUFACTURER,
     MAX_CLOUD_FAILURES_HELD,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
-from .local_sensor import LOCAL_EXTRA_RESOURCES
 
 _LOGGER = logging.getLogger(__name__)
 

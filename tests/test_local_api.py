@@ -45,6 +45,8 @@ from custom_components.bosch_homecom.const import (
     CONF_LOCAL_TOKEN_ID,
     CONF_REFRESH,
     DOMAIN,
+    HC1_PUMP_VOLUME_FLOW,
+    LOCAL_EXTRA_RESOURCES,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
 from custom_components.bosch_homecom.coordinator import (
@@ -56,8 +58,6 @@ from custom_components.bosch_homecom.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.bosch_homecom.local_sensor import (
-    HC1_PUMP_VOLUME_FLOW,
-    LOCAL_EXTRA_RESOURCES,
     LOCAL_SENSORS,
     BoschComLocalSensor,
     BoschComLocalSourceSensor,

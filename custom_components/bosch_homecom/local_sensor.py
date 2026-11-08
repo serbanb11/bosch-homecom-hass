@@ -31,6 +31,8 @@ from homeassistant.const import (
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import HC1_PUMP_VOLUME_FLOW
+
 _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
@@ -59,12 +61,6 @@ class LocalSensorDescription(SensorEntityDescription):
     field: str | None = None
     fallback_resources: tuple[str, ...] = ()
     state_is_unknown: bool = False
-
-
-# Local resources outside homecom_alt's poll set. The coordinator reads them
-# after each local update and merges them into ``local_data.resources``.
-HC1_PUMP_VOLUME_FLOW = "/signals/SRC.HC1.FlowCtrl.PumpVolumeFlow"
-LOCAL_EXTRA_RESOURCES: tuple[str, ...] = (HC1_PUMP_VOLUME_FLOW,)
 
 
 _TEMP = SensorDeviceClass.TEMPERATURE
