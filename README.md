@@ -83,6 +83,8 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 **Energy recordings:** today's compressor, electric heater, consumed and produced energy come from `/recordings/heatSources`. A K40 serves them under `emon/*`, an icom under `total/energyMonitoring/*`; both are requested and a sensor is created only once its data has actually been served, so a device gets exactly the recordings it has.
 
+**Energy history (K30/K40):** each `emon/*` energy counter is also written to Home Assistant's long-term statistics as `bosch_homecom:<device id>_<counter>` (for example `bosch_homecom:101756851_heat_produced_total`), which the energy dashboard can use. The first time, the integration loads the history the cloud still keeps: hourly values for about ten days, daily values for about two months and monthly values back to the installation. A daily or monthly value is shown on the first hour of its day or month. After that it adds each hour from the regular recordings poll, with no extra requests, and after Home Assistant has been down it reads back the hours missed while the cloud still has them. A counter that only ever reports zero (hot water on a unit without a tank) gets no statistic.
+
 ### Local network access (K 40 RF)
 
 A K 40 RF gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.

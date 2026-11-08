@@ -90,6 +90,7 @@ from .const import (
     WDDW2_RECORDINGS_POLL_INTERVAL,
     WDDW2_WATER_TODAY_KEY,
 )
+from .statistics import async_import_energy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -358,6 +359,8 @@ class _K40ExtraEndpointsMixin:
         # the previous day has been read since midnight (see _fetch_recordings).
         self._recordings_day: date | None = None
         self._previous_day_reads = 0
+        # Statistic ids whose history import was already tried in this run.
+        self._statistics_backfilled: set[str] = set()
         self._last_hc_tune_fetch = None
 
     async def _async_update_data(self):
@@ -505,6 +508,7 @@ class _K40ExtraEndpointsMixin:
         self._last_recordings_fetch = now
 
         complete = self._store_recordings(result or {}, day)
+        await self._import_statistics(result or {}, day)
         if day == today:
             self._recordings_day = today
             return
@@ -515,6 +519,34 @@ class _K40ExtraEndpointsMixin:
             self._recordings_day = today
             self._previous_day_reads = 0
             self._last_recordings_fetch = None
+
+    async def _import_statistics(self, result: dict, day: date) -> None:
+        """Add the energy recordings to the long-term statistics (statistics.py).
+
+        A failure only costs this hour's import: the next fetch catches up.
+        """
+        if "recorder" not in self.hass.config.components:
+            return
+        try:
+            await async_import_energy(
+                self.hass,
+                self.bhc,
+                self.unique_id,
+                result,
+                day,
+                self._statistics_backfilled,
+            )
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            RetryError,
+            TimeoutError,
+        ):
+            _LOGGER.debug(
+                "Device %s: energy statistics import failed, retrying next hour",
+                self.unique_id,
+            )
 
     def _store_recordings(self, result: dict, day: date) -> bool:
         """Aggregate a bulk answer for ``day`` into ``recordings``.
