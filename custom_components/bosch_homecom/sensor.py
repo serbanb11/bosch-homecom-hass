@@ -4292,7 +4292,9 @@ _LIFETIME_ENERGY_PARTS: Final[dict[str, str]] = {
     "eheater": "lifetime_eheater",
     "outputProduced": "lifetime_heat_produced",
     # Gas boilers (e.g. Condens 8700i W on a K30) report the burner's
-    # energy input under this key instead of the heat pump parts.
+    # energy input under this key instead of the heat pump parts. It stays
+    # device_class ENERGY: GAS only allows volume units, and the Energy
+    # dashboard accepts an ENERGY sensor in kWh as a gas source anyway.
     "burner": "lifetime_burner",
 }
 
@@ -4342,10 +4344,6 @@ class BoschComK40LifetimeEnergySensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.unique_id}-{key}"
         self._attr_suggested_object_id = key
         self._attr_entity_registry_enabled_default = enabled_default
-        if part == "burner":
-            # Burner input is gas energy; GAS lets the Energy dashboard offer
-            # it as gas consumption rather than electricity.
-            self._attr_device_class = SensorDeviceClass.GAS
 
     @property
     def native_value(self) -> float | None:

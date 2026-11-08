@@ -262,7 +262,9 @@ async def test_lifetime_burner_counter_for_a_gas_boiler(hass):
     burner = lifetime["k40123-lifetime_burner_total"]
     assert burner.native_value == 42794.0
     assert burner.translation_key == "lifetime_burner_total"
-    assert burner.device_class is SensorDeviceClass.GAS
+    # kWh is not a valid GAS unit; ENERGY in kWh is what the Energy dashboard
+    # accepts as a gas source.
+    assert burner.device_class is SensorDeviceClass.ENERGY
     assert burner.state_class is SensorStateClass.TOTAL_INCREASING
     assert burner.native_unit_of_measurement == "kWh"
     assert burner.entity_registry_enabled_default is True
