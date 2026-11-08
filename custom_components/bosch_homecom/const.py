@@ -218,6 +218,12 @@ CLOUD_AUTH_FAILURES_BEFORE_REFRESH: Final = 3
 # --- Coordinator: extra cloud endpoints and recordings ---------------------
 RECORDINGS_POLL_INTERVAL = timedelta(hours=1)
 
+# After midnight the recordings fetch first finishes the previous day, whose last
+# hourly bucket arrives with a 1-2 h lag (#178). It gives up after this many
+# reads, so a recording that never fills its last hour cannot hold the sensors
+# on yesterday's total for longer than about that many hours.
+RECORDINGS_PREVIOUS_DAY_TRIES = 3
+
 # The WDDW2 coordinator re-reads today's water recording and the health status
 # at this cadence. Both move slowly (the recording gains a bucket per hour, the
 # health status changes on a fault), and five minutes keeps the daily figure

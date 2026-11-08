@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 import asyncio
 import dataclasses
-from datetime import datetime
+from datetime import date, datetime, timedelta
 import logging
 from typing import Any, TypeVar
 
@@ -80,6 +80,7 @@ from .const import (
     MAX_CLOUD_FAILURES_WITH_LOCAL,
     RECORDING_PATHS,
     RECORDINGS_POLL_INTERVAL,
+    RECORDINGS_PREVIOUS_DAY_TRIES,
     WDDW2_HEALTH_STATUS_PATH,
     WDDW2_RECORDINGS_POLL_INTERVAL,
     WDDW2_WATER_TODAY_KEY,
@@ -348,6 +349,10 @@ class _K40ExtraEndpointsMixin:
         self.extra_data: dict[str, dict | None] = {}
         self.recordings: dict[str, float] = {}
         self._last_recordings_fetch = None
+        # The local day the values in ``recordings`` belong to, and how often
+        # the previous day has been read since midnight (see _fetch_recordings).
+        self._recordings_day: date | None = None
+        self._previous_day_reads = 0
         self._last_hc_tune_fetch = None
 
     async def _async_update_data(self):
@@ -450,6 +455,13 @@ class _K40ExtraEndpointsMixin:
             ``sum`` -> sum of ``y`` (kWh counters)
             ``avg`` -> sum(y) / sum(c) (sensor sample averages)
             ``minute_sum`` -> sum(y) / 60 (icom per-minute sample sums)
+
+        Bosch fills the hourly buckets with a 1-2 h lag, so at midnight the
+        day's last hour is not in yet and used to be lost (#178). The first
+        reads after midnight therefore finish the previous day: its total stays
+        on the sensors until its last bucket has arrived, or
+        RECORDINGS_PREVIOUS_DAY_TRIES reads have passed, and today's values
+        follow on the next poll.
         """
         now = dt_util.utcnow()
         if (
@@ -458,9 +470,12 @@ class _K40ExtraEndpointsMixin:
         ):
             return
 
-        today = dt_util.now().strftime("%Y-%m-%d")
+        today = dt_util.now().date()
+        day = today
+        if self._recordings_day == today - timedelta(days=1):
+            day = self._recordings_day
         paths = [
-            f"/recordings/heatSources/{suffix}?interval={today}"
+            f"/recordings/heatSources/{suffix}?interval={day.isoformat()}"
             for suffix in RECORDING_PATHS
         ]
         try:
@@ -484,11 +499,38 @@ class _K40ExtraEndpointsMixin:
         # rate-limit for the next hour regardless of payload contents.
         self._last_recordings_fetch = now
 
-        if not result:
+        complete = self._store_recordings(result or {}, day)
+        if day == today:
+            self._recordings_day = today
             return
+        self._previous_day_reads += 1
+        if complete or self._previous_day_reads >= RECORDINGS_PREVIOUS_DAY_TRIES:
+            # The previous day's final values are on the sensors for this poll;
+            # today's are read on the next one rather than in an hour.
+            self._recordings_day = today
+            self._previous_day_reads = 0
+            self._last_recordings_fetch = None
 
+    def _store_recordings(self, result: dict, day: date) -> bool:
+        """Aggregate a bulk answer for ``day`` into ``recordings``.
+
+        Returns whether the day is complete: every recording that answered has
+        samples in the day's last hour. Depending on the device an unpopulated
+        hour is either missing or carries ``c: 0``, so both are checked.
+        """
+        # Compare in UTC: two datetimes in the same zone subtract by wall clock,
+        # which would make every day 24 hours, DST changes included.
+        hours = round(
+            (
+                dt_util.as_utc(dt_util.start_of_local_day(day + timedelta(days=1)))
+                - dt_util.as_utc(dt_util.start_of_local_day(day))
+            ).total_seconds()
+            / 3600
+        )
+        answered = False
+        complete = True
         for suffix, meta in RECORDING_PATHS.items():
-            path = f"/recordings/heatSources/{suffix}?interval={today}"
+            path = f"/recordings/heatSources/{suffix}?interval={day.isoformat()}"
             payload = result.get(path)
             if not isinstance(payload, dict):
                 # Endpoint not supported on this device (404/403) or unexpected shape.
@@ -497,24 +539,25 @@ class _K40ExtraEndpointsMixin:
             recording = payload.get("recording") or []
             if not isinstance(recording, list):
                 continue
+            answered = True
+            last = recording[hours - 1] if len(recording) >= hours else None
+            if not isinstance(last, dict) or not _has_samples(last):
+                complete = False
             y_sum = 0.0
             c_sum = 0
             for item in recording:
-                if not isinstance(item, dict):
-                    continue
-                c = item.get("c")
                 # Skip future / unpopulated hour slots. Some devices (e.g.
                 # Buderus Logatherm WLW166i) return {"c": 0, "y": 1.0} for
                 # every not-yet-populated hour of the current day; without
                 # this guard both ``sum`` and ``avg`` aggregations would
                 # count those placeholders as real samples. Reported by
                 # @ombuyse in PR #155.
-                if not isinstance(c, (int, float)) or c <= 0:
+                if not isinstance(item, dict) or not _has_samples(item):
                     continue
                 y = item.get("y")
                 if isinstance(y, (int, float)):
                     y_sum += y
-                c_sum += int(c)
+                c_sum += int(item["c"])
             if meta["agg"] == "avg":
                 if c_sum > 0:
                     self.recordings[meta["key"]] = round(y_sum / c_sum, 2)
@@ -522,6 +565,13 @@ class _K40ExtraEndpointsMixin:
                 self.recordings[meta["key"]] = round(y_sum / 60, 3)
             else:  # "sum"
                 self.recordings[meta["key"]] = round(y_sum, 3)
+        return answered and complete
+
+
+def _has_samples(bucket: dict) -> bool:
+    """Return whether a recording bucket holds samples (``c > 0``)."""
+    c = bucket.get("c")
+    return isinstance(c, (int, float)) and c > 0
 
 
 def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
