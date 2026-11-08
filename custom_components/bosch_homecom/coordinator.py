@@ -68,12 +68,15 @@ from .const import (
     K40_HC_TUNE_KEYS,
     LAST_KNOWN_GOOD_MAX_AGE,
     LAST_KNOWN_GOOD_SKIP,
+    LOCAL_CIRCUIT_FALLBACKS,
     LOCAL_DHW_CIRCUIT,
     LOCAL_DHW_KEYS,
+    LOCAL_FLAME_STATUS,
     LOCAL_HC_CIRCUIT,
     LOCAL_HC_KEYS,
     LOCAL_HC_STATUS_TO_MODE,
     LOCAL_HEAT_SOURCES,
+    LOCAL_NOTIFICATIONS,
     LOCAL_OUTDOOR_TEMP,
     MANUFACTURER,
     MAX_CLOUD_FAILURES_HELD,
@@ -584,9 +587,16 @@ def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDe
     if not resources:
         return data
 
-    def merged(node, path: str):
-        payload = resources.get(path)
-        if not isinstance(payload, dict):
+    def merged(node, path: str, fallbacks: tuple[str, ...] = ()):
+        payload = next(
+            (
+                resources[candidate]
+                for candidate in (path, *fallbacks)
+                if isinstance(resources.get(candidate), dict)
+            ),
+            None,
+        )
+        if payload is None:
             return node
         return {**node, **payload} if isinstance(node, dict) else dict(payload)
 
@@ -605,7 +615,11 @@ def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDe
             if isinstance(ref, dict) and isinstance(ref.get("id"), str):
                 ref = dict(ref)
                 for key in keys:
-                    ref[key] = merged(ref.get(key), f"{ref['id']}/{key}")
+                    ref[key] = merged(
+                        ref.get(key),
+                        f"{ref['id']}/{key}",
+                        LOCAL_CIRCUIT_FALLBACKS.get((ref["id"], key), ()),
+                    )
                 if mode := modes.get(ref["id"]):
                     node = ref.get("operationMode")
                     ref["operationMode"] = {
@@ -617,12 +631,27 @@ def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDe
 
     heat_sources = dict(data.heat_sources or {})
     for key, path in LOCAL_HEAT_SOURCES.items():
-        heat_sources[key] = merged(heat_sources.get(key) or {}, path)
+        # Neither transport has it: leave the key out rather than adding an
+        # empty node, so "not reported" stays distinguishable.
+        if (node := merged(heat_sources.get(key), path)) is not None:
+            heat_sources[key] = node
+
+    flame = data.flame_indication
+    if isinstance(flame, dict):
+        flame = merged(flame, LOCAL_FLAME_STATUS)
+
+    notifications = data.notifications
+    if notifications is None:
+        local_errors = (resources.get(LOCAL_NOTIFICATIONS) or {}).get("values")
+        if isinstance(local_errors, list):
+            notifications = local_errors
 
     return dataclasses.replace(
         data,
+        notifications=notifications,
         outdoor_temp=merged(data.outdoor_temp, LOCAL_OUTDOOR_TEMP),
         heat_sources=heat_sources,
+        flame_indication=flame,
         dhw_circuits=circuits(data.dhw_circuits, LOCAL_DHW_KEYS),
         heating_circuits=circuits(data.heating_circuits, LOCAL_HC_KEYS),
     )

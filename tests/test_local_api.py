@@ -63,6 +63,7 @@ from custom_components.bosch_homecom.local_sensor import (
     BoschComLocalSourceSensor,
     _emon_field,
 )
+from custom_components.bosch_homecom.sensor import _emon_part, _notifications_state
 
 _FLOW_CLIENT = "custom_components.bosch_homecom.config_flow.HomeComK40Local"
 HOST = "192.0.2.10"
@@ -1296,6 +1297,134 @@ def test_overlay_replaces_shared_values_and_keeps_cloud_only_ones() -> None:
     }
     assert dhw["operationMode"] == {"value": "ownprogram"}
     assert data.heating_circuits[0]["currentSuWiMode"]["value"] == "forced"
+
+
+# Example payloads from the official K 40 RF OpenAPI spec
+# (github.com/bosch-home-comfort/api-docs, openapi/k-40-rf.yaml).
+_SPEC_TOTAL_CONSUMPTION = {
+    "id": "/heatSources/emon/totalConsumption",
+    "writeable": 0,
+    "type": "emonValue",
+    "values": [
+        {"outputProduced": 30},
+        {"eheater": 2},
+        {"compressor": 14},
+        {"solar": 27.9},
+        {"burner": 156.9},
+        {"electricity": 236.8},
+        {"ventilation": 72.436},
+        {"ventilationHeatRecovered": 15.314},
+    ],
+    "unit": "kWh",
+}
+_SPEC_EHEATER_STATUS = {
+    "id": "/heatSources/Source/eHeater/status",
+    "type": "stringValue",
+    "writeable": 0,
+    "value": "off",
+    "allowedValues": ["off", "heating", "dhw", "pool", "pool_heat", "defrost", "alarm"],
+}
+_SPEC_PUMP_TYPE = {
+    "id": "/heatSources/hs1/heatPumpType",
+    "type": "stringValue",
+    "writeable": 0,
+    "value": "air_water",
+    "allowedValues": ["air_water", "liquid_water", "exhaustAir_water"],
+}
+_SPEC_FLAME = {
+    "id": "/heatSources/flameStatus",
+    "type": "stringValue",
+    "writeable": 0,
+    "value": "off",
+    "allowedValues": ["off", "on"],
+}
+_SPEC_NOTIFICATIONS = {
+    "id": "/notifications",
+    "type": "errorList",
+    "writeable": 0,
+    "values": [{"dcd": "4U", "ccd": 521, "orig": "8", "dlv": "8", "fc": "4"}],
+}
+_SPEC_CYLINDER_TEMP = {
+    "id": "/heatSources/dhw/cylinderTemperature",
+    "type": "floatValue",
+    "writeable": 0,
+    "value": 24.4,
+    "unitOfMeasure": "C",
+}
+
+
+def test_overlay_feeds_the_cloud_sensors_from_spec_payloads() -> None:
+    """The spec's payloads land where the existing cloud sensors read them."""
+    cloud = dataclasses.replace(
+        _cloud_with_circuits(),
+        flame_indication={"value": "on"},
+        heat_sources={
+            "pumpType": {"value": "liquid_water"},
+            "consumption": {"values": [{"compressor": 1.0}], "unit": "kWh"},
+        },
+    )
+    local = _local_device(
+        resources={
+            "/heatSources/emon/totalConsumption": _SPEC_TOTAL_CONSUMPTION,
+            "/heatSources/Source/eHeater/status": _SPEC_EHEATER_STATUS,
+            "/heatSources/hs1/heatPumpType": _SPEC_PUMP_TYPE,
+            "/heatSources/flameStatus": _SPEC_FLAME,
+        }
+    )
+
+    data = _overlay_local(cloud, local)
+
+    hs = data.heat_sources
+    assert _emon_part(hs["consumption"], "compressor") == 14.0
+    assert _emon_part(hs["consumption"], "burner") == 156.9
+    assert hs["eHeaterStatus"]["value"] == "off"
+    assert hs["pumpType"]["value"] == "air_water"
+    # The flame sensor reads the node's value.
+    assert data.flame_indication["value"] == "off"
+
+
+def test_overlay_adds_no_flame_where_the_cloud_has_none() -> None:
+    """A heat pump whose gateway answers flameStatus gains no flame entity."""
+    local = _local_device(resources={"/heatSources/flameStatus": _SPEC_FLAME})
+
+    data = _overlay_local(_cloud_with_circuits(), local)
+
+    assert data.flame_indication is None
+
+
+def test_overlay_notifications_only_replace_a_missing_cloud_list() -> None:
+    """The local list has no history, so a cloud list is never replaced."""
+    local = _local_device(resources={"/notifications": _SPEC_NOTIFICATIONS})
+    cloud_list = [{"dcd": "A01", "ccd": 5, "act": "H"}]
+
+    kept = _overlay_local(
+        dataclasses.replace(_cloud_with_circuits(), notifications=cloud_list), local
+    )
+    filled = _overlay_local(_cloud_with_circuits(), local)
+
+    assert kept.notifications == cloud_list
+    assert filled.notifications == _SPEC_NOTIFICATIONS["values"]
+    # The notifications sensor shows the display code with its cause code.
+    assert _notifications_state(filled.notifications) == "4U-521"
+
+
+def test_overlay_dhw_temperature_falls_back_to_the_cylinder_sensor() -> None:
+    """Without dhw1/actualTemp the storage cylinder sensor stands in."""
+    local = _local_device(
+        resources={"/heatSources/dhw/cylinderTemperature": _SPEC_CYLINDER_TEMP}
+    )
+
+    data = _overlay_local(_cloud_with_circuits(), local)
+    assert data.dhw_circuits[0]["actualTemp"]["value"] == 24.4
+
+    local = _local_device(
+        resources={
+            "/heatSources/dhw/cylinderTemperature": _SPEC_CYLINDER_TEMP,
+            **_resource("/dhwCircuits/dhw1/actualTemp", 51.0),
+        }
+    )
+    data = _overlay_local(_cloud_with_circuits(), local)
+    assert data.dhw_circuits[0]["actualTemp"]["value"] == 51.0
 
 
 def test_overlay_does_not_mutate_the_cloud_payload() -> None:

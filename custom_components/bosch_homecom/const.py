@@ -364,10 +364,31 @@ LOCAL_HEAT_SOURCES: dict[str, str] = {
     "systemPressure": "/heatSources/systemPressure",
     "starts": "/heatSources/hs1/numberOfStarts",
     "totalWorkingTime": "/heatSources/workingTime/totalSystem",
+    # Same shapes as the cloud per the K 40 RF OpenAPI spec: a stringValue for
+    # the pump type and the eHeater state, emonValue lists for the lifetime
+    # counters that the lifetime energy sensors split by part.
+    "pumpType": "/heatSources/hs1/heatPumpType",
+    "eHeaterStatus": "/heatSources/Source/eHeater/status",
+    "consumption": "/heatSources/emon/totalConsumption",
+    "chConsumption": "/heatSources/emon/chConsumption",
+    "dhwConsumption": "/heatSources/emon/dhwConsumption",
 }
+# Burner on/off; overlaid only where the cloud already reports a flame, so a
+# heat pump whose gateway answers this resource does not gain a flame entity.
+LOCAL_FLAME_STATUS = "/heatSources/flameStatus"
+# The active error list ({"values": [{"dcd", "ccd", "orig", "dlv", "fc"}]}).
+# Unlike the cloud list it carries no history entries, so it stands in only
+# when there is no cloud list at all.
+LOCAL_NOTIFICATIONS = "/notifications"
 # Per-circuit keys, read from ``{circuit id}/{key}``, e.g. /dhwCircuits/dhw1/actualTemp.
 LOCAL_DHW_KEYS = ("actualTemp", "currentTemperatureLevel", "chargeRemainingTime")
 LOCAL_HC_KEYS = ("currentSuWiMode", "currentRoomSetpoint")
+# Read when a circuit's own resource is absent: (circuit id, key) -> paths.
+# The storage cylinder sensor is the DHW temperature on systems whose gateway
+# does not serve dhw1/actualTemp; it belongs to the first DHW circuit only.
+LOCAL_CIRCUIT_FALLBACKS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("/dhwCircuits/dhw1", "actualTemp"): ("/heatSources/dhw/cylinderTemperature",),
+}
 # The Local API has no operationMode resource. The library derives the DHW one
 # from overallStatus (``dhw_mode``); the heating circuit's is derived the same
 # way here. Statuses without a mode (away, holiday, boost, ...) map to nothing.
