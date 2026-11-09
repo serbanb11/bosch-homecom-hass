@@ -25,7 +25,7 @@
         "title": "Authentication"
       },
       "browser": {
-        "description": "Login in browser using [URL]({url}) in readme and capture code using browser's developer tools.",
+        "description": "1. Open the [SingleKey ID login]({url}) and sign in. Afterwards the page seems to do nothing; that is expected.\n2. Press F12 and open the **Console** tab.\n3. Copy the red line starting with \"Failed to launch\" and paste it below. The full URL or just the code (ends in -1) works too.\n\nThe code works only once and expires quickly. Details and other ways are in the README.",
         "data": {
           "code": "SingleKey ID code"
         },

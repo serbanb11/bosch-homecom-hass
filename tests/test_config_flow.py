@@ -9,7 +9,22 @@ from homecom_alt import ApiError, AuthFailedError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.bosch_homecom.config_flow import extract_auth_code
 from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DOMAIN
+
+# Shape of a real SingleKey redirect; code and session values are made up.
+AUTH_CODE = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF-1"
+REDIRECT_URL = (
+    "com.bosch.tt.dashtt.pointt://app/login?code="
+    + AUTH_CODE
+    + "&state=nKqS17oMAxqUsQpMznajIr&session_state=abc.DEF123"
+    + "&iss=https%3A%2F%2Fsinglekey-id.com%2Fauth"
+)
+CONSOLE_LINE = (
+    "password?f=siXpLrvxag:1 Failed to launch '"
+    + REDIRECT_URL
+    + "' because the scheme does not have a registered handler."
+)
 
 
 @pytest.mark.asyncio
@@ -450,3 +465,55 @@ async def test_async_step_browser_matter_only_account(hass):
     assert flow.data[CONF_DEVICES] == [
         {"deviceId": "86DM-577", "deviceType": "bacon_rac"}
     ]
+
+
+@pytest.mark.parametrize(
+    "pasted",
+    [
+        AUTH_CODE,
+        f"  {AUTH_CODE}\n",
+        f"'{AUTH_CODE}'",
+        REDIRECT_URL,
+        CONSOLE_LINE,
+        REDIRECT_URL.replace("com.bosch.tt.dashtt.pointt", "com.buderus.tt.dashtt"),
+    ],
+    ids=["code", "code-whitespace", "code-quoted", "url", "console", "buderus"],
+)
+def test_extract_auth_code(pasted):
+    """The code is found in the bare code, the redirect URL and the console line."""
+    assert extract_auth_code(pasted) == AUTH_CODE
+
+
+@pytest.mark.asyncio
+async def test_async_step_browser_accepts_console_line(hass):
+    """Pasting the browser's console line logs in with the code inside it."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    with patch(
+        "custom_components.bosch_homecom.config_flow.async_get_clientsession",
+        return_value=AsyncMock(),
+    ), patch(
+        "custom_components.bosch_homecom.config_flow.async_get_bacon_devices",
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        "custom_components.bosch_homecom.config_flow.HomeComAlt.create",
+        new_callable=AsyncMock,
+    ) as mock_create:
+        mock_bhc = AsyncMock()
+        mock_bhc.async_get_devices.return_value = [
+            {"deviceId": "123", "deviceType": "generic"}
+        ]
+        mock_bhc.refresh_token = "mock_refresh"
+        mock_bhc.token = "mock_token"
+        mock_create.return_value = mock_bhc
+
+        await flow.async_step_user(user_input={CONF_USERNAME: "test-user"})
+        result = await flow.async_step_browser(user_input={CONF_CODE: CONSOLE_LINE})
+
+    assert result["step_id"] == "devices"
+    assert mock_create.call_args.args[1].code == AUTH_CODE
+    assert flow.data[CONF_CODE] == AUTH_CODE

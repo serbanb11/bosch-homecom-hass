@@ -25,7 +25,7 @@
         "title": "Authenticatie"
       },
       "browser": {
-        "description": "Log in via de browser met de [URL]({url}) in de README en haal de code op via de ontwikkelaarstools van de browser.",
+        "description": "1. Open de [SingleKey ID-aanmelding]({url}) en meld je aan. Daarna lijkt de pagina niets te doen; dat is de bedoeling.\n2. Druk op F12 en open het tabblad **Console**.\n3. Kopieer de rode regel die begint met \"Failed to launch\" en plak deze hieronder. De volledige URL of alleen de code (eindigt op -1) werkt ook.\n\nDe code werkt maar één keer en verloopt snel. Details en andere manieren staan in de README.",
         "data": {
           "code": "SingleKey ID-code"
         },
