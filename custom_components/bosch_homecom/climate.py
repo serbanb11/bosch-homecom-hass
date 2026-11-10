@@ -24,6 +24,7 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -411,6 +412,9 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
         self._attr_hvac_mode = HVACMode.OFF
         self.field = field
         self._attr_suggested_object_id = field
+        # Last non-off summer/winter switch value seen, so leaving OFF can
+        # restore it (e.g. "forced") instead of always landing on "automatic".
+        self._last_suwi_mode: str | None = None
 
         # Call this in __init__ so data is populated right away, since it's
         # already available in the coordinator data.
@@ -458,18 +462,25 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
         await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set new hvac mode."""
+        """Set new hvac mode.
+
+        ``operationMode`` only accepts manual/auto, so writing "off" there is
+        rejected by the cloud (HTTP 400) and the card did nothing. OFF therefore
+        drives the summer/winter switch — the same resource the Bosch app and
+        this integration's SuWi select use. AUTO keeps its original meaning
+        ("follow the schedule") and only touches the switch to undo an OFF.
+        """
         match hvac_mode:
             case HVACMode.AUTO:
-                payload = "auto"
+                if self._suwi_value("suWiSwitchMode") == "off":
+                    await self._write_suwi_switch(self._suwi_restore_value())
+                await self.coordinator.bhc.async_put_hc_operation_mode(
+                    self.coordinator.unique_id, self.field, "auto"
+                )
             case HVACMode.OFF:
-                payload = "off"
+                await self._write_suwi_switch("off")
             case _:
                 return
-
-        await self.coordinator.bhc.async_put_hc_operation_mode(
-            self.coordinator.unique_id, self.field, payload
-        )
 
         await self.coordinator.async_request_refresh()
 
@@ -492,6 +503,11 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
     def _set_heating_circuits(self, heating_circuits: dict) -> None:
         """Populate heating circuits."""
 
+        # The switch *setting* is the only resource that expresses OFF;
+        # operationMode rejects "off" with HTTP 400 and currentSuWiMode just
+        # reports the live mode (off while a summer circuit simply idles), so
+        # the setting decides the card's OFF state after the loop.
+        switch_setting = (heating_circuits.get("suWiSwitchMode") or {}).get("value")
         for key in heating_circuits:
             val = heating_circuits[key]
             if not isinstance(val, dict):
@@ -508,6 +524,11 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
                         case "manual":
                             # Not sure what to do here
                             self._attr_hvac_mode = HVACMode.AUTO
+                case "suWiSwitchMode":
+                    # Remember the last non-off setting so leaving OFF can
+                    # restore it rather than always writing "automatic".
+                    if switch_setting != "off":
+                        self._last_suwi_mode = switch_setting
                 case "currentSuWiMode":
                     match heating_circuits[key]["value"]:
                         case "off":
@@ -533,6 +554,9 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
                 case "actualHumidity":
                     self._attr_current_humidity = heating_circuits[key]["value"]
 
+        if switch_setting == "off":
+            self._attr_hvac_mode = HVACMode.OFF
+
     def _circuit(self) -> dict:
         """Return this circuit's entry in the coordinator data, or an empty dict."""
         for entry in self.coordinator.data.heating_circuits or []:
@@ -556,6 +580,37 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
         suwi = (entry.get("currentSuWiMode") or {}).get("value")
         heatcool = (entry.get("heatCoolMode") or {}).get("value")
         return suwi == "cooling" or heatcool == "cooling"
+
+    def _suwi_value(self, key: str) -> str | None:
+        """Return a circuit suWi node value (setting or live mode), if any."""
+        node = self._circuit().get(key)
+        return node.get("value") if isinstance(node, dict) else None
+
+    async def _write_suwi_switch(self, value: str) -> None:
+        """Write the summer/winter switch *setting*, if the gateway has one.
+
+        ``currentSuWiMode`` is read-only (#170) and some gateways (e.g. the
+        K30, #186) expose no writable ``suWiSwitchMode`` at all. Raise the same
+        clear error the SuWi select raises rather than silently sending a write
+        the cloud rejects, and never fall back to breaking AUTO.
+        """
+        node = self._circuit().get("suWiSwitchMode")
+        if (
+            not isinstance(node, dict)
+            or not node.get("allowedValues")
+            or not node.get("writeable", 1)
+        ):
+            raise HomeAssistantError(
+                f"{self.field} summer/winter switch is not writable on this "
+                "gateway: cannot switch the heating circuit off/on from here"
+            )
+        await self.coordinator.bhc.async_put_hc_suwi_switch_mode(
+            self.coordinator.unique_id, self.field, value
+        )
+
+    def _suwi_restore_value(self) -> str:
+        """Return the switch value to restore when leaving OFF."""
+        return self._last_suwi_mode or "automatic"
 
     def set_attr(self) -> None:
         """Populate attributes with data from the coordinator."""
