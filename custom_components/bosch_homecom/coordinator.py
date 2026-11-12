@@ -1016,8 +1016,10 @@ class BoschComModuleCoordinatorK40(
         heat demand, DHW and heating-circuit status) keep updating. Values only
         the cloud has keep their last state for ``MAX_CLOUD_FAILURES_WITH_LOCAL``
         polls and are empty after that, or straight away when there is no
-        cloud data yet (setup without the cloud). Without local data the
-        refresh fails as before.
+        cloud data yet (setup without the cloud, or the cloud failing the first
+        refresh). In that last case the entry reloads once the cloud answers,
+        so the cloud-only entities get created. Without local data the refresh
+        fails as before.
         """
         if local is None:
             self._async_notify_local_listeners()
@@ -1027,6 +1029,13 @@ class BoschComModuleCoordinatorK40(
         ):
             base = self.data
         else:
+            if self.data is None:
+                # No cloud data yet: the cloud failed the first refresh although
+                # the token worked (a 504 burst while Home Assistant starts).
+                # The platforms create their entities from this skeleton, so the
+                # cloud-only ones would stay missing until the entry is reloaded.
+                # Reload once the cloud answers, as after a setup without it.
+                self.cloud_setup_pending = True
             if self._cloud_failures == MAX_CLOUD_FAILURES_WITH_LOCAL + 1:
                 _LOGGER.warning(
                     "Device_Id: %s, no cloud data for %s polls (%s); showing "
