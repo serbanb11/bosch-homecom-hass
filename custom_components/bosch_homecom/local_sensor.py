@@ -187,47 +187,6 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         state_class=_MEASUREMENT,
         entity_registry_enabled_default=False,
     ),
-    # --- heat source circuit (PC0) --------------------------------------------
-    # With a parallel buffer the heat source circuit and the heating circuit
-    # carry different flows; ``local_pump_volume_flow`` above is the heating
-    # circuit. Without a buffer both are the same circuit.
-    LocalSensorDescription(
-        key="local_primary_pump_volume_flow",
-        translation_key="local_primary_pump_volume_flow",
-        resource=PRIMARY_PUMP_VOLUME_FLOW,
-        state_is_unknown=True,
-        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
-        native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_HOUR,
-        state_class=_MEASUREMENT,
-        entity_registry_enabled_default=False,
-    ),
-    LocalSensorDescription(
-        key="local_heat_carrier_pump_speed",
-        translation_key="local_heat_carrier_pump_speed",
-        resource=HEAT_CARRIER_PUMP_SPEED,
-        native_unit_of_measurement="%",
-        state_class=_MEASUREMENT,
-        entity_registry_enabled_default=False,
-    ),
-    LocalSensorDescription(
-        key="local_heat_output",
-        translation_key="local_heat_output",
-        resource=HEAT_OUTPUT,
-        device_class=SensorDeviceClass.POWER,
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
-        state_class=_MEASUREMENT,
-        entity_registry_enabled_default=False,
-    ),
-    LocalSensorDescription(
-        key="local_hc1_flow_temp_setpoint",
-        translation_key="local_hc1_flow_temp_setpoint",
-        resource=HC1_FLOW_TEMP_SETPOINT,
-        state_is_unknown=True,
-        device_class=_TEMP,
-        native_unit_of_measurement=_CELSIUS,
-        state_class=_MEASUREMENT,
-        entity_registry_enabled_default=False,
-    ),
     # --- per-mode counters: the cloud only exposes the totals ----------------
     LocalSensorDescription(
         key="local_starts_ch",
@@ -273,6 +232,47 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
 # manager gets no permanently unavailable entity. States follow the
 # allowedValues of the K 40 RF OpenAPI spec.
 LOCAL_OPTIONAL_SENSORS: tuple[LocalSensorDescription, ...] = (
+    # --- heat source circuit (PC0) --------------------------------------------
+    # With a parallel buffer the heat source circuit and the heating circuit
+    # carry different flows; ``local_pump_volume_flow`` is the heating circuit.
+    # Without a buffer both are the same circuit.
+    LocalSensorDescription(
+        key="local_primary_pump_volume_flow",
+        translation_key="local_primary_pump_volume_flow",
+        resource=PRIMARY_PUMP_VOLUME_FLOW,
+        state_is_unknown=True,
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_HOUR,
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    LocalSensorDescription(
+        key="local_heat_carrier_pump_speed",
+        translation_key="local_heat_carrier_pump_speed",
+        resource=HEAT_CARRIER_PUMP_SPEED,
+        native_unit_of_measurement="%",
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    LocalSensorDescription(
+        key="local_heat_output",
+        translation_key="local_heat_output",
+        resource=HEAT_OUTPUT,
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    LocalSensorDescription(
+        key="local_hc1_flow_temp_setpoint",
+        translation_key="local_hc1_flow_temp_setpoint",
+        resource=HC1_FLOW_TEMP_SETPOINT,
+        state_is_unknown=True,
+        device_class=_TEMP,
+        native_unit_of_measurement=_CELSIUS,
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
     LocalSensorDescription(
         key="local_refrigerant_status",
         translation_key="local_refrigerant_status",

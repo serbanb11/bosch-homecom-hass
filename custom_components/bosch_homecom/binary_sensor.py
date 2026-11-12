@@ -91,9 +91,11 @@ async def async_setup_entry(
                     pending.add(circuit_id)
             if pending:
                 pending_pumps.append((coordinator, pending))
-            entities.append(BoschComK40LocalPrimaryLowFlowSensor(coordinator))
             local_pending: list = []
-            for candidate in _local_on_off_candidates(coordinator):
+            for candidate in (
+                *_local_on_off_candidates(coordinator),
+                _primary_low_flow_candidate(coordinator),
+            ):
                 _add_or_defer(candidate, entities, local_pending)
             if local_pending:
                 _add_pending_sensors_later(
@@ -275,6 +277,16 @@ class BoschComK40LocalPumpStatusSensor(CoordinatorEntity, BinarySensorEntity):
     def _handle_coordinator_update(self) -> None:
         self._attr_is_on = self._read_status()
         self.async_write_ha_state()
+
+
+def _primary_low_flow_candidate(coordinator: BoschComModuleCoordinatorK40) -> tuple:
+    """Return the heat source low-flow sensor as a candidate, built once served."""
+
+    def served() -> bool:
+        resources = getattr(getattr(coordinator, "local_data", None), "resources", None)
+        return isinstance(resources, dict) and PRIMARY_PUMP_VOLUME_FLOW in resources
+
+    return served, lambda: BoschComK40LocalPrimaryLowFlowSensor(coordinator)
 
 
 class BoschComK40LocalPrimaryLowFlowSensor(CoordinatorEntity, BinarySensorEntity):

@@ -1102,7 +1102,7 @@ async def test_local_sensors_add_to_the_platform(hass, entry, device, firmware, 
     assert disabled == {
         d.key for d in LOCAL_SENSORS if not d.entity_registry_enabled_default
     }
-    assert len(disabled) == 9
+    assert len(disabled) == 5
 
     power = hass.states.get(entries["local_compressor_power"].entity_id)
     assert power.state == "25.0"
@@ -1210,7 +1210,7 @@ async def test_primary_pump_volume_flow_reads_the_heat_source_circuit(
     """
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
-    by_key = {d.key: d for d in LOCAL_SENSORS}
+    by_key = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}
     coordinator.local_data = _local_device(
         resources={
             HC1_PUMP_VOLUME_FLOW: _flow(882, {"LOW_FLOW": 65535}),
@@ -1286,10 +1286,16 @@ async def test_primary_low_flow_binary_sensor(hass, entry, device, firmware, cap
 async def test_primary_low_flow_binary_sensor_only_with_local_access(
     hass, entry, device, firmware
 ):
-    """The binary sensor is set up for a gateway with local access only."""
+    """The binary sensor is set up once the gateway serves the heat source flow."""
     entry.add_to_hass(hass)
-    for local, expected in ((True, 1), (False, 0)):
+    served = {PRIMARY_PUMP_VOLUME_FLOW: _flow(1224, [{"lowflow": 65535}])}
+    for local, resources, expected in (
+        (True, served, 1),
+        (True, {}, 0),
+        (False, served, 0),
+    ):
         coordinator, _ = _coordinator(hass, entry, device, firmware, local=local)
+        coordinator.local_data = _local_device(resources=resources)
         coordinator.async_set_updated_data(_cloud_device())
         entry.runtime_data = [coordinator]
         entities: list = []
@@ -1316,7 +1322,7 @@ async def test_heat_carrier_pump_speed(hass, entry, device, firmware):
         }
     )
     coordinator.local_healthy = True
-    by_key = {d.key: d for d in LOCAL_SENSORS}
+    by_key = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}
 
     speed = BoschComLocalSensor(
         coordinator, entry, by_key["local_heat_carrier_pump_speed"]
@@ -1332,7 +1338,7 @@ async def test_heat_carrier_pump_speed(hass, entry, device, firmware):
 async def test_heat_output_reads_the_calculated_signal(hass, entry, device, firmware):
     """The appliance's calculated heat output, in kW, from the extra fetch."""
     assert HEAT_OUTPUT in LOCAL_EXTRA_RESOURCES
-    description = {d.key: d for d in LOCAL_SENSORS}["local_heat_output"]
+    description = _optional("local_heat_output")
     assert description.native_unit_of_measurement == "kW"
     assert description.device_class == "power"
     assert description.state_class == "measurement"
@@ -1360,7 +1366,7 @@ async def test_hc1_flow_temp_setpoint(hass, entry, device, firmware):
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
     coordinator.local_healthy = True
-    by_key = {d.key: d for d in LOCAL_SENSORS}
+    by_key = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}
     markers = {"OFF_HEAT": 0, "OFF_COOL": 90}
 
     def hc1(value):
