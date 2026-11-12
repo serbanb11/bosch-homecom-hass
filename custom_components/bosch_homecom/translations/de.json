@@ -609,6 +609,18 @@
       "local_pump_volume_flow": {
         "name": "Pumpen-Volumenstrom"
       },
+      "local_primary_pump_volume_flow": {
+        "name": "Volumenstrom Wärmeerzeugerpumpe"
+      },
+      "local_heat_carrier_pump_speed": {
+        "name": "Drehzahl Wärmeerzeugerpumpe"
+      },
+      "local_heat_output": {
+        "name": "Wärmeleistung (Bosch-Berechnung)"
+      },
+      "local_hc1_flow_temp_setpoint": {
+        "name": "Vorlaufsollwert HK1"
+      },
       "local_starts_ch": {
         "name": "Starts Heizung"
       },
@@ -787,6 +799,9 @@
       }
     },
     "binary_sensor": {
+      "local_primary_flow_low": {
+        "name": "Volumenstrom Wärmeerzeuger unter Messbereich"
+      },
       "wb_network": {
         "name": "Wallbox Netzwerk"
       },

@@ -15,13 +15,14 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import BACON_DEVICE_TYPES
+from .const import BACON_DEVICE_TYPES, PRIMARY_PUMP_VOLUME_FLOW
 from .coordinator import (
     BoschComModuleCoordinatorBaconRac,
     BoschComModuleCoordinatorCommodule,
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
+from .local_sensor import below_measuring_range
 from .sensor import _add_or_defer, _add_pending_sensors_later
 
 PARALLEL_UPDATES = 1
@@ -91,7 +92,10 @@ async def async_setup_entry(
             if pending:
                 pending_pumps.append((coordinator, pending))
             local_pending: list = []
-            for candidate in _local_on_off_candidates(coordinator):
+            for candidate in (
+                *_local_on_off_candidates(coordinator),
+                _primary_low_flow_candidate(coordinator),
+            ):
                 _add_or_defer(candidate, entities, local_pending)
             if local_pending:
                 _add_pending_sensors_later(
@@ -272,6 +276,55 @@ class BoschComK40LocalPumpStatusSensor(CoordinatorEntity, BinarySensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         self._attr_is_on = self._read_status()
+        self.async_write_ha_state()
+
+
+def _primary_low_flow_candidate(coordinator: BoschComModuleCoordinatorK40) -> tuple:
+    """Return the heat source low-flow sensor as a candidate, built once served."""
+
+    def served() -> bool:
+        resources = getattr(getattr(coordinator, "local_data", None), "resources", None)
+        return isinstance(resources, dict) and PRIMARY_PUMP_VOLUME_FLOW in resources
+
+    return served, lambda: BoschComK40LocalPrimaryLowFlowSensor(coordinator)
+
+
+class BoschComK40LocalPrimaryLowFlowSensor(CoordinatorEntity, BinarySensorEntity):
+    """Heat source circuit flow below the flow sensor's measuring range.
+
+    The gateway then reports its LOW_FLOW marker (65535) in place of the flow,
+    which the volume flow sensor shows as unknown. This keeps the information
+    that the pump runs slowly rather than not at all: a stopped pump reads 0.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_translation_key = "local_primary_flow_low"
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: BoschComModuleCoordinatorK40) -> None:
+        """Initialize."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.unique_id}-local_primary_flow_low"
+        self._attr_device_info = coordinator.device_info
+        self._attr_is_on = self._read()
+
+    def _read(self) -> bool | None:
+        local = getattr(self.coordinator, "local_data", None)
+        resources = getattr(local, "resources", None) or {}
+        return below_measuring_range(resources.get(PRIMARY_PUMP_VOLUME_FLOW))
+
+    @property
+    def available(self) -> bool:
+        """Follow the gateway, like the other local entities."""
+        return bool(
+            getattr(self.coordinator, "local_healthy", False)
+            and self._attr_is_on is not None
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._attr_is_on = self._read()
         self.async_write_ha_state()
 
 

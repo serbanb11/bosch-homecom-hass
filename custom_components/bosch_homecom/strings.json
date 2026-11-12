@@ -608,6 +608,18 @@
       "local_pump_volume_flow": {
         "name": "Pump volume flow"
       },
+      "local_primary_pump_volume_flow": {
+        "name": "Heat source pump volume flow"
+      },
+      "local_heat_carrier_pump_speed": {
+        "name": "Heat source pump speed"
+      },
+      "local_heat_output": {
+        "name": "Heat output (appliance calculation)"
+      },
+      "local_hc1_flow_temp_setpoint": {
+        "name": "HC1 supply temperature setpoint"
+      },
       "local_starts_ch": {
         "name": "Heating starts"
       },
@@ -786,6 +798,9 @@
       }
     },
     "binary_sensor": {
+      "local_primary_flow_low": {
+        "name": "Heat source flow below measuring range"
+      },
       "wb_network": {
         "name": "Wallbox Network"
       },

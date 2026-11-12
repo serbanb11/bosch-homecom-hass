@@ -607,6 +607,18 @@
       "local_pump_volume_flow": {
         "name": "Pomp-volumestroom"
       },
+      "local_primary_pump_volume_flow": {
+        "name": "Debiet warmtebronpomp"
+      },
+      "local_heat_carrier_pump_speed": {
+        "name": "Toerental warmtebronpomp"
+      },
+      "local_heat_output": {
+        "name": "Warmteafgifte (berekening toestel)"
+      },
+      "local_hc1_flow_temp_setpoint": {
+        "name": "Aanvoersetpoint VC1"
+      },
       "local_starts_ch": {
         "name": "Starts verwarming"
       },
@@ -785,6 +797,9 @@
       }
     },
     "binary_sensor": {
+      "local_primary_flow_low": {
+        "name": "Debiet warmtebron onder meetbereik"
+      },
       "wb_network": {
         "name": "Wallbox Netwerk"
       },
