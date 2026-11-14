@@ -2576,3 +2576,85 @@ def test_module_key_never_uses_the_serial() -> None:
         local_module_key(_module(hw_ident="K40RF", module_serial="2530"), 0) == "K40RF"
     )
     assert local_module_key(_module(product_serial="8370"), 4) == "index-4"
+
+
+# A CS5800iAW's real inventory (serials replaced): the K40RF is listed twice,
+# at 15.00 and at the gateway's running 15.00.01, plus an HMI without a name.
+_CS5800_MODULES = (
+    _module(
+        bus_id="8",
+        token="8",
+        version="12.17.1-fbbde910",
+        product_name="Compress CS5800iAW 12 MB",
+        hw_ident="XCU_THH",
+        product_serial="P1",
+        module_serial="M1",
+    ),
+    _module(
+        bus_id="253",
+        token="16",
+        version="47.12-FIELD",
+        hw_ident="HMI_module_02_800-20_GSBS_BO_111x",
+        module_serial="M2",
+    ),
+    _module(
+        bus_id="17", token="75", version="15.00", hw_ident="K40RF", module_serial="M3"
+    ),
+    _module(
+        bus_id="65281",
+        token="8",
+        version="9.17.2-aea82289",
+        product_name="AW 7 OR-S",
+        hw_ident="XCU_SRH",
+        product_serial="P4",
+        module_serial="M4",
+    ),
+    _module(
+        bus_id="17",
+        token="72",
+        version="15.00.01",
+        hw_ident="K40RF",
+        module_serial="M3",
+    ),
+)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_gateway_entries_stay_separate_devices(
+    hass, entry, device, firmware
+):
+    """Only the K40RF entry on the gateway's firmware gets its MACs."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_modules = _CS5800_MODULES
+    coordinator.local_gateway_identity = {
+        "/gateway/brand": "Bosch",
+        "/gateway/versionFirmware": "15.00.01",
+        "/gateway/versionHardware": "K40RF_v1",
+        "/gateway/eth/mac": "f0:4a:3d:00:00:20",
+        "/gateway/wifi/mac": "f0:4a:3d:00:00:21",
+    }
+
+    coordinator.async_sync_module_devices()
+    coordinator.async_sync_module_devices()
+
+    parent = registry.async_get_device(identifiers={(DOMAIN, coordinator.unique_id)})
+    modules = [
+        d
+        for d in dr.async_entries_for_config_entry(registry, entry.entry_id)
+        if d.via_device_id == parent.id
+    ]
+    assert len(modules) == 5
+    gateways = {d.sw_version: d for d in modules if d.model_id == "K40RF"}
+    assert set(gateways) == {"15.00", "15.00.01"}
+    assert gateways["15.00.01"].hw_version == "K40RF_v1"
+    assert gateways["15.00.01"].connections == {
+        (dr.CONNECTION_NETWORK_MAC, "f0:4a:3d:00:00:20"),
+        (dr.CONNECTION_NETWORK_MAC, "f0:4a:3d:00:00:21"),
+    }
+    assert gateways["15.00"].connections == set()
+    assert gateways["15.00"].hw_version is None

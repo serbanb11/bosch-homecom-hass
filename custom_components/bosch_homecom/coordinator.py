@@ -75,6 +75,7 @@ from .const import (
     LOCAL_DHW_KEYS,
     LOCAL_FLAME_STATUS,
     LOCAL_GATEWAY_BRAND,
+    LOCAL_GATEWAY_FIRMWARE,
     LOCAL_GATEWAY_HW_VERSION,
     LOCAL_GATEWAY_IDENTITY,
     LOCAL_GATEWAY_MACS,
@@ -1081,12 +1082,18 @@ class BoschComModuleCoordinatorK40(
             return
         registry = dr.async_get(self.hass)
         identity = self.local_gateway_identity
+        gateways = [m for m in modules if m.is_gateway]
+        own_gateway = next(
+            (m for m in gateways if m.version == identity.get(LOCAL_GATEWAY_FIRMWARE)),
+            gateways[0] if gateways else None,
+        )
         current = set()
         for index, module in enumerate(modules):
             identifier = (DOMAIN, self.module_device_identifier(module, index))
             current.add(identifier)
             gateway: dict[str, Any] = {}
-            if module.is_gateway:
+            # One device only: a MAC on two would merge them in the registry.
+            if module is own_gateway:
                 gateway["hw_version"] = identity.get(LOCAL_GATEWAY_HW_VERSION)
                 gateway["connections"] = {
                     (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
