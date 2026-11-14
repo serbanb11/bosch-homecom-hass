@@ -179,6 +179,7 @@ def _coordinator(hass, entry, device, firmware, *, local=True):
     local_client = Mock() if local else None
     if local_client is not None:
         local_client.async_get_modules = AsyncMock(return_value=None)
+        local_client.async_get_resources = AsyncMock(return_value={})
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, False, local_client
     )
@@ -1541,6 +1542,15 @@ _SPEC_MODULES = (
 )
 
 
+# The gateway identity resources, values as in the K 40 RF OpenAPI spec.
+_SPEC_GATEWAY_IDENTITY = {
+    "/gateway/brand": {"value": "Buderus"},
+    "/gateway/versionHardware": {"value": "K30RF_v1"},
+    "/gateway/eth/mac": {"value": "48:F1:7F:59:E3:36"},
+    "/gateway/wifi/mac": {"value": "00:00:00:00:00:00"},
+}
+
+
 @pytest.mark.asyncio
 async def test_module_inventory_names_the_appliance_model(
     hass, entry, device, firmware
@@ -2376,6 +2386,10 @@ async def test_setup_without_the_cloud_uses_the_gateway(hass, cloud_error, reaut
             "custom_components.bosch_homecom.HomeComK40Local.async_get_modules",
             new=AsyncMock(return_value=_SPEC_MODULES),
         ),
+        patch(
+            "custom_components.bosch_homecom.HomeComK40Local.async_get_resources",
+            new=AsyncMock(return_value=_SPEC_GATEWAY_IDENTITY),
+        ),
         patch.object(entry, "async_start_reauth") as start_reauth,
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -2480,6 +2494,9 @@ async def test_modules_become_sub_devices_of_the_appliance(
         config_entry_id=entry.entry_id, **coordinator.device_info
     )
     coordinator.local_client.async_get_modules = AsyncMock(return_value=_SPEC_MODULES)
+    coordinator.local_client.async_get_resources = AsyncMock(
+        return_value=_SPEC_GATEWAY_IDENTITY
+    )
     coordinator.local_healthy = True
 
     await coordinator._fetch_local_modules()
@@ -2494,6 +2511,12 @@ async def test_modules_become_sub_devices_of_the_appliance(
     gateway = devices["K40RF"]
     assert gateway.name == "K40RF"
     assert gateway.serial_number == "25302791000098738806125"
+    # The gateway's own identity goes on its device only; brand on all.
+    assert gateway.hw_version == "K30RF_v1"
+    assert gateway.connections == {(dr.CONNECTION_NETWORK_MAC, "48:f1:7f:59:e3:36")}
+    assert outdoor.hw_version is None
+    assert outdoor.connections == set()
+    assert {d.manufacturer for d in devices.values()} == {"Buderus"}
     # Serials are not part of any identifier.
     for d in devices.values():
         assert not any("8370374" in i or "2530279" in i for _, i in d.identifiers)

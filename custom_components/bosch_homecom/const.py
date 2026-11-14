@@ -402,6 +402,17 @@ LOCAL_DHW_CIRCUIT = "/dhwCircuits/dhw1"
 # hardware, so it is read at setup and then once a day, while local access
 # works. It names the appliance for the device registry's model.
 LOCAL_MODULES_POLL_INTERVAL = timedelta(hours=24)
+# Static identity of the gateway, read along with the module inventory: the
+# brand names every module's manufacturer, the hardware version and MACs belong
+# on the gateway's own module device.
+LOCAL_GATEWAY_BRAND = "/gateway/brand"
+LOCAL_GATEWAY_HW_VERSION = "/gateway/versionHardware"
+LOCAL_GATEWAY_MACS = ("/gateway/eth/mac", "/gateway/wifi/mac")
+LOCAL_GATEWAY_IDENTITY = (
+    LOCAL_GATEWAY_BRAND,
+    LOCAL_GATEWAY_HW_VERSION,
+    *LOCAL_GATEWAY_MACS,
+)
 LOCAL_HC_CIRCUIT = "/heatingCircuits/hc1"
 
 

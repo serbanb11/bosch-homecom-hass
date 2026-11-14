@@ -74,6 +74,10 @@ from .const import (
     LOCAL_DHW_CIRCUIT,
     LOCAL_DHW_KEYS,
     LOCAL_FLAME_STATUS,
+    LOCAL_GATEWAY_BRAND,
+    LOCAL_GATEWAY_HW_VERSION,
+    LOCAL_GATEWAY_IDENTITY,
+    LOCAL_GATEWAY_MACS,
     LOCAL_HC_CIRCUIT,
     LOCAL_HC_KEYS,
     LOCAL_HC_STATUS_TO_MODE,
@@ -792,6 +796,8 @@ class BoschComModuleCoordinatorK40(
         self.local_healthy = False
         # The gateway's module inventory, see _fetch_local_modules.
         self.local_modules: tuple[BHCLocalModule, ...] | None = None
+        # String values of LOCAL_GATEWAY_IDENTITY, by resource path.
+        self.local_gateway_identity: dict[str, str] = {}
         self._last_local_modules_fetch: datetime | None = None
         self._cloud_failures = 0
         # Consecutive cloud 401s from the update itself, see
@@ -1013,6 +1019,9 @@ class BoschComModuleCoordinatorK40(
             return
         try:
             modules = await self.local_client.async_get_modules()
+            identity = await self.local_client.async_get_resources(
+                LOCAL_GATEWAY_IDENTITY
+            )
         except (ApiError, AuthFailedError, NotRespondingError, TimeoutError) as error:
             _LOGGER.debug(
                 "Device_Id: %s, reading the gateway's module inventory failed: %s",
@@ -1021,6 +1030,11 @@ class BoschComModuleCoordinatorK40(
             )
             return
         self._last_local_modules_fetch = now
+        self.local_gateway_identity = {
+            path: value
+            for path, payload in identity.items()
+            if isinstance(value := payload.get("value"), str) and value
+        }
         if modules is None:
             return
         self.local_modules = modules
@@ -1066,15 +1080,25 @@ class BoschComModuleCoordinatorK40(
         ):
             return
         registry = dr.async_get(self.hass)
+        identity = self.local_gateway_identity
         current = set()
         for index, module in enumerate(modules):
             identifier = (DOMAIN, self.module_device_identifier(module, index))
             current.add(identifier)
+            gateway: dict[str, Any] = {}
+            if module.is_gateway:
+                gateway["hw_version"] = identity.get(LOCAL_GATEWAY_HW_VERSION)
+                gateway["connections"] = {
+                    (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
+                    for path in LOCAL_GATEWAY_MACS
+                    if (mac := identity.get(path)) and mac.strip("0:")
+                }
             registry.async_get_or_create(
                 config_entry_id=self.entry.entry_id,
                 identifiers={identifier},
                 via_device=(DOMAIN, self.unique_id),
-                manufacturer=MANUFACTURER,
+                manufacturer=identity.get(LOCAL_GATEWAY_BRAND, MANUFACTURER),
+                **gateway,
                 name=module.product_name or module.hw_ident or f"Module {index + 1}",
                 model=module.product_name,
                 model_id=module.hw_ident,
