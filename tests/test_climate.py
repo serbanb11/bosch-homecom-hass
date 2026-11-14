@@ -360,6 +360,48 @@ def test_k40_room_temperature_still_uses_room_temp_key():
     assert climate.native_current_temperature == 20.5
 
 
+async def test_set_hvac_mode_off_uses_suwi_switch():
+    """OFF writes the SuWi switch, not the operationMode endpoint.
+
+    The K40 operationMode resource only accepts manual/auto; writing "off"
+    there is rejected by the cloud (HTTP 400), so the card must drive the
+    summer/winter switch instead.
+    """
+    coordinator = _make_k40_coordinator(suwi="forced", heatcool="heating")
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_hvac_mode(HVACMode.OFF)
+
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_awaited_once_with(
+        "k40123", "hc1", "off"
+    )
+    coordinator.bhc.async_put_hc_operation_mode.assert_not_awaited()
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_set_hvac_mode_auto_uses_suwi_switch():
+    """AUTO writes the SuWi switch as automatic."""
+    coordinator = _make_k40_coordinator(suwi="off", heatcool="heating")
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_hvac_mode(HVACMode.AUTO)
+
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_awaited_once_with(
+        "k40123", "hc1", "automatic"
+    )
+    coordinator.bhc.async_put_hc_operation_mode.assert_not_awaited()
+
+
+def test_suwi_off_reports_hvac_mode_off():
+    """When the SuWi switch is off the circuit reports off, not auto."""
+    coordinator = _make_k40_coordinator(suwi="off", heatcool="heating")
+    climate = _make_climate(coordinator)
+
+    climate.set_attr()
+
+    assert climate.hvac_mode == HVACMode.OFF
+
+
 def test_icom_room_temperature_reaches_the_status_sensor_attribute():
     """The heating circuit status sensor exposes it as the roomTemp attribute."""
     coordinator = _make_icom_coordinator(suwi="forced")

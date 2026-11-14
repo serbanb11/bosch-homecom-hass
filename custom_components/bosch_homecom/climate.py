@@ -459,16 +459,21 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new hvac mode."""
+        # The K40 heating-circuit operationMode resource only accepts
+        # manual/auto; writing "off" there is rejected by the Bosch cloud
+        # (HTTP 400) so the HA card silently failed. OFF/AUTO drive the
+        # summer/winter switch instead - the same resource the Bosch app and
+        # this integration's SuWi select write.
         match hvac_mode:
             case HVACMode.AUTO:
-                payload = "auto"
+                suwi = "automatic"
             case HVACMode.OFF:
-                payload = "off"
+                suwi = "off"
             case _:
                 return
 
-        await self.coordinator.bhc.async_put_hc_operation_mode(
-            self.coordinator.unique_id, self.field, payload
+        await self.coordinator.bhc.async_put_hc_suwi_switch_mode(
+            self.coordinator.unique_id, self.field, suwi
         )
 
         await self.coordinator.async_request_refresh()
@@ -492,6 +497,7 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
     def _set_heating_circuits(self, heating_circuits: dict) -> None:
         """Populate heating circuits."""
 
+        suwi_off = (heating_circuits.get("currentSuWiMode") or {}).get("value") == "off"
         for key in heating_circuits:
             val = heating_circuits[key]
             if not isinstance(val, dict):
@@ -500,6 +506,9 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
                 continue
             match key:
                 case "operationMode":
+                    if suwi_off:
+                        self._attr_hvac_mode = HVACMode.OFF
+                        continue
                     match heating_circuits[key]["value"]:
                         case "auto":
                             self._attr_hvac_mode = HVACMode.AUTO
@@ -511,6 +520,9 @@ class BoschComK40Climate(CoordinatorEntity, ClimateTemperatureCompat, ClimateEnt
                 case "currentSuWiMode":
                     match heating_circuits[key]["value"]:
                         case "off":
+                            # SuWi off == heating circuit off, and operationMode
+                            # cannot express it, so mirror it in the state.
+                            self._attr_hvac_mode = HVACMode.OFF
                             self._attr_hvac_action = HVACAction.IDLE
                         case "forced":
                             self._attr_hvac_action = HVACAction.HEATING
