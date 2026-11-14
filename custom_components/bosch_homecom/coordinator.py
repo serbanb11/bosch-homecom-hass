@@ -579,6 +579,26 @@ def _has_samples(bucket: dict) -> bool:
     return isinstance(c, (int, float)) and c > 0
 
 
+@callback
+def _async_update_registry_device(
+    hass: HomeAssistant, entry: ConfigEntry, unique_id: str, **changes: Any
+) -> None:
+    """Apply ``changes`` to the device's registry entry, if it has one.
+
+    Home Assistant 2026.8 added the lookup scoped to the config entry, and
+    2026.11 deprecates async_get_device, which stops working in 2027.8.
+    Older releases only have async_get_device.
+    """
+    registry = dr.async_get(hass)
+    identifier = (DOMAIN, unique_id)
+    if hasattr(registry, "async_get_device_by_identifier"):
+        device = registry.async_get_device_by_identifier(identifier, entry.entry_id)
+    else:
+        device = registry.async_get_device(identifiers={identifier})
+    if device is not None:
+        registry.async_update_device(device.id, **changes)
+
+
 def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
     """Return ``data`` with every value the gateway also served replaced by it.
 
@@ -1002,10 +1022,9 @@ class BoschComModuleCoordinatorK40(
         if model is None or self.device_info.get("model") == model:
             return
         self.device_info["model"] = model
-        registry = dr.async_get(self.hass)
-        device = registry.async_get_device(identifiers={(DOMAIN, self.unique_id)})
-        if device is not None:
-            registry.async_update_device(device.id, model=model)
+        _async_update_registry_device(
+            self.hass, self.entry, self.unique_id, model=model
+        )
 
     def _local_data_or_fail(
         self, local: BHCDeviceK40Local | None, cloud_error: str
@@ -1469,11 +1488,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
         if not changes:
             return
         self.device_info.update(changes)
-        device = dr.async_get(self.hass).async_get_device(
-            identifiers={(DOMAIN, self.unique_id)}
-        )
-        if device is not None:
-            dr.async_get(self.hass).async_update_device(device.id, **changes)
+        _async_update_registry_device(self.hass, self.entry, self.unique_id, **changes)
 
     def _persist_title(self, title: str) -> None:
         """Persist the friendly name on the entry so it survives a reload."""

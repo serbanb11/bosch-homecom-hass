@@ -1626,6 +1626,31 @@ async def test_module_inventory_without_a_named_appliance_leaves_the_model(
 
 
 @pytest.mark.asyncio
+async def test_appliance_model_uses_the_entry_scoped_device_lookup(
+    hass, entry, device, firmware
+):
+    """Where the registry has it (HA 2026.8+), async_get_device is not called."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    # spec: an attribute outside the list, such as async_get_device, raises.
+    registry = Mock(spec=["async_get_device_by_identifier", "async_update_device"])
+    registry.async_get_device_by_identifier.return_value = Mock(id="device-1")
+
+    with patch(
+        "custom_components.bosch_homecom.coordinator.dr.async_get",
+        return_value=registry,
+    ):
+        coordinator._apply_appliance_model(_SPEC_MODULES)
+
+    registry.async_get_device_by_identifier.assert_called_once_with(
+        (DOMAIN, coordinator.unique_id), entry.entry_id
+    )
+    registry.async_update_device.assert_called_once_with(
+        "device-1", model="Compress CS6800iAW 12 E"
+    )
+
+
+@pytest.mark.asyncio
 async def test_diagnostics_list_the_modules_without_serials(
     hass, entry, device, firmware
 ):
