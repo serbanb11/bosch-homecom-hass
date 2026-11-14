@@ -48,17 +48,18 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 1. Go to **Settings** > **Devices & Services** > **Add Integration** > **Bosch HomeCom**
 2. Enter your SingleKey ID **username**
-3. Open the [authorization URL](https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.bosch.tt.dashtt.pointt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bsch) in a private browser window
-4. Open the **Network** tab in Developer Tools (`F12`), then log in with your credentials
-5. After the redirect fails (expected), find the request containing `code=` in the Network tab and copy the code value (ends in `-1`)
-
-   ![Authorization Code](./img/login.png)
-
-6. Paste the code into Home Assistant and select your devices
+3. Open the [authorization URL](https://singlekey-id.com/auth/connect/authorize?state=nKqS17oMAxqUsQpMznajIr&nonce=5yPvyTqMS3iPb4c8RfGJg1&code_challenge=Fc6eY3uMBJkFqa4VqcULuLuKC5Do70XMw7oa_Pxafw0&redirect_uri=com.bosch.tt.dashtt.pointt://app/login&client_id=762162C0-FA2D-4540-AE66-6489F189FADC&response_type=code&prompt=login&scope=openid+email+profile+offline_access+pointt.gateway.claiming+pointt.gateway.removal+pointt.gateway.list+pointt.gateway.users+pointt.gateway.resource.dashapp+pointt.castt.flow.token-exchange+bacon+hcc.tariff.read&code_challenge_method=S256&style_id=tt_bsch) in a private browser window (the setup dialog shows the link for your brand) and log in with your credentials
+4. After the login the page seems to do nothing. That is expected: SingleKey redirects to the HomeCom app (`com.bosch.tt.dashtt.pointt://app/login?code=…`), which the browser cannot open
+5. In Chrome or Edge, press `F12` now and open the **Console** tab. Copy the red line `Failed to launch 'com.bosch.tt.dashtt.pointt://app/login?code=…'` (the console keeps it, even though you opened it after the login)
+6. Paste the whole line into Home Assistant and select your devices. The full URL or just the code value (ends in `-1`) works too
 
 > **Tip:** Use a private/incognito window and complete setup quickly -- the code is single-use and expires fast.
 
-> **Tip:** If you're having trouble capturing the authorization code, try using Microsoft Edge -- some users have reported more consistent results with its Developer Tools.
+> **Tip:** Alternatively, open the **Network** tab in Developer Tools (`F12`) *before* logging in. After the redirect fails, find the request containing `code=` and copy it.
+>
+> ![Authorization Code](./img/login.png)
+
+> **Tip:** The login needs a desktop browser. Mobile browsers have no developer tools, and with the HomeCom app installed the phone may hand the code to the app instead.
 
 > **Tip:** As an alternative to capturing the code manually via Developer Tools, you can use the community-made [SingleKey Code Catcher](https://github.com/Tozzi89/SingleKey-Code-Catcher) Firefox add-on, which tracks the login flow and lets you copy the code directly (see [#142](https://github.com/serbanb11/bosch-homecom-hass/issues/142)). Note: this is a third-party tool, not maintained by this project.
 
