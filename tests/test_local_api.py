@@ -60,6 +60,7 @@ from custom_components.bosch_homecom.const import (
 from custom_components.bosch_homecom.coordinator import (
     BoschComModuleCoordinatorK40,
     _overlay_local,
+    local_module_key,
 )
 from custom_components.bosch_homecom.diagnostics import (
     async_get_config_entry_diagnostics,
@@ -2381,10 +2382,15 @@ async def test_setup_without_the_cloud_uses_the_gateway(hass, cloud_error, reaut
         await hass.async_block_till_done()
 
         # The gateway names the appliance even without the cloud.
-        (device_entry,) = dr.async_entries_for_config_entry(
+        device_entries = dr.async_entries_for_config_entry(
             dr.async_get(hass), entry.entry_id
         )
+        (device_entry,) = [d for d in device_entries if d.via_device_id is None]
         assert device_entry.model == "Compress CS6800iAW 12 E"
+        # ...and setup connects the module sub-devices via the appliance.
+        assert sorted(
+            d.model_id for d in device_entries if d.via_device_id == device_entry.id
+        ) == ["K40RF", "XCU_SRH", "XCU_THH"]
 
         assert entry.state is ConfigEntryState.LOADED
         assert bool(start_reauth.call_count) is reauth
@@ -2450,3 +2456,100 @@ def test_overlay_keeps_the_mode_for_statuses_without_one() -> None:
 
     assert "operationMode" not in data.heating_circuits[0]
     assert data.dhw_circuits[0]["operationMode"] == {"value": "ownprogram"}
+
+
+def _module_devices(hass, entry, coordinator):
+    """The module sub-devices registered for ``entry``, by model_id."""
+    registry = dr.async_get(hass)
+    parent = registry.async_get_device(identifiers={(DOMAIN, coordinator.unique_id)})
+    return {
+        d.model_id: d
+        for d in dr.async_entries_for_config_entry(registry, entry.entry_id)
+        if d.via_device_id == parent.id
+    }
+
+
+@pytest.mark.asyncio
+async def test_modules_become_sub_devices_of_the_appliance(
+    hass, entry, device, firmware
+):
+    """Each module gets a device with its own model, firmware and serial."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_client.async_get_modules = AsyncMock(return_value=_SPEC_MODULES)
+    coordinator.local_healthy = True
+
+    await coordinator._fetch_local_modules()
+
+    devices = _module_devices(hass, entry, coordinator)
+    assert set(devices) == {"XCU_THH", "XCU_SRH", "K40RF"}
+    outdoor = devices["XCU_SRH"]
+    assert outdoor.name == "AW 4 OR-S"
+    assert outdoor.model == "AW 4 OR-S"
+    assert outdoor.sw_version == "3.06.02-5.33-d510f849"
+    assert outdoor.serial_number == "83703740000968738215209"
+    gateway = devices["K40RF"]
+    assert gateway.name == "K40RF"
+    assert gateway.serial_number == "25302791000098738806125"
+    # Serials are not part of any identifier.
+    for d in devices.values():
+        assert not any("8370374" in i or "2530279" in i for _, i in d.identifiers)
+
+
+@pytest.mark.asyncio
+async def test_module_sub_devices_follow_the_inventory(hass, entry, device, firmware):
+    """Reordering keeps devices; a gone module is detached, a new one added."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_modules = _SPEC_MODULES
+    coordinator.async_sync_module_devices()
+    ids = {k: d.id for k, d in _module_devices(hass, entry, coordinator).items()}
+
+    coordinator.local_modules = tuple(reversed(_SPEC_MODULES))
+    coordinator.async_sync_module_devices()
+    assert {
+        k: d.id for k, d in _module_devices(hass, entry, coordinator).items()
+    } == ids
+
+    added = _module(bus_id="48", token="8", product_name="HMC", hw_ident="HMC")
+    coordinator.local_modules = (*_SPEC_MODULES[:2], added)
+    coordinator.async_sync_module_devices()
+    assert set(_module_devices(hass, entry, coordinator)) == {
+        "XCU_THH",
+        "XCU_SRH",
+        "HMC",
+    }
+
+
+@pytest.mark.asyncio
+async def test_module_sub_devices_wait_for_the_appliance_device(
+    hass, entry, device, firmware
+):
+    """Before setup registers the appliance there is nothing to connect via."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_modules = _SPEC_MODULES
+
+    coordinator.async_sync_module_devices()
+    assert dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id) == []
+
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.async_sync_module_devices()
+    assert len(_module_devices(hass, entry, coordinator)) == 3
+
+
+def test_module_key_never_uses_the_serial() -> None:
+    """Without a bus address: hardware ident, then position."""
+    assert local_module_key(_SPEC_MODULES[1], 1) == "65281-8"
+    assert (
+        local_module_key(_module(hw_ident="K40RF", module_serial="2530"), 0) == "K40RF"
+    )
+    assert local_module_key(_module(product_serial="8370"), 4) == "index-4"

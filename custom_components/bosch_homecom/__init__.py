@@ -477,6 +477,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             model=MODEL.get(c.device["deviceType"], c.device["deviceType"]),
             sw_version=c.firmware,
         )
+    # Module sub-devices hang off the appliance's device, which exists only now.
+    for c in coordinators:
+        if hasattr(c, "async_sync_module_devices"):
+            c.async_sync_module_devices()
 
     entry.runtime_data = coordinators
     # Forward the setup to the sensor platform.
