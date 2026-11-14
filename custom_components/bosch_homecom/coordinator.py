@@ -7,6 +7,7 @@ import asyncio
 import dataclasses
 from datetime import date, datetime, timedelta
 import logging
+import re
 from typing import Any, TypeVar
 
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntry
@@ -73,6 +74,11 @@ from .const import (
     LOCAL_DHW_CIRCUIT,
     LOCAL_DHW_KEYS,
     LOCAL_FLAME_STATUS,
+    LOCAL_GATEWAY_BRAND,
+    LOCAL_GATEWAY_FIRMWARE,
+    LOCAL_GATEWAY_HW_VERSION,
+    LOCAL_GATEWAY_IDENTITY,
+    LOCAL_GATEWAY_MACS,
     LOCAL_HC_CIRCUIT,
     LOCAL_HC_KEYS,
     LOCAL_HC_STATUS_TO_MODE,
@@ -580,10 +586,10 @@ def _has_samples(bucket: dict) -> bool:
 
 
 @callback
-def _async_update_registry_device(
-    hass: HomeAssistant, entry: ConfigEntry, unique_id: str, **changes: Any
-) -> None:
-    """Apply ``changes`` to the device's registry entry, if it has one.
+def _async_registry_device(
+    hass: HomeAssistant, entry: ConfigEntry, unique_id: str
+) -> dr.DeviceEntry | None:
+    """Return the device's registry entry, if it has one.
 
     Home Assistant 2026.8 added the lookup scoped to the config entry, and
     2026.11 deprecates async_get_device, which stops working in 2027.8.
@@ -592,11 +598,29 @@ def _async_update_registry_device(
     registry = dr.async_get(hass)
     identifier = (DOMAIN, unique_id)
     if hasattr(registry, "async_get_device_by_identifier"):
-        device = registry.async_get_device_by_identifier(identifier, entry.entry_id)
-    else:
-        device = registry.async_get_device(identifiers={identifier})
+        return registry.async_get_device_by_identifier(identifier, entry.entry_id)
+    return registry.async_get_device(identifiers={identifier})
+
+
+def _async_update_registry_device(
+    hass: HomeAssistant, entry: ConfigEntry, unique_id: str, **changes: Any
+) -> None:
+    """Apply ``changes`` to the device's registry entry, if it has one."""
+    device = _async_registry_device(hass, entry, unique_id)
     if device is not None:
-        registry.async_update_device(device.id, **changes)
+        dr.async_get(hass).async_update_device(device.id, **changes)
+
+
+def local_module_key(module: BHCLocalModule, index: int) -> str:
+    """Identify a gateway module by its bus address, stable across reordering.
+
+    Without a bus address the hardware ident, then the inventory position, is
+    used. Never the serial: identifiers end up in registry files and logs.
+    """
+    identity = [value for value in (module.bus_id, module.token) if value is not None]
+    if not identity:
+        identity = [module.hw_ident or f"index-{index}"]
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", "-".join(identity))
 
 
 def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
@@ -773,6 +797,8 @@ class BoschComModuleCoordinatorK40(
         self.local_healthy = False
         # The gateway's module inventory, see _fetch_local_modules.
         self.local_modules: tuple[BHCLocalModule, ...] | None = None
+        # String values of LOCAL_GATEWAY_IDENTITY, by resource path.
+        self.local_gateway_identity: dict[str, str] = {}
         self._last_local_modules_fetch: datetime | None = None
         self._cloud_failures = 0
         # Consecutive cloud 401s from the update itself, see
@@ -994,6 +1020,9 @@ class BoschComModuleCoordinatorK40(
             return
         try:
             modules = await self.local_client.async_get_modules()
+            identity = await self.local_client.async_get_resources(
+                LOCAL_GATEWAY_IDENTITY
+            )
         except (ApiError, AuthFailedError, NotRespondingError, TimeoutError) as error:
             _LOGGER.debug(
                 "Device_Id: %s, reading the gateway's module inventory failed: %s",
@@ -1002,10 +1031,16 @@ class BoschComModuleCoordinatorK40(
             )
             return
         self._last_local_modules_fetch = now
+        self.local_gateway_identity = {
+            path: value
+            for path, payload in identity.items()
+            if isinstance(value := payload.get("value"), str) and value
+        }
         if modules is None:
             return
         self.local_modules = modules
         self._apply_appliance_model(modules)
+        self.async_sync_module_devices()
 
     @callback
     def _apply_appliance_model(self, modules: tuple[BHCLocalModule, ...]) -> None:
@@ -1025,6 +1060,69 @@ class BoschComModuleCoordinatorK40(
         _async_update_registry_device(
             self.hass, self.entry, self.unique_id, model=model
         )
+
+    def module_device_identifier(self, module: BHCLocalModule, index: int) -> str:
+        """Registry identifier of a module's sub-device."""
+        return f"{self.unique_id}-module-{local_module_key(module, index)}"
+
+    @callback
+    def async_sync_module_devices(self) -> None:
+        """Register each gateway module as a device connected via the appliance.
+
+        A heat pump is several modules (indoor unit, outdoor unit, gateway),
+        each with its own model and firmware; the registry shows them on their
+        own device pages. Modules gone from the latest inventory lose this
+        entry. Waits for the appliance's device, which setup creates after the
+        first refresh; setup calls this again then.
+        """
+        modules = self.local_modules
+        if modules is None or (
+            _async_registry_device(self.hass, self.entry, self.unique_id) is None
+        ):
+            return
+        registry = dr.async_get(self.hass)
+        identity = self.local_gateway_identity
+        gateways = [m for m in modules if m.is_gateway]
+        own_gateway = next(
+            (m for m in gateways if m.version == identity.get(LOCAL_GATEWAY_FIRMWARE)),
+            gateways[0] if gateways else None,
+        )
+        current = set()
+        for index, module in enumerate(modules):
+            identifier = (DOMAIN, self.module_device_identifier(module, index))
+            current.add(identifier)
+            gateway: dict[str, Any] = {}
+            # One device only: a MAC on two would merge them in the registry.
+            if module is own_gateway:
+                gateway["hw_version"] = identity.get(LOCAL_GATEWAY_HW_VERSION)
+                gateway["connections"] = {
+                    (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
+                    for path in LOCAL_GATEWAY_MACS
+                    if (mac := identity.get(path)) and mac.strip("0:")
+                }
+            registry.async_get_or_create(
+                config_entry_id=self.entry.entry_id,
+                identifiers={identifier},
+                via_device=(DOMAIN, self.unique_id),
+                manufacturer=identity.get(LOCAL_GATEWAY_BRAND, MANUFACTURER),
+                **gateway,
+                name=module.product_name or module.hw_ident or f"Module {index + 1}",
+                model=module.product_name,
+                model_id=module.hw_ident,
+                sw_version=module.version,
+                serial_number=module.product_serial or module.module_serial,
+            )
+        prefix = f"{self.unique_id}-module-"
+        for device in dr.async_entries_for_config_entry(registry, self.entry.entry_id):
+            ours = {
+                i
+                for i in device.identifiers
+                if i[0] == DOMAIN and i[1].startswith(prefix)
+            }
+            if ours and not ours & current:
+                registry.async_update_device(
+                    device.id, remove_config_entry_id=self.entry.entry_id
+                )
 
     def _local_data_or_fail(
         self, local: BHCDeviceK40Local | None, cloud_error: str

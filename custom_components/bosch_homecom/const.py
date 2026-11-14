@@ -402,6 +402,21 @@ LOCAL_DHW_CIRCUIT = "/dhwCircuits/dhw1"
 # hardware, so it is read at setup and then once a day, while local access
 # works. It names the appliance for the device registry's model.
 LOCAL_MODULES_POLL_INTERVAL = timedelta(hours=24)
+# Static identity of the gateway, read along with the module inventory: the
+# brand names every module's manufacturer, the hardware version and MACs belong
+# on the gateway's own module device. The inventory can list the K40RF more
+# than once (a CS5800iAW gateway on 15.00.01 lists it at 15.00 and 15.00.01);
+# the entry running the gateway's firmware is the gateway itself.
+LOCAL_GATEWAY_BRAND = "/gateway/brand"
+LOCAL_GATEWAY_FIRMWARE = "/gateway/versionFirmware"
+LOCAL_GATEWAY_HW_VERSION = "/gateway/versionHardware"
+LOCAL_GATEWAY_MACS = ("/gateway/eth/mac", "/gateway/wifi/mac")
+LOCAL_GATEWAY_IDENTITY = (
+    LOCAL_GATEWAY_BRAND,
+    LOCAL_GATEWAY_FIRMWARE,
+    LOCAL_GATEWAY_HW_VERSION,
+    *LOCAL_GATEWAY_MACS,
+)
 LOCAL_HC_CIRCUIT = "/heatingCircuits/hc1"
 
 
