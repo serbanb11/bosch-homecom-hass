@@ -2304,6 +2304,72 @@ async def test_cloud_back_reloads_an_entry_set_up_without_it(
     assert coordinator.cloud_setup_pending is False
 
 
+def _local_only_update() -> K40Update:
+    return K40Update(
+        local=_local_device(resources=_resource(OUTDOOR, 7.1)),
+        cloud=None,
+        source="local",
+        local_healthy=True,
+        cloud_error="504",
+    )
+
+
+@pytest.mark.asyncio
+async def test_cloud_down_at_the_first_refresh_reloads_once_it_answers(
+    hass, entry, device, firmware
+):
+    """Token fine, first cloud read failed: only the skeleton reached the
+    platforms, so the cloud-only entities are missing until a reload."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    both = K40Update(
+        local=_local_device(),
+        cloud=_cloud_device(),
+        source="both",
+        local_healthy=True,
+    )
+    coordinator.local_first.async_update = AsyncMock(
+        side_effect=[_local_only_update(), both, both]
+    )
+
+    coordinator.data = await coordinator._async_update_data()
+    assert coordinator.cloud_setup_pending is True
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        coordinator.data = await coordinator._async_update_data()
+        coordinator.data = await coordinator._async_update_data()
+
+    reload.assert_called_once_with(entry.entry_id)
+    assert coordinator.cloud_setup_pending is False
+
+
+@pytest.mark.asyncio
+async def test_cloud_outage_after_setup_does_not_reload(hass, entry, device, firmware):
+    """The entities exist already: a later outage, even past the hold, and
+    the cloud coming back need no reload."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.data = _cloud_with_circuits()
+    coordinator.local_first.async_update = AsyncMock(
+        side_effect=[_local_only_update()] * (MAX_CLOUD_FAILURES_WITH_LOCAL + 2)
+        + [
+            K40Update(
+                local=_local_device(),
+                cloud=_cloud_device(),
+                source="both",
+                local_healthy=True,
+            )
+        ]
+    )
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        for _ in range(MAX_CLOUD_FAILURES_WITH_LOCAL + 3):
+            coordinator.data = await coordinator._async_update_data()
+
+    assert coordinator.cloud_setup_pending is False
+    reload.assert_not_called()
+
+
 def _local_entry(**data):
     return MockConfigEntry(
         domain=DOMAIN,
