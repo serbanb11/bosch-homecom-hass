@@ -224,7 +224,8 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
 # Resources not every gateway serves. Unlike LOCAL_SENSORS, these are created
 # only once the gateway answers for them, so a system without, say, an energy
 # manager gets no permanently unavailable entity. States follow the
-# allowedValues of the K 40 RF OpenAPI spec.
+# allowedValues of the K 40 RF OpenAPI spec, plus the values a gateway answers
+# with where the two differ.
 LOCAL_OPTIONAL_SENSORS: tuple[LocalSensorDescription, ...] = (
     LocalSensorDescription(
         key="local_refrigerant_status",
@@ -240,6 +241,13 @@ LOCAL_OPTIONAL_SENSORS: tuple[LocalSensorDescription, ...] = (
             "shutoff": "shutoff",
             "alarm": "alarm",
             "test_mode": "test_mode",
+            # A K 40 RF on firmware 15.00.01 answers with the compressor
+            # status values instead: off, heating, cooling, dhw, pool,
+            # pool_heat, defrost, alarm.
+            "off": "off",
+            "dhw": "dhw",
+            "pool": "pool",
+            "pool_heat": "pool_heat",
         },
     ),
     LocalSensorDescription(
@@ -278,6 +286,8 @@ LOCAL_OPTIONAL_SENSORS: tuple[LocalSensorDescription, ...] = (
             "inactive": "inactive",
             "activeCh": "active_ch",
             "activeDHW": "active_dhw",
+            # The spec spells it activeDHW, firmware 15.00.01 answers activeDhw.
+            "activeDhw": "active_dhw",
         },
     ),
     LocalSensorDescription(

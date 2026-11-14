@@ -744,7 +744,11 @@
           "passive_defrost": "Passives Abtauen",
           "shutoff": "Abgeschaltet",
           "alarm": "Alarm",
-          "test_mode": "Testbetrieb"
+          "test_mode": "Testbetrieb",
+          "off": "Aus",
+          "dhw": "Warmwasser",
+          "pool": "Pool",
+          "pool_heat": "Poolheizung"
         }
       },
       "local_supply_setpoint": {
