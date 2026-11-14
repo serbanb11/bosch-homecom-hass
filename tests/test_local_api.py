@@ -2450,3 +2450,39 @@ def test_overlay_keeps_the_mode_for_statuses_without_one() -> None:
 
     assert "operationMode" not in data.heating_circuits[0]
     assert data.dhw_circuits[0]["operationMode"] == {"value": "ownprogram"}
+
+
+@pytest.mark.asyncio
+async def test_local_silent_status_is_discovered_and_tracks_gateway(
+    hass, entry, device, firmware
+):
+    """The read-only silent status appears only when served, as an enum."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+    entities, pending = [], []
+    for candidate in _local_optional_candidates(coordinator, entry):
+        _add_or_defer(candidate, entities, pending)
+    assert not any(
+        e.entity_description.key == "local_silent_mode_status" for e in entities
+    )
+    added = []
+    _add_pending_sensors_later(coordinator, entry, pending, added.extend)
+    resource = "/system/powerConstraints/silentMode/status"
+    coordinator.local_data = _local_device(resources={resource: {"value": "active"}})
+    coordinator.async_update_listeners()
+    coordinator.async_update_listeners()
+    silent = [
+        e for e in added if e.entity_description.key == "local_silent_mode_status"
+    ]
+    assert len(silent) == 1
+    sensor = silent[0]
+    assert sensor.device_class == SensorDeviceClass.ENUM
+    assert sensor.options == ["active", "inactive"]
+    assert sensor.native_value == "active"
+
+    coordinator.local_data = _local_device(resources={resource: {"value": "inactive"}})
+    sensor.set_attr()
+    assert sensor.native_value == "inactive"
+    coordinator.local_healthy = False
+    assert not sensor.available
