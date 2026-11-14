@@ -60,7 +60,9 @@ set_dhw_extrahot_water:
           unit_of_measurement: "minutes"
 get_custom_path_service:
   name: Fetch Custom Path Service
-  description: Fetch the custom path service for the Bosch HomeCom integration
+  description: >-
+    Fetch the custom path service for the Bosch HomeCom integration.
+    Admin users only.
   fields:
     device_id:
       name: device_id
@@ -81,7 +83,7 @@ get_recordings_service:
     Fetch /recordings/* endpoints via bulk POST (the single-endpoint universal
     GET returns empty for /recordings/*, that tier is only exposed via POST
     /pointt-api/api/v1/bulk). Use this to fetch daily energy/recording data
-    like emon totals and ventilation heat recovery.
+    like emon totals and ventilation heat recovery. Admin users only.
   fields:
     device_id:
       name: device_id
@@ -107,7 +109,8 @@ get_shadow_service:
     Return the raw MQTT device shadow (reported/desired) for a Matter/Bacon
     (bacon_rac) air conditioner. These devices are not pointt/REST devices, so
     get_custom_path_service cannot reach them; use this to inspect the exact
-    shadow field layout.
+    shadow field layout. Matter pairing codes, MAC, SSID and serials are
+    redacted. Admin users only.
   fields:
     device_id:
       name: device_id
@@ -122,7 +125,8 @@ capture_raw_service:
     request/response, but the "topics" channel that carries the room temperature
     is push-only and cannot be polled. Devices publish roughly every 30 minutes,
     so use a window of 2100 seconds if you need to be sure a sensor reading is
-    included.
+    included. Matter pairing codes, MAC, SSID and serials are redacted, and
+    device serials in the result are shortened. Admin users only.
   fields:
     device_id:
       name: device_id

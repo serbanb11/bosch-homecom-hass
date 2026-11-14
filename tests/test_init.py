@@ -8,10 +8,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_CODE, CONF_TOKEN, CONF_USERNAME
+from homeassistant.core import Context
+from homeassistant.exceptions import Unauthorized, UnknownUser
 from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from homecom_alt import BHCDeviceRac, NotRespondingError
+from homecom_alt import BaconMqttClient, BHCDeviceRac, NotRespondingError
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -284,3 +286,145 @@ async def test_get_shadow_service_rejects_non_bacon(hass):
     )
 
     assert result == {}
+
+
+def _bacon_entry(hass, client=None, reported=None):
+    """Add an entry with one bacon coordinator to hass."""
+    entry = MockConfigEntry(domain=DOMAIN, title="t", data={CONF_USERNAME: "t"})
+    entry.add_to_hass(hass)
+    entry.runtime_data = [
+        SimpleNamespace(
+            device={"deviceId": "86DM-1", "deviceType": "bacon_rac"},
+            data=SimpleNamespace(reported=reported or {}, desired=None),
+            client=client,
+        )
+    ]
+    return entry
+
+
+async def test_get_shadow_service_redacts_pairing_fields(hass):
+    """get_shadow_service masks Matter pairing and network fields."""
+    assert await async_setup_component(hass, DOMAIN, {}) is True
+    _bacon_entry(
+        hass,
+        reported={
+            "opMode": "cool",
+            "matterOnboarding": {"manualPairingCode": "1234-567-8901"},
+            "ssid": "home-wifi",
+        },
+    )
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        "get_shadow_service",
+        {"device_id": "86DM-1"},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result["reported"] == {
+        "opMode": "cool",
+        "matterOnboarding": "**REDACTED**",
+        "ssid": "**REDACTED**",
+    }
+    assert result["desired"] is None
+
+
+async def test_capture_raw_service_redacts_payloads(hass):
+    """capture_raw_service redacts pairing secrets and masks serials."""
+    assert await async_setup_component(hass, DOMAIN, {}) is True
+    client = Mock(spec=BaconMqttClient)
+
+    def _publish(listener):
+        listener(
+            "86DM-1",
+            "topics/info",
+            {
+                "manualPairingCode": "1234-567-8901",
+                "qrCodeData": "MT:XYZ",
+                "mac": "aa:bb:cc:dd:ee:ff",
+                "roomTemperature": 21.5,
+            },
+        )
+        listener("OTHER-9", "topics/info", {"roomTemperature": 19.0})
+
+    client.register_raw_listener.side_effect = _publish
+    _bacon_entry(hass, client=client)
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        "capture_raw_service",
+        {"device_id": "86DM-1", "seconds": 0},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result["device_id"] == "86DM***"
+    assert result["topics_seen"] == ["86DM***/topics/info"]
+    assert result["captured"]["86DM***/topics/info"]["payload"] == {
+        "manualPairingCode": "**REDACTED**",
+        "qrCodeData": "**REDACTED**",
+        "mac": "**REDACTED**",
+        "roomTemperature": 21.5,
+    }
+    assert "86DM-1" not in json.dumps(result)
+    client.remove_raw_listener.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("service", "data"),
+    [
+        ("get_custom_path_service", {"device_id": "86DM-1", "path": "/x"}),
+        ("get_recordings_service", {"device_id": "86DM-1", "paths": ["/x"]}),
+        ("get_shadow_service", {"device_id": "86DM-1"}),
+        ("capture_raw_service", {"seconds": 0}),
+    ],
+)
+async def test_debug_services_refuse_non_admin(
+    hass, hass_read_only_user, service, data
+):
+    """A non-admin user cannot call the debug services."""
+    assert await async_setup_component(hass, DOMAIN, {}) is True
+    _bacon_entry(hass)
+
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(
+            DOMAIN,
+            service,
+            data,
+            blocking=True,
+            return_response=True,
+            context=Context(user_id=hass_read_only_user.id),
+        )
+
+
+async def test_debug_services_refuse_unknown_user(hass):
+    """A call from a user id that does not exist is refused."""
+    assert await async_setup_component(hass, DOMAIN, {}) is True
+
+    with pytest.raises(UnknownUser):
+        await hass.services.async_call(
+            DOMAIN,
+            "get_shadow_service",
+            {"device_id": "86DM-1"},
+            blocking=True,
+            return_response=True,
+            context=Context(user_id="no-such-user"),
+        )
+
+
+async def test_debug_services_allow_admin(hass, hass_admin_user):
+    """An admin user can call the debug services."""
+    assert await async_setup_component(hass, DOMAIN, {}) is True
+    _bacon_entry(hass, reported={"opMode": "cool"})
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        "get_shadow_service",
+        {"device_id": "86DM-1"},
+        blocking=True,
+        return_response=True,
+        context=Context(user_id=hass_admin_user.id),
+    )
+
+    assert result == {"reported": {"opMode": "cool"}, "desired": None}
