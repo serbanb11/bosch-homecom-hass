@@ -34,7 +34,10 @@ from pytest_homeassistant_custom_component.common import (
     MockEntityPlatform,
 )
 
-from custom_components.bosch_homecom import _local_only_devices
+from custom_components.bosch_homecom import (
+    _local_only_devices,
+    async_remove_config_entry_device,
+)
 from custom_components.bosch_homecom.binary_sensor import (
     BoschComK40LocalOnOffSensor,
     BoschComK40LocalPumpStatusSensor,
@@ -55,6 +58,7 @@ from custom_components.bosch_homecom.const import (
     DOMAIN,
     HC1_PUMP_VOLUME_FLOW,
     HC_TUNE_ENDPOINTS,
+    LOCAL_GATEWAY_HARDWARE,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
 )
 from custom_components.bosch_homecom.coordinator import (
@@ -1542,9 +1546,10 @@ _SPEC_MODULES = (
 )
 
 
-# The gateway identity resources, values as in the K 40 RF OpenAPI spec.
+# The gateway hardware resources read with the inventory, values as in the
+# K 40 RF OpenAPI spec. Brand and firmware come with the local poll.
+_SPEC_GATEWAY_BRAND = {"/gateway/brand": {"value": "Buderus"}}
 _SPEC_GATEWAY_IDENTITY = {
-    "/gateway/brand": {"value": "Buderus"},
     "/gateway/versionHardware": {"value": "K30RF_v1"},
     "/gateway/eth/mac": {"value": "48:F1:7F:59:E3:36"},
     "/gateway/wifi/mac": {"value": "00:00:00:00:00:00"},
@@ -2497,10 +2502,15 @@ async def test_modules_become_sub_devices_of_the_appliance(
     coordinator.local_client.async_get_resources = AsyncMock(
         return_value=_SPEC_GATEWAY_IDENTITY
     )
+    coordinator.local_data = _local_device(resources=_SPEC_GATEWAY_BRAND)
     coordinator.local_healthy = True
 
     await coordinator._fetch_local_modules()
 
+    # Only the hardware identity is read again; brand and firmware are polled.
+    coordinator.local_client.async_get_resources.assert_awaited_once_with(
+        LOCAL_GATEWAY_HARDWARE
+    )
     devices = _module_devices(hass, entry, coordinator)
     assert set(devices) == {"XCU_THH", "XCU_SRH", "K40RF"}
     outdoor = devices["XCU_SRH"]
@@ -2619,11 +2629,28 @@ _CS5800_MODULES = (
 )
 
 
+def _cs5800_identity():
+    return {
+        "/gateway/versionHardware": "K40RF_v1",
+        "/gateway/eth/mac": "f0:4a:3d:00:00:20",
+        "/gateway/wifi/mac": "f0:4a:3d:00:00:21",
+    }
+
+
+def _cs5800_poll(firmware="15.00.01"):
+    return _local_device(
+        resources={
+            "/gateway/brand": {"value": "Bosch"},
+            "/gateway/versionFirmware": {"value": firmware},
+        }
+    )
+
+
 @pytest.mark.asyncio
-async def test_duplicate_gateway_entries_stay_separate_devices(
+async def test_duplicate_gateway_entries_become_one_device(
     hass, entry, device, firmware
 ):
-    """Only the K40RF entry on the gateway's firmware gets its MACs."""
+    """Only the K40RF entry on the gateway's firmware is the gateway's device."""
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
     registry = dr.async_get(hass)
@@ -2631,13 +2658,8 @@ async def test_duplicate_gateway_entries_stay_separate_devices(
         config_entry_id=entry.entry_id, **coordinator.device_info
     )
     coordinator.local_modules = _CS5800_MODULES
-    coordinator.local_gateway_identity = {
-        "/gateway/brand": "Bosch",
-        "/gateway/versionFirmware": "15.00.01",
-        "/gateway/versionHardware": "K40RF_v1",
-        "/gateway/eth/mac": "f0:4a:3d:00:00:20",
-        "/gateway/wifi/mac": "f0:4a:3d:00:00:21",
-    }
+    coordinator.local_gateway_identity = _cs5800_identity()
+    coordinator.local_data = _cs5800_poll()
 
     coordinator.async_sync_module_devices()
     coordinator.async_sync_module_devices()
@@ -2648,13 +2670,111 @@ async def test_duplicate_gateway_entries_stay_separate_devices(
         for d in dr.async_entries_for_config_entry(registry, entry.entry_id)
         if d.via_device_id == parent.id
     ]
-    assert len(modules) == 5
-    gateways = {d.sw_version: d for d in modules if d.model_id == "K40RF"}
-    assert set(gateways) == {"15.00", "15.00.01"}
-    assert gateways["15.00.01"].hw_version == "K40RF_v1"
-    assert gateways["15.00.01"].connections == {
+    assert len(modules) == 4
+    gateways = [d for d in modules if d.model_id == "K40RF"]
+    assert len(gateways) == 1
+    gateway = gateways[0]
+    assert gateway.sw_version == "15.00.01"
+    assert gateway.manufacturer == "Bosch"
+    assert gateway.hw_version == "K40RF_v1"
+    assert gateway.connections == {
         (dr.CONNECTION_NETWORK_MAC, "f0:4a:3d:00:00:20"),
         (dr.CONNECTION_NETWORK_MAC, "f0:4a:3d:00:00:21"),
     }
-    assert gateways["15.00"].connections == set()
-    assert gateways["15.00"].hw_version is None
+
+
+@pytest.mark.asyncio
+async def test_gateway_device_survives_a_firmware_update(hass, entry, device, firmware):
+    """The running K40RF entry moving to another bus slot keeps the device."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_modules = _CS5800_MODULES
+    coordinator.local_gateway_identity = _cs5800_identity()
+    coordinator.local_data = _cs5800_poll("15.00.01")
+    coordinator.async_sync_module_devices()
+    before = _module_devices(hass, entry, coordinator)["K40RF"]
+
+    # The older slot now runs the gateway's firmware.
+    coordinator.local_data = _cs5800_poll("15.00")
+    coordinator.async_sync_module_devices()
+    after = _module_devices(hass, entry, coordinator)["K40RF"]
+
+    assert after.id == before.id
+    assert after.sw_version == "15.00"
+
+
+@pytest.mark.asyncio
+async def test_hardware_read_failure_keeps_the_inventory(hass, entry, device, firmware):
+    """The MACs are decoration: failing to read them never drops the modules."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_client.async_get_modules = AsyncMock(return_value=_SPEC_MODULES)
+    coordinator.local_client.async_get_resources = AsyncMock(
+        side_effect=NotRespondingError("timeout")
+    )
+    coordinator.local_healthy = True
+
+    await coordinator._fetch_local_modules()
+
+    assert coordinator.local_modules == _SPEC_MODULES
+    assert coordinator._last_local_modules_fetch is not None
+    devices = _module_devices(hass, entry, coordinator)
+    assert set(devices) == {"XCU_THH", "XCU_SRH", "K40RF"}
+    assert devices["K40RF"].connections == set()
+
+
+@pytest.mark.asyncio
+async def test_module_devices_go_once_local_access_is_off(
+    hass, entry, device, firmware
+):
+    """Without local access nothing would ever update or remove them."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_modules = _SPEC_MODULES
+    coordinator.async_sync_module_devices()
+    assert len(_module_devices(hass, entry, coordinator)) == 3
+
+    cloud_only, _ = _coordinator(hass, entry, device, firmware, local=False)
+    cloud_only.async_sync_module_devices()
+
+    assert _module_devices(hass, entry, coordinator) == {}
+    assert registry.async_get_device(identifiers={(DOMAIN, coordinator.unique_id)})
+
+
+@pytest.mark.asyncio
+async def test_only_stale_module_devices_can_be_deleted(hass, entry, device, firmware):
+    """The appliance and listed modules stay; a module gone from it may go."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    registry = dr.async_get(hass)
+    parent = registry.async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
+    coordinator.local_modules = _SPEC_MODULES
+    coordinator.async_sync_module_devices()
+    entry.runtime_data = [coordinator]
+    listed = _module_devices(hass, entry, coordinator)["XCU_SRH"]
+    stale = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, coordinator.module_device_identifier("99-9"))},
+    )
+    orphan = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "other-gateway-module-8-8")},
+    )
+
+    assert await async_remove_config_entry_device(hass, entry, parent) is False
+    assert await async_remove_config_entry_device(hass, entry, listed) is False
+    assert await async_remove_config_entry_device(hass, entry, stale) is True
+    assert await async_remove_config_entry_device(hass, entry, orphan) is True

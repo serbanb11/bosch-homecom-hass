@@ -76,8 +76,8 @@ from .const import (
     LOCAL_FLAME_STATUS,
     LOCAL_GATEWAY_BRAND,
     LOCAL_GATEWAY_FIRMWARE,
+    LOCAL_GATEWAY_HARDWARE,
     LOCAL_GATEWAY_HW_VERSION,
-    LOCAL_GATEWAY_IDENTITY,
     LOCAL_GATEWAY_MACS,
     LOCAL_HC_CIRCUIT,
     LOCAL_HC_KEYS,
@@ -623,6 +623,17 @@ def local_module_key(module: BHCLocalModule, index: int) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", "-".join(identity))
 
 
+def _string_values(payloads: dict[str, Any]) -> dict[str, str]:
+    """Return the non-empty string ``value`` of each resource payload, by path."""
+    return {
+        path: value
+        for path, payload in payloads.items()
+        if isinstance(payload, dict)
+        and isinstance(value := payload.get("value"), str)
+        and value
+    }
+
+
 def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
     """Return ``data`` with every value the gateway also served replaced by it.
 
@@ -797,8 +808,11 @@ class BoschComModuleCoordinatorK40(
         self.local_healthy = False
         # The gateway's module inventory, see _fetch_local_modules.
         self.local_modules: tuple[BHCLocalModule, ...] | None = None
-        # String values of LOCAL_GATEWAY_IDENTITY, by resource path.
+        # String values of the gateway's identity resources, by path: those of
+        # LOCAL_GATEWAY_HARDWARE, read with the inventory (see _gateway_identity).
         self.local_gateway_identity: dict[str, str] = {}
+        # Registry identifiers of the module devices of the latest sync.
+        self._module_identifiers: set[tuple[str, str]] = set()
         self._last_local_modules_fetch: datetime | None = None
         self._cloud_failures = 0
         # Consecutive cloud 401s from the update itself, see
@@ -1020,9 +1034,6 @@ class BoschComModuleCoordinatorK40(
             return
         try:
             modules = await self.local_client.async_get_modules()
-            identity = await self.local_client.async_get_resources(
-                LOCAL_GATEWAY_IDENTITY
-            )
         except (ApiError, AuthFailedError, NotRespondingError, TimeoutError) as error:
             _LOGGER.debug(
                 "Device_Id: %s, reading the gateway's module inventory failed: %s",
@@ -1031,11 +1042,7 @@ class BoschComModuleCoordinatorK40(
             )
             return
         self._last_local_modules_fetch = now
-        self.local_gateway_identity = {
-            path: value
-            for path, payload in identity.items()
-            if isinstance(value := payload.get("value"), str) and value
-        }
+        await self._fetch_local_gateway_hardware()
         if modules is None:
             return
         self.local_modules = modules
@@ -1061,9 +1068,75 @@ class BoschComModuleCoordinatorK40(
             self.hass, self.entry, self.unique_id, model=model
         )
 
-    def module_device_identifier(self, module: BHCLocalModule, index: int) -> str:
+    async def _fetch_local_gateway_hardware(self) -> None:
+        """Read the gateway's hardware version and MACs, best effort.
+
+        Only decorates the gateway's module device: a failure keeps the values
+        read before and never holds up the inventory.
+        """
+        try:
+            payloads = await self.local_client.async_get_resources(
+                LOCAL_GATEWAY_HARDWARE
+            )
+        except (ApiError, AuthFailedError, NotRespondingError, TimeoutError) as error:
+            _LOGGER.debug(
+                "Device_Id: %s, reading the gateway's hardware identity failed: %s",
+                self.unique_id,
+                error,
+            )
+            return
+        self.local_gateway_identity = _string_values(payloads)
+
+    def _gateway_identity(self) -> dict[str, str]:
+        """Return the gateway's identity: hardware, plus brand and firmware.
+
+        Brand and firmware come with every local poll, so they are not read
+        again with the inventory.
+        """
+        resources = getattr(self.local_data, "resources", None) or {}
+        polled = _string_values(
+            {
+                path: resources[path]
+                for path in (LOCAL_GATEWAY_BRAND, LOCAL_GATEWAY_FIRMWARE)
+                if path in resources
+            }
+        )
+        return {**self.local_gateway_identity, **polled}
+
+    @property
+    def _module_device_prefix(self) -> str:
+        return f"{self.unique_id}-module-"
+
+    def module_device_identifier(self, key: str) -> str:
         """Registry identifier of a module's sub-device."""
-        return f"{self.unique_id}-module-{local_module_key(module, index)}"
+        return f"{self._module_device_prefix}{key}"
+
+    def module_device_removable(self, device: dr.DeviceEntry) -> bool | None:
+        """Tell whether ``device`` is one of this appliance's module devices
+        that the gateway no longer lists. None when it is not a module device
+        of this appliance.
+        """
+        ours = {
+            i
+            for i in device.identifiers
+            if i[0] == DOMAIN and i[1].startswith(self._module_device_prefix)
+        }
+        if not ours:
+            return None
+        return not ours & self._module_identifiers
+
+    @callback
+    def _async_detach_module_devices(self, keep: set[tuple[str, str]]) -> None:
+        """Detach this entry from the appliance's module devices not in ``keep``."""
+        registry = dr.async_get(self.hass)
+        for device in dr.async_entries_for_config_entry(registry, self.entry.entry_id):
+            if self.module_device_removable(device) is None:
+                continue
+            ours = {i for i in device.identifiers if i[0] == DOMAIN}
+            if not ours & keep:
+                registry.async_update_device(
+                    device.id, remove_config_entry_id=self.entry.entry_id
+                )
 
     @callback
     def async_sync_module_devices(self) -> None:
@@ -1072,33 +1145,47 @@ class BoschComModuleCoordinatorK40(
         A heat pump is several modules (indoor unit, outdoor unit, gateway),
         each with its own model and firmware; the registry shows them on their
         own device pages. Modules gone from the latest inventory lose this
-        entry. Waits for the appliance's device, which setup creates after the
-        first refresh; setup calls this again then.
+        entry, and all of them do once local access is off. Waits for the
+        appliance's device, which setup creates after the first refresh; setup
+        calls this again then.
         """
+        if self.local_client is None:
+            self._module_identifiers = set()
+            self._async_detach_module_devices(keep=set())
+            return
         modules = self.local_modules
         parent = _async_registry_device(self.hass, self.entry, self.unique_id)
         if modules is None or parent is None:
             return
         registry = dr.async_get(self.hass)
-        identity = self.local_gateway_identity
+        identity = self._gateway_identity()
         gateways = [m for m in modules if m.is_gateway]
         own_gateway = next(
             (m for m in gateways if m.version == identity.get(LOCAL_GATEWAY_FIRMWARE)),
             gateways[0] if gateways else None,
         )
-        current = set()
+        current: set[tuple[str, str]] = set()
         for index, module in enumerate(modules):
-            identifier = (DOMAIN, self.module_device_identifier(module, index))
-            current.add(identifier)
             gateway: dict[str, Any] = {}
-            # One device only: a MAC on two would merge them in the registry.
             if module is own_gateway:
+                # One key whatever the entry's bus address, so a firmware update
+                # that moves the running entry keeps the device. The MACs go on
+                # this device only: on two they would merge them in the registry.
+                key = "gateway"
                 gateway["hw_version"] = identity.get(LOCAL_GATEWAY_HW_VERSION)
                 gateway["connections"] = {
                     (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
                     for path in LOCAL_GATEWAY_MACS
                     if (mac := identity.get(path)) and mac.strip("0:")
                 }
+            elif module.is_gateway:
+                # A second listing of the gateway (an older firmware slot), not
+                # a module of its own.
+                continue
+            else:
+                key = local_module_key(module, index)
+            identifier = (DOMAIN, self.module_device_identifier(key))
+            current.add(identifier)
             # Linked by update: async_get_or_create's via_device is
             # deprecated in 2026.11, and via_device_id there is too new.
             device = registry.async_get_or_create(
@@ -1114,17 +1201,8 @@ class BoschComModuleCoordinatorK40(
             )
             if device.via_device_id != parent.id:
                 registry.async_update_device(device.id, via_device_id=parent.id)
-        prefix = f"{self.unique_id}-module-"
-        for device in dr.async_entries_for_config_entry(registry, self.entry.entry_id):
-            ours = {
-                i
-                for i in device.identifiers
-                if i[0] == DOMAIN and i[1].startswith(prefix)
-            }
-            if ours and not ours & current:
-                registry.async_update_device(
-                    device.id, remove_config_entry_id=self.entry.entry_id
-                )
+        self._module_identifiers = current
+        self._async_detach_module_devices(keep=current)
 
     def _local_data_or_fail(
         self, local: BHCDeviceK40Local | None, cloud_error: str
