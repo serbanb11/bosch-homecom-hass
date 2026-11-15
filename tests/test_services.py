@@ -9,9 +9,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from homeassistant.const import CONF_USERNAME
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
+from homecom_alt import ApiError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 import voluptuous as vol
@@ -266,3 +267,107 @@ async def test_dhw_temperature_rejects_bad_input_before_writing(hass, data):
         )
 
     coordinator.bhc.async_set_dhw_temp_level.assert_not_awaited()
+
+
+def _register_sensor(hass, entry, device_id: str, unique_id: str, object_id: str):
+    """Create the device and a sensor entity the way HA would."""
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, device_id)}
+    )
+    return (
+        er.async_get(hass)
+        .async_get_or_create(
+            "sensor",
+            DOMAIN,
+            unique_id,
+            suggested_object_id=object_id,
+            device_id=device.id,
+            config_entry=entry,
+        )
+        .entity_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_date_time_writes_local_time_by_default(hass, freezer):
+    """Without a value the gateway gets Home Assistant's local wall-clock time."""
+    await hass.config.async_set_time_zone("Europe/Stockholm")
+    freezer.move_to("2026-11-15 08:44:26+00:00")
+    coordinator = _coordinator("123", "icom", ["dhw1"])
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register_sensor(hass, entry, "123", "123-dhw1-temp", "pump_dhw1")
+
+    await hass.services.async_call(
+        DOMAIN, "set_date_time", {"entity_id": entity_id}, blocking=True
+    )
+
+    coordinator.bhc.async_action_universal_put.assert_awaited_once_with(
+        "123", "/resource/gateway/DateTime", "2026-11-15T09:44:26"
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_date_time_writes_the_given_value(hass):
+    """A naive value is written as given, an aware one in local time."""
+    await hass.config.async_set_time_zone("Europe/Stockholm")
+    coordinator = _coordinator("123", "icom", ["dhw1"])
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register_sensor(hass, entry, "123", "123-dhw1-temp", "pump_dhw1")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_date_time",
+        {"entity_id": entity_id, "date_time": "2026-11-15 09:44:00"},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "set_date_time",
+        {"entity_id": entity_id, "date_time": "2026-07-01T10:00:00+00:00"},
+        blocking=True,
+    )
+
+    calls = coordinator.bhc.async_action_universal_put.await_args_list
+    assert [c.args for c in calls] == [
+        ("123", "/resource/gateway/DateTime", "2026-11-15T09:44:00"),
+        ("123", "/resource/gateway/DateTime", "2026-07-01T12:00:00"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_set_date_time_rejects_foreign_entity_and_bad_input(hass):
+    """Nothing is written for an entity the integration does not own or bad input."""
+    coordinator = _coordinator("123", "icom", ["dhw1"])
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register_sensor(hass, entry, "123", "123-dhw1-temp", "pump_dhw1")
+    er.async_get(hass).async_get_or_create(
+        "sensor", "other", "x-1", suggested_object_id="other_sensor"
+    )
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "set_date_time", {"entity_id": "sensor.other_sensor"}, blocking=True
+        )
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            "set_date_time",
+            {"entity_id": entity_id, "date_time": "tomorrow"},
+            blocking=True,
+        )
+
+    coordinator.bhc.async_action_universal_put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_set_date_time_reports_api_errors(hass):
+    """A rejected write surfaces as an error instead of a silent success."""
+    coordinator = _coordinator("123", "icom", ["dhw1"])
+    coordinator.bhc.async_action_universal_put.side_effect = ApiError("403")
+    entry = await _setup(hass, [coordinator])
+    entity_id = _register_sensor(hass, entry, "123", "123-dhw1-temp", "pump_dhw1")
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN, "set_date_time", {"entity_id": entity_id}, blocking=True
+        )
