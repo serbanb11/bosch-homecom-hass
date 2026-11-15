@@ -58,6 +58,22 @@ set_dhw_extrahot_water:
           min: 60
           max: 2880
           unit_of_measurement: "minutes"
+set_date_time:
+  name: Set date and time
+  description: >-
+    Set the date and time of the device's gateway, for example after a power
+    outage. Uses Home Assistant's current local time unless a date and time is given.
+  target:
+    entity:
+      integration: bosch_homecom
+  fields:
+    date_time:
+      name: Date and time
+      description: Date and time to set. Leave empty to use the current local time.
+      required: false
+      example: "2026-11-15 09:44:00"
+      selector:
+        datetime:
 get_custom_path_service:
   name: Fetch Custom Path Service
   description: >-

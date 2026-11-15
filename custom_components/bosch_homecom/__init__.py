@@ -23,6 +23,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
+    HomeAssistantError,
     ServiceValidationError,
     Unauthorized,
     UnknownUser,
@@ -124,6 +125,18 @@ SET_DHW_EXTRAHOT_WATER_SCHEMA = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
+SET_DATE_TIME_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_ids,
+        vol.Optional("date_time"): cv.datetime,
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
+# The gateway keeps its clock as local time without an offset; after a power
+# cut it can come back with a wrong date and time and raise alarms until set.
+GATEWAY_DATE_TIME_PATH = "/resource/gateway/DateTime"
+GATEWAY_DATE_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
 def _local_only_devices(entry: ConfigEntry) -> list[dict[str, str]]:
@@ -541,22 +554,18 @@ def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
 _DHW_CIRCUIT_RE = re.compile(r"dhw\d+")
 
 
-def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
-    """Return ``(coordinator, dhw_id)`` for a DHW-related entity.
+def _resolve_target(hass: HomeAssistant, entity_id: str):
+    """Return ``(coordinator, registry_entry)`` for an entity of this integration.
 
     Resolved through the registries, never from the entity id: the id is
     whatever the user renamed the device or entity to, so splitting it on
     underscores only ever worked for the auto-generated name (#200). The
-    device comes from the entity's device identifiers. The circuit is the
-    ``dhwN`` token of the unique id (wddw2 water heaters, DHW sensors); a K40
-    water heater has none, so its coordinator's single circuit is used, the
-    same way the entity itself writes.
+    device comes from the entity's device identifiers.
     """
     registry_entry = er.async_get(hass).async_get(entity_id)
     if registry_entry is None or registry_entry.platform != DOMAIN:
         raise ServiceValidationError(f"{entity_id} is not a {DOMAIN} entity")
 
-    coordinator = None
     device = (
         dr.async_get(hass).async_get(registry_entry.device_id)
         if registry_entry.device_id
@@ -566,11 +575,18 @@ def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
         if domain == DOMAIN:
             coordinator = _find_coordinator_by_device_id(hass, device_id)
             if coordinator is not None:
-                break
-    if coordinator is None:
-        raise ServiceValidationError(
-            f"No Bosch HomeCom device is set up for {entity_id}"
-        )
+                return coordinator, registry_entry
+    raise ServiceValidationError(f"No Bosch HomeCom device is set up for {entity_id}")
+
+
+def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
+    """Return ``(coordinator, dhw_id)`` for a DHW-related entity.
+
+    The circuit is the ``dhwN`` token of the unique id (wddw2 water heaters,
+    DHW sensors); a K40 water heater has none, so its coordinator's single
+    circuit is used, the same way the entity itself writes.
+    """
+    coordinator, registry_entry = _resolve_target(hass, entity_id)
 
     for token in (registry_entry.unique_id or "").split("-"):
         if _DHW_CIRCUIT_RE.fullmatch(token):
@@ -721,6 +737,36 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "set_dhw_extrahot_water",
         set_dhw_extrahot_water_service,
         schema=SET_DHW_EXTRAHOT_WATER_SCHEMA,
+    )
+
+    async def set_date_time_service(call: ServiceCall) -> None:
+        """Service to set the gateway's date and time.
+
+        Writes Home Assistant's local time unless a date and time is given.
+        The gateway stores local time without an offset, so an aware value is
+        converted to Home Assistant's time zone and written as wall-clock time.
+        """
+        value = call.data.get("date_time") or dt_util.now()
+        if value.tzinfo is not None:
+            value = dt_util.as_local(value)
+        written = value.strftime(GATEWAY_DATE_TIME_FORMAT)
+        for entity_id in call.data["entity_id"]:
+            coordinator, _ = _resolve_target(hass, entity_id)
+            try:
+                await coordinator.bhc.async_action_universal_put(
+                    coordinator.unique_id, GATEWAY_DATE_TIME_PATH, written
+                )
+            except ApiError as err:
+                raise HomeAssistantError(
+                    f"Could not set the date and time on {entity_id}: {err}"
+                ) from err
+
+    # Register our service with Home Assistant.
+    hass.services.async_register(
+        DOMAIN,
+        "set_date_time",
+        set_date_time_service,
+        schema=SET_DATE_TIME_SCHEMA,
     )
 
     async def get_custom_path_service(call: ServiceCall) -> ServiceResponse:
