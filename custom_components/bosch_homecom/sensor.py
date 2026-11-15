@@ -371,6 +371,8 @@ async def async_setup_entry(
             # reported, so a missing resource leaves no unavailable entity.
             rrc2_pending: list[_PendingSensor] = []
             _add_or_defer(_rrc2_pressure_candidate(coordinator), entities, rrc2_pending)
+            for candidate in _rrc2_energy_candidates(coordinator, config_entry):
+                _add_or_defer(candidate, entities, rrc2_pending)
             if rrc2_pending:
                 _add_pending_sensors_later(
                     coordinator, config_entry, rrc2_pending, async_add_entities
@@ -3113,6 +3115,46 @@ def _rrc2_pressure_candidate(
             hide_markers=True,
         ),
     )
+
+
+def _rrc2_energy_candidates(
+    coordinator: BoschComModuleCoordinatorRrc2,
+    config_entry: config_entries.ConfigEntry,
+) -> list[_PendingSensor]:
+    """Return the daily and hourly gas sensors as pending candidates (#242).
+
+    The same entities as a K40's, with the same unique ids, so the ones an
+    RRC2 had before it got its own client come back with their history.
+    Created once the gateway serves the history: not every one does.
+    """
+
+    def served(field: str) -> Callable[[], bool]:
+        def has_history() -> bool:
+            node = getattr(coordinator.data, field, None)
+            return isinstance(node, dict) and bool(node.get("value"))
+
+        return has_history
+
+    return [
+        (
+            served("energy_history"),
+            partial(
+                BoschComSensorEnergyHistory,
+                coordinator,
+                config_entry,
+                field="energy_history",
+            ),
+        ),
+        (
+            served("hourly_energy_history"),
+            partial(
+                BoschComSensorEnergyHistoryHourly,
+                coordinator,
+                config_entry,
+                field="energy_history_hourly",
+            ),
+        ),
+    ]
 
 
 def _build_rrc2_sensors(

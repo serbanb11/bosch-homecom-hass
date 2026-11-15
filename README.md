@@ -83,6 +83,8 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 **Energy recordings:** today's compressor, electric heater, consumed and produced energy come from `/recordings/heatSources`. A K40 serves them under `emon/*`, an icom under `total/energyMonitoring/*`; both are requested and a sensor is created only once its data has actually been served, so a device gets exactly the recordings it has.
 
+**Energy history (K30/K40/RRC2):** daily and hourly gas input in kWh from `/energy/history`, usable as a gas source in the Energy dashboard. An RRC2 (CT200) gets these, but not the recordings above, which are only read for K40 and icom. Each sensor appears once the gateway serves its history.
+
 ### Local network access (K 40 RF)
 
 A K 40 RF gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.

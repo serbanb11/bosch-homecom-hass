@@ -1463,6 +1463,8 @@ class BoschComModuleCoordinatorRrc2(BoschComModuleCoordinatorBase[BHCDeviceRrc2]
             devices=data.devices,
             gateway_info=data.gateway_info,
             system_location=data.system_location,
+            energy_history=data.energy_history,
+            hourly_energy_history=data.hourly_energy_history,
         )
 
 
