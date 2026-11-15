@@ -72,7 +72,6 @@ from .const import (
     LOCAL_CIRCUIT_FALLBACKS,
     LOCAL_DHW_CIRCUIT,
     LOCAL_DHW_KEYS,
-    LOCAL_EXTRA_RESOURCES,
     LOCAL_FLAME_STATUS,
     LOCAL_HC_CIRCUIT,
     LOCAL_HC_KEYS,
@@ -580,6 +579,26 @@ def _has_samples(bucket: dict) -> bool:
     return isinstance(c, (int, float)) and c > 0
 
 
+@callback
+def _async_update_registry_device(
+    hass: HomeAssistant, entry: ConfigEntry, unique_id: str, **changes: Any
+) -> None:
+    """Apply ``changes`` to the device's registry entry, if it has one.
+
+    Home Assistant 2026.8 added the lookup scoped to the config entry, and
+    2026.11 deprecates async_get_device, which stops working in 2027.8.
+    Older releases only have async_get_device.
+    """
+    registry = dr.async_get(hass)
+    identifier = (DOMAIN, unique_id)
+    if hasattr(registry, "async_get_device_by_identifier"):
+        device = registry.async_get_device_by_identifier(identifier, entry.entry_id)
+    else:
+        device = registry.async_get_device(identifiers={identifier})
+    if device is not None:
+        registry.async_update_device(device.id, **changes)
+
+
 def _overlay_local(data: BHCDeviceK40, local: BHCDeviceK40Local | None) -> BHCDeviceK40:
     """Return ``data`` with every value the gateway also served replaced by it.
 
@@ -807,7 +826,6 @@ class BoschComModuleCoordinatorK40(
         self._cloud_auth_failures = 0
         self._cloud_auth_refreshed = False
         self._cloud_auth_outage_warned = False
-        await self._fetch_local_extra(update.local)
         self.local_data = update.local
         self.local_source = update.source
         self.local_healthy = update.local_healthy
@@ -953,36 +971,11 @@ class BoschComModuleCoordinatorK40(
                     error,
                 )
         self._cloud_failures += 1
-        await self._fetch_local_extra(local)
         self.local_data = local
         self.local_source = "local" if local is not None else None
         self.local_healthy = local is not None
         await self._fetch_local_modules()
         return self._local_data_or_fail(local, "No usable cloud token")
-
-    async def _fetch_local_extra(self, local: BHCDeviceK40Local | None) -> None:
-        """Merge the local resources homecom_alt does not poll into ``local``.
-
-        Best effort: a failure only leaves those sensors empty for this cycle,
-        the update itself goes ahead.
-        """
-        if local is None or self.local_client is None:
-            return
-        try:
-            extra = await self.local_client.async_get_resources(LOCAL_EXTRA_RESOURCES)
-        except (
-            ApiError,
-            AuthFailedError,
-            NotRespondingError,
-            TimeoutError,
-        ) as error:
-            _LOGGER.debug(
-                "Device_Id: %s, extra local resources failed: %s",
-                self.unique_id,
-                error,
-            )
-            return
-        local.resources.update(extra)
 
     async def _fetch_local_modules(self) -> None:
         """Read the gateway's module inventory, at most once a day.
@@ -1029,10 +1022,9 @@ class BoschComModuleCoordinatorK40(
         if model is None or self.device_info.get("model") == model:
             return
         self.device_info["model"] = model
-        registry = dr.async_get(self.hass)
-        device = registry.async_get_device(identifiers={(DOMAIN, self.unique_id)})
-        if device is not None:
-            registry.async_update_device(device.id, model=model)
+        _async_update_registry_device(
+            self.hass, self.entry, self.unique_id, model=model
+        )
 
     def _local_data_or_fail(
         self, local: BHCDeviceK40Local | None, cloud_error: str
@@ -1496,11 +1488,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
         if not changes:
             return
         self.device_info.update(changes)
-        device = dr.async_get(self.hass).async_get_device(
-            identifiers={(DOMAIN, self.unique_id)}
-        )
-        if device is not None:
-            dr.async_get(self.hass).async_update_device(device.id, **changes)
+        _async_update_registry_device(self.hass, self.entry, self.unique_id, **changes)
 
     def _persist_title(self, title: str) -> None:
         """Persist the friendly name on the entry so it survives a reload."""

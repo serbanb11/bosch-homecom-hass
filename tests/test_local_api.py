@@ -28,6 +28,7 @@ from homecom_alt import (
     ProximityRequiredError,
     TokenStoreFullError,
 )
+from homecom_alt.const import LOCAL_POLL_RESOURCES
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -59,7 +60,6 @@ from custom_components.bosch_homecom.const import (
     HC_TUNE_ENDPOINTS,
     HEAT_CARRIER_PUMP_SPEED,
     HEAT_OUTPUT,
-    LOCAL_EXTRA_RESOURCES,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
     PRIMARY_PUMP_VOLUME_FLOW,
 )
@@ -76,7 +76,7 @@ from custom_components.bosch_homecom.local_sensor import (
     BoschComLocalSensor,
     BoschComLocalSourceSensor,
     _emon_field,
-    below_measuring_range,
+    is_low_flow,
 )
 from custom_components.bosch_homecom.sensor import (
     _add_or_defer,
@@ -185,7 +185,6 @@ def _coordinator(hass, entry, device, firmware, *, local=True):
     local_client = Mock() if local else None
     if local_client is not None:
         local_client.async_get_modules = AsyncMock(return_value=None)
-        local_client.async_get_resources = AsyncMock(return_value={})
     coordinator = BoschComModuleCoordinatorK40(
         hass, bhc, device, firmware, entry, False, local_client
     )
@@ -1199,6 +1198,48 @@ async def test_pump_volume_flow_falls_back_and_hides_the_low_flow_marker(
     assert BoschComLocalSensor(coordinator, entry, flow).native_value is None
 
 
+def _temperature(value):
+    """A temperature payload as the K 40 RF serves it, with its sensor markers."""
+    return {
+        "type": "floatValue",
+        "writeable": 0,
+        "value": value,
+        "unitOfMeasure": "C",
+        "state": [{"short": 32767.0}, {"open": -32768.0}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        ("local_hot_gas_temp", 20.1, 20.1),
+        ("local_hot_gas_temp", 32767.0, None),
+        ("local_suction_gas_temp", -32768.0, None),
+        ("local_compressor_temp", 32767.0, None),
+        ("local_condenser_supply_temp", -32768.0, None),
+        ("local_additional_heater_flow_temp", 29.4, 29.4),
+        ("local_additional_heater_flow_temp", -32768.0, None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_local_sensors_hide_the_markers_their_payload_declares(
+    hass, entry, device, firmware, key, value, expected
+):
+    """A value the payload lists as a named state is no reading (#222)."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+    description = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}[key]
+    coordinator.local_data = _local_device(
+        resources={description.resource: _temperature(value)}
+    )
+
+    sensor = BoschComLocalSensor(coordinator, entry, description)
+
+    assert sensor.native_value == expected
+    assert sensor.available is (expected is not None)
+
+
 @pytest.mark.asyncio
 async def test_primary_pump_volume_flow_reads_the_heat_source_circuit(
     hass, entry, device, firmware
@@ -1242,15 +1283,18 @@ async def test_primary_pump_volume_flow_reads_the_heat_source_circuit(
     assert primary.available
 
 
-def test_below_measuring_range() -> None:
+def test_is_low_flow() -> None:
     """A marker value is flagged, a reading is not, a missing value is unknown."""
-    assert below_measuring_range(_flow(65535, [{"lowflow": 65535}])) is True
-    assert below_measuring_range(_flow(65535, {"LOW_FLOW": 65535})) is True
-    assert below_measuring_range(_flow(957, [{"lowflow": 65535}])) is False
-    assert below_measuring_range(_flow(0, [{"lowflow": 65535}])) is False
-    assert below_measuring_range({"value": 12}) is False
-    assert below_measuring_range({"value": None}) is None
-    assert below_measuring_range(None) is None
+    assert is_low_flow(_flow(65535, [{"lowflow": 65535}])) is True
+    assert is_low_flow(_flow(65535, {"LOW_FLOW": 65535})) is True
+    assert is_low_flow(_flow(957, [{"lowflow": 65535}])) is False
+    assert is_low_flow(_flow(0, [{"lowflow": 65535}])) is False
+    assert is_low_flow({"value": 12}) is False
+    assert is_low_flow({"value": None}) is None
+    assert is_low_flow(None) is None
+    # Another declared marker is no reading, not a low flow.
+    assert is_low_flow(_flow(32767, [{"lowflow": 65535}, {"short": 32767}])) is None
+    assert is_low_flow({"value": "on"}) is None
 
 
 @pytest.mark.asyncio
@@ -1308,8 +1352,7 @@ async def test_primary_low_flow_binary_sensor_only_with_local_access(
 
 @pytest.mark.asyncio
 async def test_heat_carrier_pump_speed(hass, entry, device, firmware):
-    """The PC0 pump speed comes from the extra local fetch."""
-    assert HEAT_CARRIER_PUMP_SPEED in LOCAL_EXTRA_RESOURCES
+    """The PC0 pump speed, as the gateway serves it."""
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
     coordinator.local_data = _local_device(
@@ -1336,8 +1379,7 @@ async def test_heat_carrier_pump_speed(hass, entry, device, firmware):
 
 @pytest.mark.asyncio
 async def test_heat_output_reads_the_calculated_signal(hass, entry, device, firmware):
-    """The appliance's calculated heat output, in kW, from the extra fetch."""
-    assert HEAT_OUTPUT in LOCAL_EXTRA_RESOURCES
+    """The appliance's calculated heat output, in kW."""
     description = _optional("local_heat_output")
     assert description.native_unit_of_measurement == "kW"
     assert description.device_class == "power"
@@ -1362,7 +1404,6 @@ async def test_heat_output_reads_the_calculated_signal(hass, entry, device, firm
 @pytest.mark.asyncio
 async def test_hc1_flow_temp_setpoint(hass, entry, device, firmware):
     """The HC1 supply setpoint; its off markers are no setpoint."""
-    assert HC1_FLOW_TEMP_SETPOINT in LOCAL_EXTRA_RESOURCES
     entry.add_to_hass(hass)
     coordinator, _ = _coordinator(hass, entry, device, firmware)
     coordinator.local_healthy = True
@@ -1392,30 +1433,15 @@ async def test_hc1_flow_temp_setpoint(hass, entry, device, firmware):
         assert circuit.native_value is None
 
 
-@pytest.mark.asyncio
-async def test_local_update_merges_the_extra_resources(hass, entry, device, firmware):
-    """The coordinator reads what homecom_alt does not poll, best effort."""
-    entry.add_to_hass(hass)
-    coordinator, _ = _coordinator(hass, entry, device, firmware)
-    signal = {HC1_PUMP_VOLUME_FLOW: _flow(1065, {"LOW_FLOW": 65535})}
-    coordinator.local_client.async_get_resources = AsyncMock(return_value=signal)
-    local = _local_device()
-
-    await coordinator._fetch_local_extra(local)
-
-    coordinator.local_client.async_get_resources.assert_awaited_once_with(
-        LOCAL_EXTRA_RESOURCES
-    )
-    assert local.resources[HC1_PUMP_VOLUME_FLOW]["value"] == 1065
-
-    coordinator.local_client.async_get_resources = AsyncMock(
-        side_effect=NotRespondingError("gone")
-    )
-    other = _local_device()
-    await coordinator._fetch_local_extra(other)
-    assert HC1_PUMP_VOLUME_FLOW not in other.resources
-
-    await coordinator._fetch_local_extra(None)
+def test_heat_source_circuit_resources_come_with_the_poll() -> None:
+    """homecom_alt polls every resource these sensors read; nothing extra."""
+    for path in (
+        PRIMARY_PUMP_VOLUME_FLOW,
+        HEAT_CARRIER_PUMP_SPEED,
+        HEAT_OUTPUT,
+        HC1_FLOW_TEMP_SETPOINT,
+    ):
+        assert path in LOCAL_POLL_RESOURCES
 
 
 @pytest.mark.asyncio
@@ -1483,6 +1509,10 @@ async def test_optional_local_sensors_appear_once_the_gateway_serves_them(
         ("local_system_type", "eHybrid", "e_hybrid"),
         ("local_system_bus", "EMS2_0", "ems2_0"),
         ("local_refrigerant_status", "passive_defrost", "passive_defrost"),
+        # What a K 40 RF on firmware 15.00.01 answers instead of the spec values.
+        ("local_refrigerant_status", "off", "off"),
+        ("local_refrigerant_status", "dhw", "dhw"),
+        ("local_em_status", "activeDhw", "active_dhw"),
         # A value the spec does not list is no reading, not an invalid enum state.
         ("local_em_status", "somethingNew", None),
     ],
@@ -1503,6 +1533,52 @@ async def test_enum_sensors_map_raw_values_to_state_keys(
     assert sensor.device_class == SensorDeviceClass.ENUM
     assert set(sensor.options) == set(description.states.values())
     assert sensor.native_value == state
+
+
+# allowedValues as a K 40 RF (firmware 15.00.01) serves them; both differ from
+# the OpenAPI spec.
+_GATEWAY_ALLOWED_VALUES = {
+    "local_refrigerant_status": [
+        "off",
+        "heating",
+        "cooling",
+        "dhw",
+        "pool",
+        "pool_heat",
+        "defrost",
+        "alarm",
+    ],
+    "local_em_status": ["notConnected", "inactive", "activeCh", "activeDhw"],
+}
+
+
+@pytest.mark.parametrize(("key", "allowed"), list(_GATEWAY_ALLOWED_VALUES.items()))
+@pytest.mark.asyncio
+async def test_enum_sensors_read_every_value_the_gateway_allows(
+    hass, entry, device, firmware, key, allowed
+):
+    """No value the gateway itself lists leaves the entity unavailable."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+    description = _optional(key)
+
+    for raw in allowed:
+        coordinator.local_data = _local_device(
+            resources={
+                description.resource: {
+                    "id": description.resource,
+                    "type": "stringValue",
+                    "writeable": 0,
+                    "value": raw,
+                    "allowedValues": allowed,
+                }
+            }
+        )
+        sensor = BoschComLocalSensor(coordinator, entry, description)
+
+        assert sensor.native_value in sensor.options, raw
+        assert sensor.available is True, raw
 
 
 def test_every_enum_state_and_name_is_translated() -> None:
@@ -1766,6 +1842,31 @@ async def test_module_inventory_without_a_named_appliance_leaves_the_model(
     )
 
     assert "model" not in coordinator.device_info
+
+
+@pytest.mark.asyncio
+async def test_appliance_model_uses_the_entry_scoped_device_lookup(
+    hass, entry, device, firmware
+):
+    """Where the registry has it (HA 2026.8+), async_get_device is not called."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    # spec: an attribute outside the list, such as async_get_device, raises.
+    registry = Mock(spec=["async_get_device_by_identifier", "async_update_device"])
+    registry.async_get_device_by_identifier.return_value = Mock(id="device-1")
+
+    with patch(
+        "custom_components.bosch_homecom.coordinator.dr.async_get",
+        return_value=registry,
+    ):
+        coordinator._apply_appliance_model(_SPEC_MODULES)
+
+    registry.async_get_device_by_identifier.assert_called_once_with(
+        (DOMAIN, coordinator.unique_id), entry.entry_id
+    )
+    registry.async_update_device.assert_called_once_with(
+        "device-1", model="Compress CS6800iAW 12 E"
+    )
 
 
 @pytest.mark.asyncio

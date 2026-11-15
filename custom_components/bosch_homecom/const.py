@@ -195,8 +195,9 @@ MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 # back to /heatSources/hs1/pumpVolumeFlow on gateways that do not have it.
 HC1_PUMP_VOLUME_FLOW: Final = "/signals/SRC.HC1.FlowCtrl.PumpVolumeFlow"
 
-# Flow through the heat source's own pump (PC0, outdoor unit <-> buffer or
-# heating system). homecom_alt polls it. Below the sensor's measuring range the
+# Heat source circuit resources. homecom_alt polls all of them (the last three
+# since 1.9.3). Flow through the heat source's own pump (PC0, outdoor unit <->
+# buffer or heating system). Below the sensor's measuring range the
 # gateway reports its LOW_FLOW marker instead of a number.
 PRIMARY_PUMP_VOLUME_FLOW: Final = "/heatSources/hs1/pumpVolumeFlow"
 HEAT_CARRIER_PUMP_SPEED: Final = "/heatSources/hs1/refrigerant/heatCarrierPumpSpeed"
@@ -207,14 +208,6 @@ HEAT_OUTPUT: Final = "/signals/SRC.CUHP.HP1.CompressorPower"
 # Supply temperature setpoint of heating circuit 1 (heating curve result).
 # OFF_HEAT (0) and OFF_COOL (90) are markers, not setpoints.
 HC1_FLOW_TEMP_SETPOINT: Final = "/signals/SC.HC1.FlowTempSetp"
-
-# Local resources outside homecom_alt's poll set. The coordinator reads them
-# after each local update and merges them into ``local_data.resources``.
-LOCAL_EXTRA_RESOURCES: Final[tuple[str, ...]] = (
-    HEAT_CARRIER_PUMP_SPEED,
-    HEAT_OUTPUT,
-    HC1_FLOW_TEMP_SETPOINT,
-)
 
 # How many consecutive failed cloud refreshes to ride out on the last good data
 # before the entities go unavailable, on every device type. The Bosch cloud

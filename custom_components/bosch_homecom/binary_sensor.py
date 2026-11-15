@@ -22,7 +22,7 @@ from .coordinator import (
     BoschComModuleCoordinatorIcom,
     BoschComModuleCoordinatorK40,
 )
-from .local_sensor import below_measuring_range
+from .local_sensor import is_low_flow
 from .sensor import _add_or_defer, _add_pending_sensors_later
 
 PARALLEL_UPDATES = 1
@@ -312,7 +312,7 @@ class BoschComK40LocalPrimaryLowFlowSensor(CoordinatorEntity, BinarySensorEntity
     def _read(self) -> bool | None:
         local = getattr(self.coordinator, "local_data", None)
         resources = getattr(local, "resources", None) or {}
-        return below_measuring_range(resources.get(PRIMARY_PUMP_VOLUME_FLOW))
+        return is_low_flow(resources.get(PRIMARY_PUMP_VOLUME_FLOW))
 
     @property
     def available(self) -> bool:
