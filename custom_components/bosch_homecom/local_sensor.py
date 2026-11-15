@@ -274,6 +274,13 @@ LOCAL_OPTIONAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         entity_registry_enabled_default=False,
     ),
     LocalSensorDescription(
+        key="local_silent_mode_status",
+        translation_key="local_silent_mode_status",
+        resource="/system/powerConstraints/silentMode/status",
+        entity_category=_DIAGNOSTIC,
+        states={"active": "active", "inactive": "inactive"},
+    ),
+    LocalSensorDescription(
         key="local_refrigerant_status",
         translation_key="local_refrigerant_status",
         resource="/heatSources/hs1/refrigerant/status",

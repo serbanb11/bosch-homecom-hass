@@ -62,6 +62,7 @@ All entities:
 
 - `set_dhw_tempreture` — Set DHW temperature for a level
 - `set_dhw_extrahot_water` — Control extra hot water charge mode/duration
+- `set_date_time` — Write the gateway clock (`/gateway/DateTime`), HA local time by default
 - `get_custom_path_service` — Query arbitrary API paths (returns response)
 
 ## Key Files
