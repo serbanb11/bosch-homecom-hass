@@ -477,6 +477,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             model=MODEL.get(c.device["deviceType"], c.device["deviceType"]),
             sw_version=c.firmware,
         )
+    # Module sub-devices hang off the appliance's device, which exists only now.
+    for c in coordinators:
+        if hasattr(c, "async_sync_module_devices"):
+            c.async_sync_module_devices()
 
     entry.runtime_data = coordinators
     # Forward the setup to the sensor platform.
@@ -527,6 +531,27 @@ def _async_reload_when_back(
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the user delete a gateway module device the gateway no longer lists.
+
+    Appliances and the modules of the latest inventory stay: setup would only
+    register them again.
+    """
+    for coordinator in getattr(entry, "runtime_data", None) or []:
+        if not hasattr(coordinator, "module_device_removable"):
+            continue
+        removable = coordinator.module_device_removable(device_entry)
+        if removable is not None:
+            return removable
+    # A module device of an appliance that is no longer part of this entry.
+    return any(
+        domain == DOMAIN and "-module-" in identifier
+        for domain, identifier in device_entry.identifiers
+    )
 
 
 def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
