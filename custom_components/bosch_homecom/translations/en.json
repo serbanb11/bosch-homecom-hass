@@ -786,6 +786,13 @@
           "ems2_0": "EMS 2.0",
           "detecting": "Detecting"
         }
+      },
+      "local_silent_mode_status": {
+        "name": "Silent mode status",
+        "state": {
+          "active": "Active",
+          "inactive": "Inactive"
+        }
       }
     },
     "binary_sensor": {
