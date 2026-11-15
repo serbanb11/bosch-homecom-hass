@@ -63,6 +63,8 @@ set_date_time:
   description: >-
     Set the date and time of the device's gateway, for example after a power
     outage. Uses Home Assistant's current local time unless a date and time is given.
+    Each targeted device is set once. Not available for Matter-commissioned
+    devices.
   target:
     entity:
       integration: bosch_homecom

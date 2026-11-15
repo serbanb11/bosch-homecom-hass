@@ -371,3 +371,51 @@ async def test_set_date_time_reports_api_errors(hass):
         await hass.services.async_call(
             DOMAIN, "set_date_time", {"entity_id": entity_id}, blocking=True
         )
+
+
+@pytest.mark.asyncio
+async def test_set_date_time_writes_each_device_once(hass):
+    """Several entities of one device set its clock once; each device is set."""
+    first = _coordinator("123", "icom", ["dhw1"])
+    second = _coordinator("456", "k40", ["dhw1"])
+    entry = await _setup(hass, [first, second])
+    entity_ids = [
+        _register_sensor(hass, entry, "123", "123-dhw1-temp", "pump_dhw1"),
+        _register_sensor(hass, entry, "123", "123-hc1-temp", "pump_hc1"),
+        _register_sensor(hass, entry, "456", "456-dhw1-temp", "boiler_dhw1"),
+    ]
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_date_time",
+        {"entity_id": entity_ids, "date_time": "2026-11-15 09:44:00"},
+        blocking=True,
+    )
+
+    first.bhc.async_action_universal_put.assert_awaited_once_with(
+        "123", "/resource/gateway/DateTime", "2026-11-15T09:44:00"
+    )
+    second.bhc.async_action_universal_put.assert_awaited_once_with(
+        "456", "/resource/gateway/DateTime", "2026-11-15T09:44:00"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("device_type", ["bacon_rac", "bacon_ap"])
+async def test_set_date_time_refuses_matter_devices(hass, device_type):
+    """A Matter device has no gateway clock: a clear error, and nothing written."""
+    gateway = _coordinator("123", "icom", ["dhw1"])
+    matter = _coordinator("86DM-577", device_type, [])
+    entry = await _setup(hass, [gateway, matter])
+    entity_ids = [
+        _register_sensor(hass, entry, "123", "123-dhw1-temp", "pump_dhw1"),
+        _register_sensor(hass, entry, "86DM-577", "86DM-577-temp", "matter_temp"),
+    ]
+
+    with pytest.raises(ServiceValidationError, match="Matter device"):
+        await hass.services.async_call(
+            DOMAIN, "set_date_time", {"entity_id": entity_ids}, blocking=True
+        )
+
+    gateway.bhc.async_action_universal_put.assert_not_awaited()
+    matter.bhc.async_action_universal_put.assert_not_awaited()

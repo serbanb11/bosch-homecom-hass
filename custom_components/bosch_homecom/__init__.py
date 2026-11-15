@@ -775,8 +775,19 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if value.tzinfo is not None:
             value = dt_util.as_local(value)
         written = value.strftime(GATEWAY_DATE_TIME_FORMAT)
+        # Resolve every target first, so a bad one writes nothing, and write
+        # each device once however many of its entities were targeted.
+        targets: dict[str, tuple[Any, str]] = {}
         for entity_id in call.data["entity_id"]:
             coordinator, _ = _resolve_target(hass, entity_id)
+            if coordinator.device["deviceType"] in BACON_DEVICE_TYPES:
+                # Matter devices have no pointt gateway, so no clock to set.
+                raise ServiceValidationError(
+                    f"{entity_id} belongs to a Matter device, which does not "
+                    "support setting the date and time"
+                )
+            targets.setdefault(coordinator.unique_id, (coordinator, entity_id))
+        for coordinator, entity_id in targets.values():
             try:
                 await coordinator.bhc.async_action_universal_put(
                     coordinator.unique_id, GATEWAY_DATE_TIME_PATH, written
