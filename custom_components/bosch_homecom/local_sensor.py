@@ -32,7 +32,13 @@ from homeassistant.const import (
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import HC1_PUMP_VOLUME_FLOW
+from .const import (
+    HC1_FLOW_TEMP_SETPOINT,
+    HC1_PUMP_VOLUME_FLOW,
+    HEAT_CARRIER_PUMP_SPEED,
+    HEAT_OUTPUT,
+    PRIMARY_PUMP_VOLUME_FLOW,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -175,7 +181,7 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
         # with a CS5800iAW the heat source resource reports its LOW_FLOW marker
         # (65535) nearly all the time, while the signal matches the HMI.
         resource=HC1_PUMP_VOLUME_FLOW,
-        fallback_resources=("/heatSources/hs1/pumpVolumeFlow",),
+        fallback_resources=(PRIMARY_PUMP_VOLUME_FLOW,),
         # The gateway reports l/h (API spec: unitOfMeasure "l/h").
         device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
         native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_HOUR,
@@ -228,6 +234,45 @@ LOCAL_SENSORS: tuple[LocalSensorDescription, ...] = (
 # allowedValues of the K 40 RF OpenAPI spec, plus the values a gateway answers
 # with where the two differ.
 LOCAL_OPTIONAL_SENSORS: tuple[LocalSensorDescription, ...] = (
+    # --- heat source circuit (PC0) --------------------------------------------
+    # With a parallel buffer the heat source circuit and the heating circuit
+    # carry different flows; ``local_pump_volume_flow`` is the heating circuit.
+    # Without a buffer both are the same circuit.
+    LocalSensorDescription(
+        key="local_primary_pump_volume_flow",
+        translation_key="local_primary_pump_volume_flow",
+        resource=PRIMARY_PUMP_VOLUME_FLOW,
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.LITERS_PER_HOUR,
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    LocalSensorDescription(
+        key="local_heat_carrier_pump_speed",
+        translation_key="local_heat_carrier_pump_speed",
+        resource=HEAT_CARRIER_PUMP_SPEED,
+        native_unit_of_measurement="%",
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    LocalSensorDescription(
+        key="local_heat_output",
+        translation_key="local_heat_output",
+        resource=HEAT_OUTPUT,
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    LocalSensorDescription(
+        key="local_hc1_flow_temp_setpoint",
+        translation_key="local_hc1_flow_temp_setpoint",
+        resource=HC1_FLOW_TEMP_SETPOINT,
+        device_class=_TEMP,
+        native_unit_of_measurement=_CELSIUS,
+        state_class=_MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
     LocalSensorDescription(
         key="local_silent_mode_status",
         translation_key="local_silent_mode_status",
@@ -349,6 +394,35 @@ def _state_values(state: Any) -> set[Any]:
         for value in item.values()
         if isinstance(value, (int, float, str))
     }
+
+
+def is_low_flow(payload: Any) -> bool | None:
+    """Tell whether a flow payload carries its LOW_FLOW marker.
+
+    True for e.g. ``{"value": 65535, "state": [{"lowflow": 65535}]}``, False
+    for a real reading (0 is a stopped pump), None when there is no value.
+    Only the low-flow marker counts: any other declared marker is no reading,
+    not a low flow. The gateway spells it both ``LOW_FLOW`` and ``lowflow``.
+    """
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("value")
+    if not isinstance(value, (int, float)):
+        return None
+    state = payload.get("state")
+    items = state if isinstance(state, list) else [state]
+    markers = {
+        marker
+        for item in items
+        if isinstance(item, dict)
+        for name, marker in item.items()
+        if str(name).replace("_", "").lower() == "lowflow"
+    }
+    if value in markers:
+        return True
+    if value in _state_values(state):
+        return None
+    return False
 
 
 class BoschComLocalSensor(CoordinatorEntity, SensorEntity):

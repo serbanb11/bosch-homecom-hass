@@ -195,6 +195,20 @@ MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 # back to /heatSources/hs1/pumpVolumeFlow on gateways that do not have it.
 HC1_PUMP_VOLUME_FLOW: Final = "/signals/SRC.HC1.FlowCtrl.PumpVolumeFlow"
 
+# Heat source circuit resources. homecom_alt polls all of them (the last three
+# since 1.9.3). Flow through the heat source's own pump (PC0, outdoor unit <->
+# buffer or heating system). Below the sensor's measuring range the
+# gateway reports its LOW_FLOW marker instead of a number.
+PRIMARY_PUMP_VOLUME_FLOW: Final = "/heatSources/hs1/pumpVolumeFlow"
+HEAT_CARRIER_PUMP_SPEED: Final = "/heatSources/hs1/refrigerant/heatCarrierPumpSpeed"
+# Undocumented signal in kW. It tracks the gateway's lifetime heat counter
+# (emon outputProduced), so it is the heat output the appliance calculates,
+# not a measurement of a heat meter.
+HEAT_OUTPUT: Final = "/signals/SRC.CUHP.HP1.CompressorPower"
+# Supply temperature setpoint of heating circuit 1 (heating curve result).
+# OFF_HEAT (0) and OFF_COOL (90) are markers, not setpoints.
+HC1_FLOW_TEMP_SETPOINT: Final = "/signals/SC.HC1.FlowTempSetp"
+
 # How many consecutive failed cloud refreshes to ride out on the last good data
 # before the entities go unavailable, on every device type. The Bosch cloud
 # times out a single /bulk call roughly once an hour (#193), and each blip took

@@ -28,6 +28,7 @@ from homecom_alt import (
     ProximityRequiredError,
     TokenStoreFullError,
 )
+from homecom_alt.const import LOCAL_POLL_RESOURCES
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -40,6 +41,7 @@ from custom_components.bosch_homecom import (
 )
 from custom_components.bosch_homecom.binary_sensor import (
     BoschComK40LocalOnOffSensor,
+    BoschComK40LocalPrimaryLowFlowSensor,
     BoschComK40LocalPumpStatusSensor,
     async_setup_entry as binary_sensor_async_setup_entry,
 )
@@ -56,10 +58,14 @@ from custom_components.bosch_homecom.const import (
     CONF_LOCAL_TOKEN_ID,
     CONF_REFRESH,
     DOMAIN,
+    HC1_FLOW_TEMP_SETPOINT,
     HC1_PUMP_VOLUME_FLOW,
     HC_TUNE_ENDPOINTS,
+    HEAT_CARRIER_PUMP_SPEED,
+    HEAT_OUTPUT,
     LOCAL_GATEWAY_HARDWARE,
     MAX_CLOUD_FAILURES_WITH_LOCAL,
+    PRIMARY_PUMP_VOLUME_FLOW,
 )
 from custom_components.bosch_homecom.coordinator import (
     BoschComModuleCoordinatorK40,
@@ -75,6 +81,7 @@ from custom_components.bosch_homecom.local_sensor import (
     BoschComLocalSensor,
     BoschComLocalSourceSensor,
     _emon_field,
+    is_low_flow,
 )
 from custom_components.bosch_homecom.sensor import (
     _add_or_defer,
@@ -982,7 +989,15 @@ async def test_local_pump_entities_wait_for_served_circuit(
     entities = []
 
     await binary_sensor_async_setup_entry(hass, entry, entities.extend)
-    assert [e._resource for e in entities] == ["/heatingCircuits/hc1/pumpStatus"]
+
+    def pumps():
+        return [
+            e._resource
+            for e in entities
+            if isinstance(e, BoschComK40LocalPumpStatusSensor)
+        ]
+
+    assert pumps() == ["/heatingCircuits/hc1/pumpStatus"]
 
     coordinator.local_data = _local_device(
         resources={
@@ -992,7 +1007,7 @@ async def test_local_pump_entities_wait_for_served_circuit(
     )
     coordinator.async_update_listeners()
     coordinator.async_update_listeners()
-    assert [e._resource for e in entities] == [
+    assert pumps() == [
         "/heatingCircuits/hc1/pumpStatus",
         "/heatingCircuits/hc2/pumpStatus",
     ]
@@ -1229,6 +1244,210 @@ async def test_local_sensors_hide_the_markers_their_payload_declares(
 
     assert sensor.native_value == expected
     assert sensor.available is (expected is not None)
+
+
+@pytest.mark.asyncio
+async def test_primary_pump_volume_flow_reads_the_heat_source_circuit(
+    hass, entry, device, firmware
+):
+    """With a buffer the heat source circuit carries its own flow.
+
+    Values from a CS5800iAW whose buffer separates the circuits: 1224 l/h on
+    the heat source side while the heating circuit carried 882 l/h.
+    """
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    by_key = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}
+    coordinator.local_data = _local_device(
+        resources={
+            HC1_PUMP_VOLUME_FLOW: _flow(882, {"LOW_FLOW": 65535}),
+            PRIMARY_PUMP_VOLUME_FLOW: _flow(1224, [{"lowflow": 65535}]),
+        }
+    )
+    coordinator.local_healthy = True
+
+    primary = BoschComLocalSensor(
+        coordinator, entry, by_key["local_primary_pump_volume_flow"]
+    )
+    heating = BoschComLocalSensor(coordinator, entry, by_key["local_pump_volume_flow"])
+    assert primary.native_value == 1224
+    assert heating.native_value == 882
+    assert by_key["local_primary_pump_volume_flow"].native_unit_of_measurement == "L/h"
+
+    coordinator.local_data = _local_device(
+        resources={PRIMARY_PUMP_VOLUME_FLOW: _flow(65535, [{"lowflow": 65535}])}
+    )
+    primary.set_attr()
+    assert primary.native_value is None
+    assert not primary.available
+
+    coordinator.local_data = _local_device(
+        resources={PRIMARY_PUMP_VOLUME_FLOW: _flow(0, [{"lowflow": 65535}])}
+    )
+    primary.set_attr()
+    assert primary.native_value == 0
+    assert primary.available
+
+
+def test_is_low_flow() -> None:
+    """A marker value is flagged, a reading is not, a missing value is unknown."""
+    assert is_low_flow(_flow(65535, [{"lowflow": 65535}])) is True
+    assert is_low_flow(_flow(65535, {"LOW_FLOW": 65535})) is True
+    assert is_low_flow(_flow(957, [{"lowflow": 65535}])) is False
+    assert is_low_flow(_flow(0, [{"lowflow": 65535}])) is False
+    assert is_low_flow({"value": 12}) is False
+    assert is_low_flow({"value": None}) is None
+    assert is_low_flow(None) is None
+    # Another declared marker is no reading, not a low flow.
+    assert is_low_flow(_flow(32767, [{"lowflow": 65535}, {"short": 32767}])) is None
+    assert is_low_flow({"value": "on"}) is None
+
+
+@pytest.mark.asyncio
+async def test_primary_low_flow_binary_sensor(hass, entry, device, firmware, caplog):
+    """The LOW_FLOW marker becomes on, a reading off, no resource unavailable."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+
+    def sensor_for(payload):
+        resources = {PRIMARY_PUMP_VOLUME_FLOW: payload} if payload else {}
+        coordinator.local_data = _local_device(resources=resources)
+        return BoschComK40LocalPrimaryLowFlowSensor(coordinator)
+
+    low = sensor_for(_flow(65535, [{"lowflow": 65535}]))
+    assert low.is_on is True and low.available
+    measured = sensor_for(_flow(1224, [{"lowflow": 65535}]))
+    assert measured.is_on is False and measured.available
+    stopped = sensor_for(_flow(0, [{"lowflow": 65535}]))
+    assert stopped.is_on is False and stopped.available
+    missing = sensor_for(None)
+    assert missing.is_on is None and not missing.available
+    coordinator.local_healthy = False
+    assert not low.available
+
+    platform = MockEntityPlatform(hass, domain="binary_sensor", platform_name=DOMAIN)
+    await platform.async_add_entities([low])
+    assert "Error adding entity" not in caplog.text
+    assert er.async_get(hass).async_get(low.entity_id).disabled_by is not None
+
+
+@pytest.mark.asyncio
+async def test_primary_low_flow_binary_sensor_only_with_local_access(
+    hass, entry, device, firmware
+):
+    """The binary sensor is set up once the gateway serves the heat source flow."""
+    entry.add_to_hass(hass)
+    served = {PRIMARY_PUMP_VOLUME_FLOW: _flow(1224, [{"lowflow": 65535}])}
+    for local, resources, expected in (
+        (True, served, 1),
+        (True, {}, 0),
+        (False, served, 0),
+    ):
+        coordinator, _ = _coordinator(hass, entry, device, firmware, local=local)
+        coordinator.local_data = _local_device(resources=resources)
+        coordinator.async_set_updated_data(_cloud_device())
+        entry.runtime_data = [coordinator]
+        entities: list = []
+        await binary_sensor_async_setup_entry(hass, entry, entities.extend)
+        found = [
+            e for e in entities if isinstance(e, BoschComK40LocalPrimaryLowFlowSensor)
+        ]
+        assert len(found) == expected
+
+
+@pytest.mark.asyncio
+async def test_heat_carrier_pump_speed(hass, entry, device, firmware):
+    """The PC0 pump speed, as the gateway serves it."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_data = _local_device(
+        resources={
+            HEAT_CARRIER_PUMP_SPEED: {
+                "type": "integerValue",
+                "value": 25,
+                "unitOfMeasure": "%",
+            },
+        }
+    )
+    coordinator.local_healthy = True
+    by_key = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}
+
+    speed = BoschComLocalSensor(
+        coordinator, entry, by_key["local_heat_carrier_pump_speed"]
+    )
+    assert speed.native_value == 25
+
+    coordinator.local_data = _local_device()
+    speed.set_attr()
+    assert speed.native_value is None and not speed.available
+
+
+@pytest.mark.asyncio
+async def test_heat_output_reads_the_calculated_signal(hass, entry, device, firmware):
+    """The appliance's calculated heat output, in kW."""
+    description = _optional("local_heat_output")
+    assert description.native_unit_of_measurement == "kW"
+    assert description.device_class == "power"
+    assert description.state_class == "measurement"
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+
+    coordinator.local_data = _local_device(
+        resources={
+            HEAT_OUTPUT: {"type": "floatValue", "value": 1.5, "unitOfMeasure": "kW"}
+        }
+    )
+    sensor = BoschComLocalSensor(coordinator, entry, description)
+    assert sensor.native_value == 1.5 and sensor.available
+
+    coordinator.local_data = _local_device()
+    sensor.set_attr()
+    assert sensor.native_value is None and not sensor.available
+
+
+@pytest.mark.asyncio
+async def test_hc1_flow_temp_setpoint(hass, entry, device, firmware):
+    """The HC1 supply setpoint; its off markers are no setpoint."""
+    entry.add_to_hass(hass)
+    coordinator, _ = _coordinator(hass, entry, device, firmware)
+    coordinator.local_healthy = True
+    by_key = {d.key: d for d in (*LOCAL_SENSORS, *LOCAL_OPTIONAL_SENSORS)}
+    markers = {"OFF_HEAT": 0, "OFF_COOL": 90}
+
+    def hc1(value):
+        return {"type": "integerValue", "value": value, "unitOfMeasure": "C"} | {
+            "state": markers
+        }
+
+    coordinator.local_data = _local_device(
+        resources={
+            HC1_FLOW_TEMP_SETPOINT: hc1(28),
+        }
+    )
+    circuit = BoschComLocalSensor(
+        coordinator, entry, by_key["local_hc1_flow_temp_setpoint"]
+    )
+    assert circuit.native_value == 28
+
+    for off in (0, 90):
+        coordinator.local_data = _local_device(
+            resources={HC1_FLOW_TEMP_SETPOINT: hc1(off)}
+        )
+        circuit.set_attr()
+        assert circuit.native_value is None
+
+
+def test_heat_source_circuit_resources_come_with_the_poll() -> None:
+    """homecom_alt polls every resource these sensors read; nothing extra."""
+    for path in (
+        PRIMARY_PUMP_VOLUME_FLOW,
+        HEAT_CARRIER_PUMP_SPEED,
+        HEAT_OUTPUT,
+        HC1_FLOW_TEMP_SETPOINT,
+    ):
+        assert path in LOCAL_POLL_RESOURCES
 
 
 @pytest.mark.asyncio
