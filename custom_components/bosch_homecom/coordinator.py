@@ -1076,9 +1076,8 @@ class BoschComModuleCoordinatorK40(
         first refresh; setup calls this again then.
         """
         modules = self.local_modules
-        if modules is None or (
-            _async_registry_device(self.hass, self.entry, self.unique_id) is None
-        ):
+        parent = _async_registry_device(self.hass, self.entry, self.unique_id)
+        if modules is None or parent is None:
             return
         registry = dr.async_get(self.hass)
         identity = self.local_gateway_identity
@@ -1100,10 +1099,11 @@ class BoschComModuleCoordinatorK40(
                     for path in LOCAL_GATEWAY_MACS
                     if (mac := identity.get(path)) and mac.strip("0:")
                 }
-            registry.async_get_or_create(
+            # Linked by update: async_get_or_create's via_device is
+            # deprecated in 2026.11, and via_device_id there is too new.
+            device = registry.async_get_or_create(
                 config_entry_id=self.entry.entry_id,
                 identifiers={identifier},
-                via_device=(DOMAIN, self.unique_id),
                 manufacturer=identity.get(LOCAL_GATEWAY_BRAND, MANUFACTURER),
                 **gateway,
                 name=module.product_name or module.hw_ident or f"Module {index + 1}",
@@ -1112,6 +1112,8 @@ class BoschComModuleCoordinatorK40(
                 sw_version=module.version,
                 serial_number=module.product_serial or module.module_serial,
             )
+            if device.via_device_id != parent.id:
+                registry.async_update_device(device.id, via_device_id=parent.id)
         prefix = f"{self.unique_id}-module-"
         for device in dr.async_entries_for_config_entry(registry, self.entry.entry_id):
             ours = {
