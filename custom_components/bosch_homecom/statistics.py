@@ -4,9 +4,9 @@ The cloud keeps a K30/K40's ``/recordings/heatSources/emon/*`` energy counters
 as hourly buckets for about ten days, daily buckets for about two months and
 monthly buckets since installation. Each counter the device serves becomes the
 external statistic ``bosch_homecom:<device id>_<key>``, selectable in the
-energy dashboard. The first import backfills it with the finest resolution
-each period still has; later imports append what the coordinator's hourly
-recordings fetch brings, so they cost no extra requests.
+energy dashboard. The first import of a counter backfills it with the finest
+resolution each period still has; later imports append what the coordinator's
+hourly recordings fetch brings, so they cost no extra requests.
 
 A daily or monthly value is stored as one row at the start of its day or
 month, so the energy dashboard shows it on that hour.
@@ -14,7 +14,7 @@ month, so the energy dashboard shows it on that hour.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from homeassistant.components.recorder import get_instance
@@ -29,13 +29,14 @@ from homeassistant.components.recorder.statistics import (
 )
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import EnergyConverter
 
 from .const import DOMAIN, RECORDING_PATHS
 
-# ponytail: only the emon kWh counters. The icom total/energyMonitoring branch
-# stores per-minute sums whose daily and monthly buckets nobody has checked yet.
+# Only the emon kWh counters: the icom total/energyMonitoring branch stores
+# per-minute sums whose daily and monthly buckets nobody has checked yet.
 ENERGY_RECORDINGS: dict[str, str] = {
     suffix: meta["key"]
     for suffix, meta in RECORDING_PATHS.items()
@@ -49,6 +50,11 @@ BACKFILL_MONTHS = 6
 BACKFILL_YEARS = 5
 
 HOUR = timedelta(hours=1)
+
+
+def zero_only_store(hass: HomeAssistant, entry_id: str, device_id: str) -> Store:
+    """Return the store that keeps a device's zero-only counters across restarts."""
+    return Store(hass, 1, f"{DOMAIN}.{entry_id}.{device_id}.energy_statistics")
 
 
 def recording_path(suffix: str, interval: str) -> str:
@@ -73,14 +79,32 @@ def bucket_values(payload: Any) -> list[float | None]:
     return values
 
 
-def _start(day: date) -> datetime:
-    """Return the UTC start of a local day, on the hour statistics are kept in.
+def _hour(local: datetime) -> datetime:
+    """Return the UTC hour statistics keep ``local`` on.
 
-    ponytail: in a zone with a half-hour offset the row moves by 30 minutes.
+    In a zone with a half-hour offset the row moves back by 30 minutes.
     """
-    return dt_util.as_utc(dt_util.start_of_local_day(day)).replace(
-        minute=0, second=0, microsecond=0
-    )
+    return dt_util.as_utc(local).replace(minute=0, second=0, microsecond=0)
+
+
+def _start(day: date) -> datetime:
+    """Return the UTC start of a local day."""
+    return _hour(dt_util.start_of_local_day(day))
+
+
+def hour_starts(day: date, count: int) -> list[datetime]:
+    """Return the UTC start of each of ``day``'s ``count`` hourly buckets.
+
+    A day has 23 or 25 hours when the clocks change. Normally each bucket is
+    an hour that passed, from midnight on. Should the cloud send 24 buckets on
+    such a day, each is a clock hour instead: the skipped hour then shares its
+    start with the next one, and the repeated hour starts on its first pass.
+    """
+    start = _start(day)
+    if count != 24 or _start(day + timedelta(days=1)) - start == 24 * HOUR:
+        return [start + index * HOUR for index in range(count)]
+    zone = dt_util.get_default_time_zone()
+    return [_hour(datetime.combine(day, time(index), zone)) for index in range(24)]
 
 
 def _next_month(first: date) -> date:
@@ -102,11 +126,22 @@ def build_rows(
     """
     rows: list[tuple[datetime, float]] = []
     for day, values in hourly.items():
-        start, end = _start(day), _start(day + timedelta(days=1))
-        for index, value in enumerate(values):
-            hour = start + index * HOUR
-            if value is not None and hour + HOUR <= min(end, now):
-                rows.append((hour, value))
+        starts = hour_starts(day, len(values))
+        # A bucket ends where the next one starts. Buckets sharing a start
+        # make one row, which is complete once the last of them has ended.
+        ends = [*starts[1:], starts[-1] + HOUR] if starts else []
+        until = min(_start(day + timedelta(days=1)), now)
+        merged: dict[datetime, tuple[datetime, float | None]] = {}
+        for start, end, value in zip(starts, ends, values):
+            total = merged.get(start, (end, None))[1]
+            if value is not None:
+                total = (total or 0.0) + value
+            merged[start] = (end, total)
+        rows += [
+            (start, total)
+            for start, (end, total) in merged.items()
+            if total is not None and end <= until
+        ]
 
     finer = min((start for start, _ in rows), default=now)
     for first, values in daily.items():
@@ -180,15 +215,18 @@ async def async_import_energy(
     device_id: str,
     result: dict,
     day: date,
-    backfilled: set[str],
-) -> None:
+    zero_only: set[str],
+) -> bool:
     """Add the energy rows that ``result``, the bulk answer for ``day``, brings.
 
-    Counters without statistics yet are backfilled first, once per
-    ``backfilled`` set (the caller keeps it for the run): a counter the device
-    answers but never fills with energy, such as hot water on a unit without a
-    tank, would otherwise ask for the whole history every hour. A gap left by Home
-    Assistant being down is filled from the hourly buckets still kept.
+    A counter without statistics is backfilled first, unless it is in
+    ``zero_only``: a counter the device answers but never fills with energy,
+    such as hot water on a unit without a tank, gets no statistic and goes
+    there once the cloud has answered its whole history. A gap left by Home
+    Assistant being down is filled from the hourly buckets still kept. Only
+    the counters that need history are asked for it.
+
+    Returns whether ``zero_only`` changed, so the caller can store it.
     """
     served = [
         suffix
@@ -196,29 +234,30 @@ async def async_import_energy(
         if isinstance(result.get(recording_path(suffix, day.isoformat())), dict)
     ]
     if not served:
-        return
+        return False
     ids = {s: f"{DOMAIN}:{device_id}_{ENERGY_RECORDINGS[s]}" for s in served}
     last = {s: await _last_row(hass, ids[s]) for s in served}
 
-    pending = {ids[s] for s in served if last[s] is None} - backfilled
-    starts = [row[0] for row in last.values() if row is not None]
-    intervals: list[str] = []
-    if pending:
-        intervals = _intervals(day, None)
-    elif starts:
-        intervals = _intervals(day, dt_util.as_local(min(starts) + HOUR).date())
+    intervals: dict[str, list[str]] = {}
+    for suffix in served:
+        if (row := last[suffix]) is not None:
+            intervals[suffix] = _intervals(day, dt_util.as_local(row[0] + HOUR).date())
+        elif ids[suffix] not in zero_only:
+            intervals[suffix] = _intervals(day, None)
+        else:
+            intervals[suffix] = []
+    paths = [recording_path(s, iv) for s in served for iv in intervals[s]]
     fetched = dict(result)
-    if intervals:
-        paths = [recording_path(s, iv) for iv in intervals for s in served]
+    if paths:
         fetched.update(await bhc.async_request_bulk(device_id, paths) or {})
-    backfilled |= pending
 
+    changed = False
     now = dt_util.utcnow()
     for suffix in served:
         hourly: dict[date, list[float | None]] = {}
         daily: dict[date, list[float | None]] = {}
         monthly: dict[int, list[float | None]] = {}
-        for interval in [day.isoformat(), *intervals]:
+        for interval in [day.isoformat(), *intervals[suffix]]:
             values = bucket_values(fetched.get(recording_path(suffix, interval)))
             if len(interval) == 10:
                 hourly[date.fromisoformat(interval)] = values
@@ -228,9 +267,17 @@ async def async_import_energy(
                 monthly[int(interval)] = values
         after, total = last[suffix] or (None, 0.0)
         statistics = with_sums(build_rows(hourly, daily, monthly, now), after, total)
-        # A new statistic starts with its first energy: a counter the unit
-        # fills with zeros only (hot water without a tank) creates none.
-        if not statistics or (after is None and not statistics[-1]["sum"]):
+        # A new statistic starts with its first energy. Without any, the
+        # counter is zero-only once every interval of its history answered.
+        if after is None and not (statistics and statistics[-1]["sum"]):
+            if intervals[suffix] and all(
+                isinstance(fetched.get(recording_path(suffix, iv)), dict)
+                for iv in intervals[suffix]
+            ):
+                zero_only.add(ids[suffix])
+                changed = True
+            continue
+        if not statistics:
             continue
         key = ENERGY_RECORDINGS[suffix]
         metadata = StatisticMetaData(
@@ -243,3 +290,4 @@ async def async_import_energy(
             unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         )
         async_add_external_statistics(hass, metadata, statistics)
+    return changed

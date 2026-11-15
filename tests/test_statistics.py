@@ -23,6 +23,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
+from custom_components.bosch_homecom import async_remove_entry
 from custom_components.bosch_homecom.const import CONF_DEVICES, CONF_REFRESH, DOMAIN
 from custom_components.bosch_homecom.coordinator import BoschComModuleCoordinatorK40
 from custom_components.bosch_homecom.statistics import (
@@ -76,6 +77,34 @@ def _bhc(requested: list[list[str]]) -> MagicMock:
     bhc = MagicMock()
     bhc.async_request_bulk = AsyncMock(side_effect=bulk)
     return bhc
+
+
+def _counters(paths: list[str]) -> set[str]:
+    """Return the emon counters, e.g. ``total``, that ``paths`` ask for."""
+    return {path.split("/emon/")[1].split("/")[0] for path in paths}
+
+
+def _coordinator(
+    hass: HomeAssistant, bhc: MagicMock, entry: MockConfigEntry | None = None
+) -> BoschComModuleCoordinatorK40:
+    if entry is None:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_DEVICES: {f"{DEVICE}_k30": True},
+                CONF_REFRESH: "r",
+                "token": "t",
+            },
+        )
+        entry.add_to_hass(hass)
+    return BoschComModuleCoordinatorK40(
+        hass,
+        bhc,
+        {"deviceId": DEVICE, "deviceType": "k30"},
+        {"value": "15.00.01"},
+        entry,
+        auth_provider=False,
+    )
 
 
 def _hourly(*values: float) -> dict:
@@ -144,6 +173,42 @@ async def test_build_rows_skip_periods_still_running(hass, rome):
     assert rows[-1][0] == dt_util.as_utc(_local(2026, 11, 9, 1))
 
 
+@pytest.mark.parametrize(
+    ("day", "count", "hours"),
+    [
+        # One bucket per hour that passed, as _store_recordings expects.
+        (date(2027, 3, 28), 23, 23),
+        (date(2026, 10, 25), 25, 25),
+        # One bucket per clock hour: the skipped 02:00 joins 03:00, the
+        # repeated 02:00 covers both of its passes.
+        (date(2027, 3, 28), 24, 23),
+        (date(2026, 10, 25), 24, 24),
+    ],
+)
+async def test_build_rows_on_dst_days(hass, rome, day, count, hours):
+    """A day of 23 or 25 hours keeps every bucket's energy, in that day."""
+    rows = build_rows({day: [1.0] * count}, {}, {}, _local(2027, 4, 1))
+    starts = [start for start, _ in rows]
+
+    assert len(starts) == len(set(starts)) == hours
+    assert sum(value for _, value in rows) == count
+    assert starts[0] == dt_util.as_utc(_local(day.year, day.month, day.day))
+    assert starts[-1] == dt_util.as_utc(_local(day.year, day.month, day.day, 23))
+
+
+async def test_build_rows_wait_for_both_passes_of_the_repeated_hour(hass, rome):
+    """With 24 buckets on the 25-hour day, 02:00 is added once it is over twice."""
+    day = date(2026, 10, 25)
+    # 02:30 on the second pass, when the 02:00 bucket can still grow.
+    second_pass = datetime(2026, 10, 25, 1, 30, tzinfo=dt_util.UTC)
+    rows = build_rows({day: [1.0] * 24}, {}, {}, second_pass)
+
+    assert [start for start, _ in rows] == [
+        dt_util.as_utc(_local(2026, 10, 25, 0)),
+        dt_util.as_utc(_local(2026, 10, 25, 1)),
+    ]
+
+
 async def test_import_backfills_then_appends_without_extra_requests(
     recorder_mock: Recorder, hass: HomeAssistant, rome, freezer
 ):
@@ -151,9 +216,11 @@ async def test_import_backfills_then_appends_without_extra_requests(
     freezer.move_to(_local(2026, 11, 9, 0, 30))
     requested: list[list[str]] = []
     bhc = _bhc(requested)
-    backfilled: set[str] = set()
+    zero_only: set[str] = set()
 
-    await async_import_energy(hass, bhc, DEVICE, _day_result(DAY), DAY, backfilled)
+    changed = await async_import_energy(
+        hass, bhc, DEVICE, _day_result(DAY), DAY, zero_only
+    )
     await async_wait_recording_done(hass)
 
     assert len(requested) == 1
@@ -163,11 +230,15 @@ async def test_import_backfills_then_appends_without_extra_requests(
     assert await _last(recorder_mock, hass, CH) is not None
     # The tank-less unit fills the hot-water recording with zeros only.
     assert await _last(recorder_mock, hass, DHW) is None
-    assert backfilled == {TOTAL, CH, DHW}
+    assert changed
+    assert zero_only == {DHW}
 
     # After midnight the coordinator reads the previous day again: nothing new.
-    await async_import_energy(hass, bhc, DEVICE, _day_result(DAY), DAY, backfilled)
+    changed = await async_import_energy(
+        hass, bhc, DEVICE, _day_result(DAY), DAY, zero_only
+    )
     await async_wait_recording_done(hass)
+    assert not changed
     assert (await _last(recorder_mock, hass, TOTAL))["sum"] == 30022
 
     # Two hours later the first two hours of the day have arrived. The hot-water
@@ -176,13 +247,37 @@ async def test_import_backfills_then_appends_without_extra_requests(
     today = date(2026, 11, 9)
     path = recording_path("emon/total/outputProduced", today.isoformat())
     result = {path: _hourly(3.0, 2.0)}
-    await async_import_energy(hass, bhc, DEVICE, result, today, backfilled)
+    await async_import_energy(hass, bhc, DEVICE, result, today, zero_only)
     await async_wait_recording_done(hass)
 
     assert len(requested) == 1
     last = await _last(recorder_mock, hass, TOTAL)
     assert last["sum"] == 30027
     assert last["start"] == _local(2026, 11, 9, 1).timestamp()
+
+
+async def test_import_asks_history_only_for_counters_without_statistics(
+    recorder_mock: Recorder, hass: HomeAssistant, rome, freezer
+):
+    """A counter that already has its statistic adds no history request."""
+    freezer.move_to(_local(2026, 11, 9, 0, 30))
+    requested: list[list[str]] = []
+    bhc = _bhc(requested)
+    zero_only: set[str] = set()
+    total = recording_path("emon/total/outputProduced", DAY.isoformat())
+
+    await async_import_energy(
+        hass, bhc, DEVICE, {total: FIXTURE[total]}, DAY, zero_only
+    )
+    await async_wait_recording_done(hass)
+    assert _counters(requested[-1]) == {"total"}
+
+    # The heating and hot-water counters come later: only theirs is asked for.
+    await async_import_energy(hass, bhc, DEVICE, _day_result(DAY), DAY, zero_only)
+    await async_wait_recording_done(hass)
+    assert len(requested) == 2
+    assert _counters(requested[-1]) == {"ch", "dhw"}
+    assert await _last(recorder_mock, hass, CH) is not None
 
 
 async def test_import_fills_the_gap_after_downtime(
@@ -192,8 +287,8 @@ async def test_import_fills_the_gap_after_downtime(
     freezer.move_to(_local(2026, 11, 9, 0, 30))
     requested: list[list[str]] = []
     bhc = _bhc(requested)
-    backfilled: set[str] = set()
-    await async_import_energy(hass, bhc, DEVICE, _day_result(DAY), DAY, backfilled)
+    zero_only: set[str] = set()
+    await async_import_energy(hass, bhc, DEVICE, _day_result(DAY), DAY, zero_only)
     await async_wait_recording_done(hass)
 
     # Down from 9 November until the 12th at 03:30, when the 12th's first three
@@ -205,7 +300,7 @@ async def test_import_fills_the_gap_after_downtime(
         recording_path(s, day.isoformat()): _hourly(1.0, 1.0, 2.0)
         for s in ("emon/total/outputProduced", "emon/ch/outputProduced")
     }
-    await async_import_energy(hass, bhc, DEVICE, result, day, backfilled)
+    await async_import_energy(hass, bhc, DEVICE, result, day, zero_only)
     await async_wait_recording_done(hass)
 
     asked = {p.rsplit("=", 1)[1] for p in requested[-1]}
@@ -215,24 +310,44 @@ async def test_import_fills_the_gap_after_downtime(
     assert last["start"] == _local(2026, 11, 12, 2).timestamp()
 
 
-async def test_coordinator_keeps_going_when_the_import_fails(
-    recorder_mock: Recorder, hass: HomeAssistant
+async def test_zero_only_counters_are_remembered_across_restarts(
+    recorder_mock: Recorder, hass: HomeAssistant, rome, freezer, hass_storage
 ):
-    """A cloud error during the history import does not fail the update."""
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_DEVICES: {f"{DEVICE}_k30": True}, CONF_REFRESH: "r", "token": "t"},
-    )
-    entry.add_to_hass(hass)
-    bhc = MagicMock()
-    bhc.async_request_bulk = AsyncMock(side_effect=ApiError("boom"))
-    coordinator = BoschComModuleCoordinatorK40(
-        hass,
-        bhc,
-        {"deviceId": DEVICE, "deviceType": "k30"},
-        {"value": "15.00.01"},
-        entry,
-        auth_provider=False,
-    )
+    """After a restart the hot-water counter does not request the history again."""
+    freezer.move_to(_local(2026, 11, 9, 0, 30))
+    requested: list[list[str]] = []
+    coordinator = _coordinator(hass, _bhc(requested))
+    entry = coordinator.entry
+    key = f"{DOMAIN}.{entry.entry_id}.{DEVICE}.energy_statistics"
+
     await coordinator._import_statistics(_day_result(DAY), DAY)
-    assert coordinator._statistics_backfilled == set()
+    await async_wait_recording_done(hass)
+    assert len(requested) == 1
+    assert hass_storage[key]["data"] == [DHW]
+
+    restarted = _coordinator(hass, _bhc(requested), entry)
+    await restarted._import_statistics(_day_result(DAY), DAY)
+    assert len(requested) == 1
+    assert restarted._statistics_zero_only == {DHW}
+
+    # Removing the integration deletes the stored counters.
+    await async_remove_entry(hass, entry)
+    assert key not in hass_storage
+
+
+@pytest.mark.parametrize("error", [ApiError("boom"), RuntimeError("bug")])
+async def test_import_errors_stay_in_the_background_task(
+    recorder_mock: Recorder, hass: HomeAssistant, caplog, error
+):
+    """The import runs beside the update; its errors never reach it."""
+    bhc = MagicMock()
+    bhc.async_request_bulk = AsyncMock(side_effect=error)
+    coordinator = _coordinator(hass, bhc)
+
+    coordinator._start_statistics_import(_day_result(DAY), DAY)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert coordinator._statistics_task.done()
+    assert coordinator._statistics_zero_only == set()
+    # A cloud error waits quietly for the next hour, a bug is logged.
+    assert ("Traceback" in caplog.text) == isinstance(error, RuntimeError)

@@ -89,6 +89,7 @@ from .coordinator import (
     BoschComModuleCoordinatorWddw2,
 )
 from .diagnostics import TO_REDACT_RAW, _mask_serial, _redact_raw_snapshot
+from .statistics import zero_only_store
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -565,6 +566,13 @@ async def async_remove_config_entry_device(
         domain == DOMAIN and "-module-" in identifier
         for domain, identifier in device_entry.identifiers
     )
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the zero-only counters the statistics import stored per device."""
+    for key in entry.data.get(CONF_DEVICES) or {}:
+        device_id = key.rpartition("_")[0]
+        await zero_only_store(hass, entry.entry_id, device_id).async_remove()
 
 
 def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
