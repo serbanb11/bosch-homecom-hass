@@ -21,6 +21,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     PERCENTAGE,
     UnitOfEnergy,
+    UnitOfFrequency,
     UnitOfPower,
     UnitOfPressure,
     UnitOfTemperature,
@@ -155,6 +156,22 @@ async def async_setup_entry(
                         coordinator=coordinator, config_entry=config_entry
                     )
                 )
+                # Read from the history service in the background, so none of
+                # these is there at setup; each is added on the first update
+                # that carries its field, and never on a unit without them.
+                history_pending: list[_PendingSensor] = []
+                for history_description in BACON_HISTORY_SENSORS:
+                    _add_or_defer(
+                        _bacon_history_sensor_candidate(
+                            coordinator, config_entry, history_description
+                        ),
+                        entities,
+                        history_pending,
+                    )
+                if history_pending:
+                    _add_pending_sensors_later(
+                        coordinator, config_entry, history_pending, async_add_entities
+                    )
             if device_type == BACON_AP_TYPE:
                 # The purifier's readings: whichever of the known fields this
                 # model publishes (an Air 4000i sends airQuality, pm2_5 and
@@ -4899,3 +4916,180 @@ class BoschComBaconApSensor(BoschComSensorBase):
             if level is not None:
                 attrs["level"] = level
         return attrs
+
+
+# --- Bacon AC: energy totals and extended readings (history service, #202) ---
+
+
+@dataclass(frozen=True)
+class BaconHistorySensorDescription:
+    """A field of a bacon AC's history record (``emon`` or ``extended``)."""
+
+    record: str
+    field: str
+    translation_key: str
+    unique_suffix: str
+    device_class: SensorDeviceClass
+    native_unit: str
+    state_class: SensorStateClass
+    icon: str | None = None
+
+
+def _bacon_energy(field: str, key: str, suffix: str) -> BaconHistorySensorDescription:
+    return BaconHistorySensorDescription(
+        record="emon",
+        field=field,
+        translation_key=key,
+        unique_suffix=suffix,
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    )
+
+
+BACON_HISTORY_SENSORS: tuple[BaconHistorySensorDescription, ...] = (
+    # Lifetime counters (the app's "Energiemonitoring"), usable on the Energy
+    # dashboard. Electrical = consumed, thermal = heat moved.
+    _bacon_energy(
+        "totalElectricalEnergyConsumptionHeat",
+        "bacon_energy_heat",
+        "energy-consumption-heat",
+    ),
+    _bacon_energy(
+        "totalElectricalEnergyConsumptionCool",
+        "bacon_energy_cool",
+        "energy-consumption-cool",
+    ),
+    _bacon_energy(
+        "totalElectricalEnergyConsumptionDry",
+        "bacon_energy_dry",
+        "energy-consumption-dry",
+    ),
+    _bacon_energy(
+        "totalElectricalEnergyConsumptionFan",
+        "bacon_energy_fan",
+        "energy-consumption-fan",
+    ),
+    _bacon_energy(
+        "totalThermalEnergyOutputHeat",
+        "bacon_thermal_energy_heat",
+        "thermal-energy-heat",
+    ),
+    _bacon_energy(
+        "totalThermalEnergyOutputCool",
+        "bacon_thermal_energy_cool",
+        "thermal-energy-cool",
+    ),
+    # The newest row the unit wrote (every 30 minutes): measured_at says when.
+    BaconHistorySensorDescription(
+        record="extended",
+        field="currentRealTimePower",
+        translation_key="bacon_power",
+        unique_suffix="power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    BaconHistorySensorDescription(
+        record="extended",
+        field="outdoorTemp",
+        translation_key="bacon_outdoor_temperature",
+        unique_suffix="outdoor-temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    BaconHistorySensorDescription(
+        record="extended",
+        field="compFreq",
+        translation_key="bacon_compressor_frequency",
+        unique_suffix="compressor-frequency",
+        device_class=SensorDeviceClass.FREQUENCY,
+        native_unit=UnitOfFrequency.HERTZ,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:sine-wave",
+    ),
+)
+
+
+def _bacon_history_value(
+    coordinator: BoschComModuleCoordinatorBaconRac,
+    description: BaconHistorySensorDescription,
+) -> tuple[float | None, dict]:
+    """Return a history field and its record (empty when absent)."""
+    data = coordinator.data
+    history = (getattr(data, "history", None) if data else None) or {}
+    record = history.get(description.record) or {}
+    value = record.get(description.field)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None, record
+    return value, record
+
+
+def _bacon_history_sensor_candidate(
+    coordinator: BoschComModuleCoordinatorBaconRac,
+    config_entry: config_entries.ConfigEntry,
+    description: BaconHistorySensorDescription,
+) -> _PendingSensor:
+    """Add the sensor once the history service has served its field."""
+    return (
+        lambda: _bacon_history_value(coordinator, description)[0] is not None,
+        lambda: BoschComBaconHistorySensor(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            description=description,
+        ),
+    )
+
+
+class BoschComBaconHistorySensor(BoschComSensorBase):
+    """A bacon AC reading read back from Bosch's history service (#202).
+
+    The unit's data-lake records never reach MQTT; the HomeCom app reads them
+    from the history service, and so does this. They are written every 30
+    minutes, so even ``currentRealTimePower`` is up to that old: the extended
+    readings carry the row's own time as ``measured_at``, and go unknown when
+    the unit wrote none in the last two hours. The energy counters are lifetime
+    totals and keep their last value.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschComModuleCoordinatorBaconRac,
+        config_entry: config_entries.ConfigEntry,
+        description: BaconHistorySensorDescription,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            unique_id=f"{coordinator.unique_id}-{description.unique_suffix}",
+            icon=description.icon,
+        )
+        self._description = description
+        self._attr_translation_key = description.translation_key
+        self._attr_should_poll = False
+        self._attr_device_class = description.device_class
+        self._attr_native_unit_of_measurement = description.native_unit
+        self._attr_state_class = description.state_class
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the field from the latest history read."""
+        return _bacon_history_value(self.coordinator, self._description)[0]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose when an extended reading was taken."""
+        if self._description.record != "extended":
+            return {}
+        timestamp = _bacon_history_value(self.coordinator, self._description)[1].get(
+            "timestamp"
+        )
+        if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+            return {}
+        return {
+            "measured_at": datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+        }

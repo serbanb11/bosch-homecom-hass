@@ -1,6 +1,7 @@
 """Fixtures for testing."""
 
 import threading
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -27,3 +28,17 @@ def whitelist_pycares_shutdown_thread():
         if "_run_safe_shutdown_loop" in t.name:
             # The plugin already ignores threads starting with 'waitpid-'
             t.name = f"waitpid-{t.ident}"
+
+
+@pytest.fixture(autouse=True)
+def no_bacon_history_requests():
+    """Keep the bacon AC's background history read off the network.
+
+    Every bacon update now schedules it (#202); tests about it patch the same
+    target themselves.
+    """
+    with patch(
+        "custom_components.bosch_homecom.coordinator.async_get_rac_history",
+        AsyncMock(return_value={"emon": None, "extended": None}),
+    ):
+        yield

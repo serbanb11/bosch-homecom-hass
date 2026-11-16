@@ -21,6 +21,7 @@ from homeassistant.core import (
 from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -47,19 +48,24 @@ from homecom_alt import (
     InvalidSensorDataError,
     MqttNotAuthorizedError,
     NotRespondingError,
+    async_get_rac_history,
     decode_jwt_exp,
     decode_jwt_sub,
 )
+from homecom_alt.const import BACON_DEFAULT_REGION
 from tenacity import RetryError
 
 from .bacon import humanize_appliance_type
 from .const import (
+    BACON_HISTORY_INTERVAL,
     BACON_MODE_FIELDS,
+    BACON_RAC_TYPE,
     BACON_RECONNECT_MARGIN,
     BACON_RECONNECT_MIN_DELAY,
     BACON_TOPIC_META,
     BACON_TOPICS_PREFIX,
     CLOUD_AUTH_FAILURES_BEFORE_REFRESH,
+    CONF_BACON_REGION,
     CONF_BACON_TITLES,
     CONF_REFRESH,
     DEFAULT_UPDATE_INTERVAL,
@@ -1559,6 +1565,13 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
         # the unit just left. Entities must not block a write on it (#164).
         self.meta_stale = False
 
+        # Energy totals and extended readings from the history service (#202),
+        # ACs only. Read in the background every BACON_HISTORY_INTERVAL; a
+        # failed read keeps the last answer.
+        self._history: dict | None = None
+        self._history_next: datetime | None = None
+        self._history_task: asyncio.Task | None = None
+
         client.register_listener(self.unique_id, self._handle_push)
         client.register_raw_listener(self._handle_topic)
         entry.async_on_unload(lambda: client.remove_raw_listener(self._handle_topic))
@@ -1642,7 +1655,56 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             sensor=self.bhc.sensor,
             metadata=self.bhc.metadata,
             info=info,
+            history=self._history,
         )
+
+    @callback
+    def _schedule_history_refresh(self) -> None:
+        """Start a history read in the background when one is due.
+
+        Kept off the poll on purpose: the shadow read must neither wait for nor
+        fail with a second backend. Entities pick the result up through
+        async_set_updated_data when the read lands.
+        """
+        if self.device.get("deviceType") != BACON_RAC_TYPE:
+            return
+        if self._history_task is not None and not self._history_task.done():
+            return
+        now = dt_util.utcnow()
+        if self._history_next is not None and now < self._history_next:
+            return
+        # Also on failure: the next try waits a full interval.
+        self._history_next = now + BACON_HISTORY_INTERVAL
+        self._history_task = self.entry.async_create_background_task(
+            self.hass,
+            self._async_refresh_history(),
+            name=f"{DOMAIN} bacon history {self.unique_id}",
+        )
+
+    async def _async_refresh_history(self) -> None:
+        """Read the energy totals and the newest extended record.
+
+        Uses the token the MQTT session and the presence heartbeat use, as is:
+        no refresh is triggered from here, and every failure (a 401 included,
+        the library raises only ApiError) is logged and dropped, so this read
+        can never start a re-authentication.
+        """
+        token = self.token_manager.token or self.entry.data.get(CONF_TOKEN)
+        if not token:
+            return
+        region = self.entry.data.get(CONF_BACON_REGION) or BACON_DEFAULT_REGION
+        try:
+            history = await async_get_rac_history(
+                async_get_clientsession(self.hass), token, self.unique_id, region
+            )
+        except ApiError as err:
+            _LOGGER.debug(
+                "Device_Id: %s, bacon history read failed: %s", self.unique_id, err
+            )
+            return
+        self._history = history
+        if self.data is not None:
+            self.async_set_updated_data(self._build({}))
 
     def _sync_versions(self, info: dict | None) -> None:
         """Put the gateway's firmware and hardware versions on the device.
@@ -1865,6 +1927,10 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             TimeoutError,
         ) as err:
             raise UpdateFailed(err) from err
+        # Before _build: a read that completes eagerly (no I/O wait) is then in
+        # this poll's data; one that suspends lands later via
+        # async_set_updated_data.
+        self._schedule_history_refresh()
         data = self._build(state)
         self._async_withdraw_reauth()
         return data

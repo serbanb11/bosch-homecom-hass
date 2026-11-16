@@ -653,6 +653,33 @@
       "bacon_humidity": {
         "name": "Humidity (last reported)"
       },
+      "bacon_energy_heat": {
+        "name": "Energy consumption heating"
+      },
+      "bacon_energy_cool": {
+        "name": "Energy consumption cooling"
+      },
+      "bacon_energy_dry": {
+        "name": "Energy consumption dehumidifying"
+      },
+      "bacon_energy_fan": {
+        "name": "Energy consumption fan"
+      },
+      "bacon_thermal_energy_heat": {
+        "name": "Heat output heating"
+      },
+      "bacon_thermal_energy_cool": {
+        "name": "Heat output cooling"
+      },
+      "bacon_power": {
+        "name": "Power (last reported)"
+      },
+      "bacon_outdoor_temperature": {
+        "name": "Outdoor temperature (last reported)"
+      },
+      "bacon_compressor_frequency": {
+        "name": "Compressor frequency (last reported)"
+      },
       "hc_actual_supply_temp": {
         "name": "{circuit} supply temperature"
       },

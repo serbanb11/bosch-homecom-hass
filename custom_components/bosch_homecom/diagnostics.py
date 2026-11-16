@@ -174,6 +174,9 @@ async def async_get_config_entry_diagnostics(
                         "sensor": getattr(data, "sensor", None),
                         "metadata": getattr(data, "metadata", None),
                         "info": getattr(data, "info", None),
+                        # Energy totals and extended readings from the history
+                        # service (#202); the query asks for no serial number.
+                        "history": getattr(data, "history", None),
                     },
                     TO_REDACT_RAW,
                 )
