@@ -484,6 +484,13 @@ def test_extract_auth_code(pasted):
     assert extract_auth_code(pasted) == AUTH_CODE
 
 
+def test_extract_auth_code_keeps_url_encoding():
+    """homecom_alt puts the code into the form body as it is, so it stays as
+    it appears in the URL, also with an encoded character."""
+    encoded = "0123456789ABCDEF%2F0123456789ABCDEF-1"
+    assert extract_auth_code(REDIRECT_URL.replace(AUTH_CODE, encoded)) == encoded
+
+
 @pytest.mark.asyncio
 async def test_async_step_browser_accepts_console_line(hass):
     """Pasting the browser's console line logs in with the code inside it."""

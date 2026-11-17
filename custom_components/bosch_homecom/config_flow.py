@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import logging
 import re
 from typing import Any
-from urllib.parse import unquote
 
 from aiohttp import ClientConnectorError
 from homeassistant import config_entries
@@ -103,7 +102,9 @@ def extract_auth_code(text: str) -> str:
     """
     text = text.strip()
     if match := _AUTH_CODE_IN_TEXT.search(text):
-        return unquote(match.group(1))
+        # As it appears in the URL: homecom_alt puts it into the form body
+        # as it is, so it must stay URL-encoded.
+        return match.group(1)
     return text.strip("'\"")
 
 
