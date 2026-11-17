@@ -290,11 +290,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     local_conf[CONF_LOCAL_TOKEN],
                     device_id=device_id,
                 )
-                _LOGGER.debug(
-                    "Device_Id: %s, local API enabled at %s",
-                    device_id,
-                    local_conf[CONF_LOCAL_HOST],
-                )
+                # The host identifies the home network; diagnostics redacts it.
+                _LOGGER.debug("Device_Id: %s, local API enabled", device_id)
             coordinators.append(
                 BoschComModuleCoordinatorK40(
                     hass,
@@ -465,7 +462,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.warning(
             "Device %s is not responding and was skipped; it is set up "
             "automatically once it answers again: %s",
-            coordinator.unique_id,
+            getattr(coordinator, "log_id", coordinator.unique_id),
             result,
         )
         _async_reload_when_back(hass, entry, coordinator)
@@ -642,7 +639,7 @@ async def _async_bacon_device_type(client: BaconMqttClient, serial: str) -> str:
         _LOGGER.warning(
             "Could not tell whether bacon device %s is an AC or an air purifier, "
             "assuming AC: %s",
-            serial,
+            _mask_serial(serial),
             err,
         )
         return BACON_RAC_TYPE
@@ -869,7 +866,9 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         device_id = str(call.data.get("device_id"))
         coordinator = _find_coordinator_by_device_id(hass, device_id)
         if coordinator is None:
-            _LOGGER.error("Coordinator not found for device %s", device_id)
+            _LOGGER.error(
+                "Coordinator not found for device %s", _mask_serial(device_id)
+            )
             return {}
         if coordinator.device.get("deviceType") not in BACON_DEVICE_TYPES:
             _LOGGER.error("Device %s is not a Matter/bacon device", device_id)

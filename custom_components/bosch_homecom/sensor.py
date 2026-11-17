@@ -13,6 +13,7 @@ from typing import Any, Final, Optional
 
 from homeassistant import config_entries, core
 from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -64,6 +65,7 @@ from .coordinator import (
     BoschComModuleCoordinatorRrc2,
     BoschComModuleCoordinatorWddw2,
 )
+from .diagnostics import TO_REDACT_RAW, _mask_serial
 from .local_sensor import (
     LOCAL_OPTIONAL_SENSORS,
     LOCAL_SENSORS,
@@ -582,17 +584,12 @@ async def async_setup_entry(
     for coordinator in coordinators:
         devtype = (coordinator.data.device or {}).get("deviceType")
         try:
-            obj = coordinator.data
-            if hasattr(obj, "asdict"):
-                snapshot = obj.asdict()
-            elif hasattr(obj, "__dict__"):
-                snapshot = dict(obj.__dict__)
-            else:
-                snapshot = obj
             _LOGGER.debug(
                 "BOSCH DATA SNAPSHOT (%s):\n%s",
                 devtype,
-                json.dumps(snapshot, indent=2, ensure_ascii=False),
+                json.dumps(
+                    _redacted_snapshot(coordinator.data), indent=2, ensure_ascii=False
+                ),
             )
         except Exception:
             _LOGGER.exception("Failed to dump coordinator data for %s", devtype)
@@ -778,11 +775,6 @@ class BoschComSensorBase(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = unique_id
         self._attr_icon = icon
         self._attr_device_info = coordinator.device_info
-
-        _LOGGER.debug(
-            "Init base class: unique_id=%s",
-            self._attr_unique_id,
-        )
 
 
 def _notification_code(item: Any) -> str | None:
@@ -3101,6 +3093,33 @@ class BoschComRrc2Sensor(CoordinatorEntity, SensorEntity):
             if isinstance(node, dict) and node.get("value") is not None:
                 attributes[name] = node["value"]
         return attributes
+
+
+def _redacted_snapshot(obj: Any) -> Any:
+    """Return coordinator data for the debug log, redacted like diagnostics.
+
+    Debug logs end up pasted into public issues just like a diagnostics dump.
+    A Matter device's shadow and topics/info carry its pairing secrets, MAC,
+    SSID and serials, and its serial is its identity on Bosch's backend, so
+    the same fields are redacted and the serial is masked.
+    """
+    if hasattr(obj, "asdict"):
+        snapshot = obj.asdict()
+    elif hasattr(obj, "__dict__"):
+        snapshot = dict(obj.__dict__)
+    else:
+        snapshot = obj
+    if isinstance(snapshot, dict):
+        device = snapshot.get("device")
+        if isinstance(device, dict) and device.get("deviceType") in BACON_DEVICE_TYPES:
+            snapshot = {
+                **snapshot,
+                "device": {
+                    **device,
+                    "deviceId": _mask_serial(str(device.get("deviceId", ""))),
+                },
+            }
+    return async_redact_data(snapshot, TO_REDACT_RAW)
 
 
 def _rrc2_pressure_candidate(

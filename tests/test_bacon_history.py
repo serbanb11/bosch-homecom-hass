@@ -282,3 +282,13 @@ def test_a_stale_extended_row_goes_unknown_but_totals_stay():
     assert entities["86DM-1-power"].native_value is None
     assert entities["86DM-1-power"].extra_state_attributes == {}
     assert entities["86DM-1-energy-consumption-heat"].native_value == 12.5
+
+
+async def test_a_failed_read_logs_a_masked_serial(hass, entry, caplog):
+    caplog.set_level("DEBUG", logger="custom_components.bosch_homecom")
+    coordinator = _coordinator(hass, entry)
+    with patch(_FETCH, AsyncMock(side_effect=ApiError("Bacon history: 500"))):
+        await _update(hass, coordinator)
+
+    assert "86DM***, bacon history read failed" in caplog.text
+    assert "86DM-1" not in caplog.text

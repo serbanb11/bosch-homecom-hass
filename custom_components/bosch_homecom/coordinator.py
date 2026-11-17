@@ -102,6 +102,7 @@ from .const import (
     WDDW2_RECORDINGS_POLL_INTERVAL,
     WDDW2_WATER_TODAY_KEY,
 )
+from .diagnostics import _mask_serial
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1537,6 +1538,9 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
         self._lock = lock
         self.auth_provider = auth_provider
         self.unique_id = device["deviceId"]
+        # The serial is the device's identity on Bosch's backend and logs end
+        # up in public issues: log a masked form, as diagnostics does.
+        self.log_id = _mask_serial(self.unique_id)
         self.device = device
         self.entry = entry
         self.firmware = firmware["value"]
@@ -1699,7 +1703,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             )
         except ApiError as err:
             _LOGGER.debug(
-                "Device_Id: %s, bacon history read failed: %s", self.unique_id, err
+                "Device_Id: %s, bacon history read failed: %s", self.log_id, err
             )
             return
         self._history = history
@@ -1751,7 +1755,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
         new_data[CONF_TOKEN] = self.token_manager.token
         new_data[CONF_REFRESH] = self.token_manager.refresh_token
         self.hass.config_entries.async_update_entry(self.entry, data=new_data)
-        _LOGGER.debug("Device_Id: %s, persisted refreshed auth tokens", self.unique_id)
+        _LOGGER.debug("Device_Id: %s, persisted refreshed auth tokens", self.log_id)
 
     async def _async_session_token(self, *, force_refresh: bool = False) -> str | None:
         """Return the access token to open the MQTT session with.
@@ -1853,7 +1857,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
                     return
                 _LOGGER.debug(
                     "Device_Id: %s, reconnecting bacon MQTT ahead of token expiry",
-                    self.unique_id,
+                    self.log_id,
                 )
                 await self._async_connect(token)
         except (
@@ -1868,7 +1872,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             # here only costs the head start.
             _LOGGER.debug(
                 "Device_Id: %s, scheduled bacon reconnect failed: %s",
-                self.unique_id,
+                self.log_id,
                 err,
             )
         finally:
@@ -1898,7 +1902,7 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             except MqttNotAuthorizedError:
                 _LOGGER.debug(
                     "Device_Id: %s, bacon MQTT refused the token, forcing a refresh",
-                    self.unique_id,
+                    self.log_id,
                 )
                 token = await self._async_session_token(force_refresh=True)
                 try:
@@ -1966,5 +1970,5 @@ class BoschComModuleCoordinatorBaconRac(DataUpdateCoordinator[BHCDeviceBacon]):
             )
             _LOGGER.debug(
                 "Device_Id: %s, withdrew stale re-authentication request",
-                self.unique_id,
+                self.log_id,
             )
