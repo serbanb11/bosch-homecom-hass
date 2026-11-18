@@ -4,7 +4,9 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.climate import ClimateEntityFeature, HVACMode
+from homeassistant.exceptions import HomeAssistantError
 from homecom_alt import BHCDeviceIcom, BHCDeviceK40, BHCDeviceRac, BHCDeviceRrc2
+import pytest
 
 from custom_components.bosch_homecom.climate import (
     BoschComK40Climate,
@@ -108,8 +110,15 @@ def test_rac_without_vertical_or_fan_gates_those_features():
     assert climate.fan_mode is None
 
 
-def _make_k40_coordinator(suwi=None, heatcool=None):
-    """Create a mock K40 coordinator with a single hc1 circuit."""
+def _make_k40_coordinator(
+    suwi=None, heatcool=None, suwi_switch=None, suwi_writable=True
+):
+    """Create a mock K40 coordinator with a single hc1 circuit.
+
+    ``suwi_switch`` is the ``suWiSwitchMode`` *setting* (the writable resource).
+    Leave it ``None`` to emulate a gateway (e.g. a K30) that does not serve a
+    writable summer/winter switch at all (#186).
+    """
     hc1 = {
         "id": "/heatingCircuits/hc1",
         "operationMode": {"value": "auto"},
@@ -117,6 +126,12 @@ def _make_k40_coordinator(suwi=None, heatcool=None):
         "heatCoolMode": {"value": heatcool},
         "currentRoomSetpoint": {"value": 21, "unitOfMeasure": "C"},
     }
+    if suwi_switch is not None:
+        hc1["suWiSwitchMode"] = {
+            "value": suwi_switch,
+            "allowedValues": ["off", "automatic", "forced"],
+            "writeable": 1 if suwi_writable else 0,
+        }
     coordinator = MagicMock()
     coordinator.unique_id = "k40123"
     coordinator.device_info = {"identifiers": {("bosch_homecom", "k40123")}}
@@ -358,6 +373,120 @@ def test_k40_room_temperature_still_uses_room_temp_key():
     climate.set_attr()
 
     assert climate.native_current_temperature == 20.5
+
+
+async def test_set_hvac_mode_off_uses_suwi_switch():
+    """OFF writes the writable SuWi switch setting, not operationMode.
+
+    The K40 operationMode resource only accepts manual/auto; writing "off"
+    there is rejected by the cloud (HTTP 400), so the card drives the
+    summer/winter switch instead.
+    """
+    coordinator = _make_k40_coordinator(
+        suwi="forced", heatcool="heating", suwi_switch="forced"
+    )
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_hvac_mode(HVACMode.OFF)
+
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_awaited_once_with(
+        "k40123", "hc1", "off"
+    )
+    coordinator.bhc.async_put_hc_operation_mode.assert_not_awaited()
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_set_hvac_mode_auto_keeps_operation_mode():
+    """AUTO still means "follow the schedule": it writes operationMode auto.
+
+    It must not touch the switch when the circuit is not off, so the K30 path
+    (no writable switch) and the schedule semantics are unchanged.
+    """
+    coordinator = _make_k40_coordinator(
+        suwi="forced", heatcool="heating", suwi_switch="forced"
+    )
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_hvac_mode(HVACMode.AUTO)
+
+    coordinator.bhc.async_put_hc_operation_mode.assert_awaited_once_with(
+        "k40123", "hc1", "auto"
+    )
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_not_awaited()
+
+
+async def test_set_hvac_mode_auto_restores_forced_after_off():
+    """Leaving OFF restores the previous non-off switch value, e.g. forced."""
+    coordinator = _make_k40_coordinator(
+        suwi="forced", heatcool="heating", suwi_switch="forced"
+    )
+    climate = _make_climate(coordinator)
+
+    # The user picks OFF, then AUTO. The switch goes off, then back to forced.
+    coordinator.data.heating_circuits[0]["suWiSwitchMode"]["value"] = "off"
+    climate.set_attr()
+
+    await climate.async_set_hvac_mode(HVACMode.AUTO)
+
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_awaited_once_with(
+        "k40123", "hc1", "forced"
+    )
+    coordinator.bhc.async_put_hc_operation_mode.assert_awaited_once_with(
+        "k40123", "hc1", "auto"
+    )
+
+
+async def test_set_hvac_mode_off_without_writable_switch_raises():
+    """A gateway without a writable switch fails loudly, never silently."""
+    coordinator = _make_k40_coordinator(suwi="forced", heatcool="heating")
+    climate = _make_climate(coordinator)
+
+    with pytest.raises(HomeAssistantError):
+        await climate.async_set_hvac_mode(HVACMode.OFF)
+
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_not_awaited()
+    coordinator.bhc.async_put_hc_operation_mode.assert_not_awaited()
+
+
+async def test_set_hvac_mode_auto_without_writable_switch_still_works():
+    """AUTO keeps working on a K30-style gateway through operationMode (#186)."""
+    coordinator = _make_k40_coordinator(suwi="forced", heatcool="heating")
+    climate = _make_climate(coordinator)
+
+    await climate.async_set_hvac_mode(HVACMode.AUTO)
+
+    coordinator.bhc.async_put_hc_operation_mode.assert_awaited_once_with(
+        "k40123", "hc1", "auto"
+    )
+    coordinator.bhc.async_put_hc_suwi_switch_mode.assert_not_awaited()
+
+
+def test_suwi_switch_off_reports_hvac_mode_off():
+    """Only the switch *setting* means OFF, not the live currentSuWiMode."""
+    coordinator = _make_k40_coordinator(
+        suwi="off", heatcool="heating", suwi_switch="off"
+    )
+    climate = _make_climate(coordinator)
+
+    climate.set_attr()
+
+    assert climate.hvac_mode == HVACMode.OFF
+
+
+def test_summer_idle_on_automatic_stays_auto():
+    """A summer-idle circuit (currentSuWiMode off) on automatic stays AUTO.
+
+    currentSuWiMode reports the live mode, so reading OFF from it bounced the
+    card back to OFF on the next poll — the switch setting is the real state.
+    """
+    coordinator = _make_k40_coordinator(
+        suwi="off", heatcool="heating", suwi_switch="automatic"
+    )
+    climate = _make_climate(coordinator)
+
+    climate.set_attr()
+
+    assert climate.hvac_mode == HVACMode.AUTO
 
 
 def test_icom_room_temperature_reaches_the_status_sensor_attribute():
