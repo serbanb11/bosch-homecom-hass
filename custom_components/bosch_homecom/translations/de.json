@@ -25,7 +25,7 @@
         "title": "Authentifizierung"
       },
       "browser": {
-        "description": "Melden Sie sich im Browser über die [URL]({url}) in der Readme an und erfassen Sie den Code mit den Entwicklertools des Browsers.",
+        "description": "1. Öffnen Sie die [SingleKey-ID-Anmeldung]({url}) und melden Sie sich an. Danach scheint die Seite nichts zu tun; das ist so gewollt.\n2. Drücken Sie F12 und öffnen Sie den Reiter **Konsole**.\n3. Kopieren Sie die rote Zeile, die mit „Failed to launch“ beginnt, und fügen Sie sie unten ein. Die ganze URL oder nur der Code (endet auf -1) geht auch.\n\nDer Code gilt nur einmal und läuft schnell ab. Details und weitere Wege stehen in der README.",
         "data": {
           "code": "SingleKey ID Code"
         },

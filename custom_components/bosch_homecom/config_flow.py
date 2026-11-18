@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 import logging
+import re
 from typing import Any
 
 from aiohttp import ClientConnectorError
@@ -86,6 +87,26 @@ AUTH_SCHEMA = vol.Schema(
 
 BROWSER_AUTH_SCHEMA = vol.Schema({vol.Required(CONF_CODE): cv.string})
 
+# The code inside the redirect URL, wherever that URL appears in the pasted text.
+_AUTH_CODE_IN_TEXT = re.compile(r"[?&]code=([^&#\s'\"]+)")
+
+
+def extract_auth_code(text: str) -> str:
+    """Return the authorization code from what the user pasted.
+
+    SingleKey redirects to the app scheme (``com.bosch.tt.dashtt.pointt://``),
+    which no browser can open. Chrome and Edge log the whole redirect URL as a
+    console error ("Failed to launch '...?code=...&state=...'"), even when the
+    developer tools are opened only after the login. Accepting that line, the
+    redirect URL or the bare code spares users cutting the code out by hand.
+    """
+    text = text.strip()
+    if match := _AUTH_CODE_IN_TEXT.search(text):
+        # As it appears in the URL: homecom_alt puts it into the form body
+        # as it is, so it must stay URL-encoded.
+        return match.group(1)
+    return text.strip("'\"")
+
 
 class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
     """Bosch HomeCom config flow."""
@@ -131,9 +152,13 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
         if user_input is not None:
+            user_input = {
+                **user_input,
+                CONF_CODE: extract_auth_code(user_input.get(CONF_CODE) or ""),
+            }
             try:
                 options = ConnectionOptions(
-                    code=user_input.get(CONF_CODE),
+                    code=user_input[CONF_CODE],
                     brand=brand,
                 )
 
