@@ -441,6 +441,12 @@ BACON_RECONNECT_MARGIN = timedelta(minutes=10)
 # expiring token cannot spin up a tight reconnect loop.
 BACON_RECONNECT_MIN_DELAY = timedelta(minutes=1)
 
+# How often a bacon AC's energy totals and extended readings are read from the
+# history service (#202). The device writes them every 30 minutes
+# (dataLake*PublishInterval 1800 s), so a quarter hour keeps a value at most
+# ~45 minutes old without asking twice for the same row.
+BACON_HISTORY_INTERVAL = timedelta(minutes=15)
+
 # Shadow fields whose change makes the cached topics/meta describe the wrong
 # mode: the device republishes meta with new ``ro`` flags after either moves.
 BACON_MODE_FIELDS: tuple[str, ...] = ("powerEnabled", "opMode")

@@ -654,6 +654,33 @@
       "bacon_humidity": {
         "name": "Luftfeuchtigkeit (zuletzt gemeldet)"
       },
+      "bacon_energy_heat": {
+        "name": "Energieverbrauch Heizen"
+      },
+      "bacon_energy_cool": {
+        "name": "Energieverbrauch Kühlen"
+      },
+      "bacon_energy_dry": {
+        "name": "Energieverbrauch Entfeuchten"
+      },
+      "bacon_energy_fan": {
+        "name": "Energieverbrauch Lüften"
+      },
+      "bacon_thermal_energy_heat": {
+        "name": "Wärmeabgabe Heizen"
+      },
+      "bacon_thermal_energy_cool": {
+        "name": "Wärmeabgabe Kühlen"
+      },
+      "bacon_power": {
+        "name": "Leistung (zuletzt gemeldet)"
+      },
+      "bacon_outdoor_temperature": {
+        "name": "Außentemperatur (zuletzt gemeldet)"
+      },
+      "bacon_compressor_frequency": {
+        "name": "Verdichterfrequenz (zuletzt gemeldet)"
+      },
       "hc_actual_supply_temp": {
         "name": "{circuit} Vorlauftemperatur"
       },

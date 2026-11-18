@@ -212,7 +212,7 @@ class BoschHomecomConfigFlow(ConfigFlow, domain=DOMAIN):
             self.data[CONF_REFRESH] = bhc.refresh_token
             self.data[CONF_TOKEN] = bhc.token
 
-            _LOGGER.info("Devices: %s", self.data[CONF_DEVICES])
+            _LOGGER.debug("Found %s devices", len(self.data[CONF_DEVICES]))
             return await self.async_step_devices()
 
         return self.async_show_form(

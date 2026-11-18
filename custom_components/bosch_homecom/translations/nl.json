@@ -652,6 +652,33 @@
       "bacon_humidity": {
         "name": "Luchtvochtigheid (laatst gemeld)"
       },
+      "bacon_energy_heat": {
+        "name": "Energieverbruik verwarmen"
+      },
+      "bacon_energy_cool": {
+        "name": "Energieverbruik koelen"
+      },
+      "bacon_energy_dry": {
+        "name": "Energieverbruik ontvochtigen"
+      },
+      "bacon_energy_fan": {
+        "name": "Energieverbruik ventilator"
+      },
+      "bacon_thermal_energy_heat": {
+        "name": "Warmteafgifte verwarmen"
+      },
+      "bacon_thermal_energy_cool": {
+        "name": "Warmteafgifte koelen"
+      },
+      "bacon_power": {
+        "name": "Vermogen (laatst gemeld)"
+      },
+      "bacon_outdoor_temperature": {
+        "name": "Buitentemperatuur (laatst gemeld)"
+      },
+      "bacon_compressor_frequency": {
+        "name": "Compressorfrequentie (laatst gemeld)"
+      },
       "hc_actual_supply_temp": {
         "name": "{circuit} aanvoertemperatuur"
       },
