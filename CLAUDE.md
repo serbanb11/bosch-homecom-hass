@@ -81,6 +81,7 @@ All entities:
 | `fan.py` | Ventilation fan (K30/K40/ICOM) |
 | `water_heater.py` | K40 and WDDW2 water heater entities |
 | `diagnostics.py` | Config entry diagnostics |
+| `statistics.py` | K30/K40 `emon/*` energy counters as external long-term statistics (`bosch_homecom:<device id>_<counter>`): backfill from the cloud's hourly/daily/monthly recordings, then hourly appends from the recordings poll, in a background task; zero-only counters are remembered per device in `helpers.storage` (#236) |
 | `strings.json` | UI strings (config flow, options, errors, entity translations) |
 
 ## Code Conventions
@@ -116,7 +117,7 @@ pip install pytest pytest-cov pytest-homeassistant-custom-component coverage ruf
 
 ### Dependencies
 
-- Runtime: `homecom_alt>=1.9.4`
+- Runtime: `homecom_alt>=1.9.5`
 - Test: `pytest`, `pytest-cov`, `pytest-homeassistant-custom-component`, `coverage`, `ruff`, `black`, `isort`
 
 ### Running Tests
