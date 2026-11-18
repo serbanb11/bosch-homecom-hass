@@ -87,6 +87,10 @@ The integration requires an authorization code from the Bosch SingleKey ID login
 
 **Energy history (K30/K40/RRC2):** daily and hourly gas input in kWh from `/energy/history`, usable as a gas source in the Energy dashboard. An RRC2 (CT200) gets these, but not the recordings above, which are only read for K40 and icom. Each sensor appears once the gateway serves its history.
 
+**Energy statistics (K30/K40):** each `emon/*` energy counter is also written to Home Assistant's long-term statistics as `bosch_homecom:<device id>_<counter>` (for example `bosch_homecom:101756851_heat_produced_total`), which the energy dashboard can use. The first time, the integration loads the history the cloud still keeps: hourly values for about ten days, daily values for about two months and monthly values back to the installation. A daily or monthly value is shown on the first hour of its day or month. After that it adds each hour from the regular recordings poll, with no extra requests, and after Home Assistant has been down it reads back the hours missed while the cloud still has them. A counter that only ever reports zero (hot water on a unit without a tank) gets no statistic.
+
+In the energy dashboard, use either these statistics or the `emon` energy sensors above for the same counter, not both: they carry the same energy, which would then be counted twice.
+
 ### Local network access (K 40 RF)
 
 A K 40 RF gateway on firmware **15.00.01 or newer** can also be read over your LAN, using the [Local API published by Bosch](https://github.com/bosch-home-comfort/api-docs). It is optional, set up per gateway, and **read-only**: every control still goes through the cloud, so the cloud account stays required.

@@ -103,6 +103,7 @@ from .const import (
     WDDW2_WATER_TODAY_KEY,
 )
 from .diagnostics import _mask_serial
+from .statistics import async_import_energy, zero_only_store
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -371,6 +372,10 @@ class _K40ExtraEndpointsMixin:
         # the previous day has been read since midnight (see _fetch_recordings).
         self._recordings_day: date | None = None
         self._previous_day_reads = 0
+        # The running statistics import, and the statistic ids of the counters
+        # served without any energy, loaded from their store by the first one.
+        self._statistics_task: asyncio.Task | None = None
+        self._statistics_zero_only: set[str] | None = None
         self._last_hc_tune_fetch = None
 
     async def _async_update_data(self):
@@ -518,6 +523,7 @@ class _K40ExtraEndpointsMixin:
         self._last_recordings_fetch = now
 
         complete = self._store_recordings(result or {}, day)
+        self._start_statistics_import(result or {}, day)
         if day == today:
             self._recordings_day = today
             return
@@ -528,6 +534,58 @@ class _K40ExtraEndpointsMixin:
             self._recordings_day = today
             self._previous_day_reads = 0
             self._last_recordings_fetch = None
+
+    def _start_statistics_import(self, result: dict, day: date) -> None:
+        """Run the statistics import as a background task.
+
+        The history requests of a first import then don't hold up the refresh.
+        While an import still runs, the next one is skipped: each fetch brings
+        the whole day again, and missed days are read back.
+        """
+        if "recorder" not in self.hass.config.components:
+            return
+        if self._statistics_task is not None and not self._statistics_task.done():
+            return
+        self._statistics_task = self.entry.async_create_background_task(
+            self.hass,
+            self._import_statistics(result, day),
+            name=f"{DOMAIN} energy statistics {self.unique_id}",
+        )
+
+    async def _import_statistics(self, result: dict, day: date) -> None:
+        """Add the energy recordings to the long-term statistics (statistics.py).
+
+        A failure only costs this hour's import: the next fetch catches up.
+        """
+        store = zero_only_store(self.hass, self.entry.entry_id, self.unique_id)
+        try:
+            if self._statistics_zero_only is None:
+                self._statistics_zero_only = set(await store.async_load() or [])
+            if await async_import_energy(
+                self.hass,
+                self.bhc,
+                self.unique_id,
+                result,
+                day,
+                self._statistics_zero_only,
+            ):
+                await store.async_save(sorted(self._statistics_zero_only))
+        except (
+            ApiError,
+            InvalidSensorDataError,
+            NotRespondingError,
+            RetryError,
+            TimeoutError,
+        ):
+            _LOGGER.debug(
+                "Device %s: energy statistics import failed, retrying next hour",
+                self.unique_id,
+            )
+        except Exception:
+            # Anything else is a bug: log it, and let the next fetch try again.
+            _LOGGER.exception(
+                "Device %s: energy statistics import failed", self.unique_id
+            )
 
     def _store_recordings(self, result: dict, day: date) -> bool:
         """Aggregate a bulk answer for ``day`` into ``recordings``.
