@@ -607,6 +607,18 @@
       "local_pump_volume_flow": {
         "name": "Pomp-volumestroom"
       },
+      "local_primary_pump_volume_flow": {
+        "name": "Debiet warmtebronpomp"
+      },
+      "local_heat_carrier_pump_speed": {
+        "name": "Toerental warmtebronpomp"
+      },
+      "local_heat_output": {
+        "name": "Warmteafgifte (berekening toestel)"
+      },
+      "local_hc1_flow_temp_setpoint": {
+        "name": "Aanvoersetpoint VC1"
+      },
       "local_starts_ch": {
         "name": "Starts verwarming"
       },
@@ -639,6 +651,33 @@
       },
       "bacon_humidity": {
         "name": "Luchtvochtigheid (laatst gemeld)"
+      },
+      "bacon_energy_heat": {
+        "name": "Energieverbruik verwarmen"
+      },
+      "bacon_energy_cool": {
+        "name": "Energieverbruik koelen"
+      },
+      "bacon_energy_dry": {
+        "name": "Energieverbruik ontvochtigen"
+      },
+      "bacon_energy_fan": {
+        "name": "Energieverbruik ventilator"
+      },
+      "bacon_thermal_energy_heat": {
+        "name": "Warmteafgifte verwarmen"
+      },
+      "bacon_thermal_energy_cool": {
+        "name": "Warmteafgifte koelen"
+      },
+      "bacon_power": {
+        "name": "Vermogen (laatst gemeld)"
+      },
+      "bacon_outdoor_temperature": {
+        "name": "Buitentemperatuur (laatst gemeld)"
+      },
+      "bacon_compressor_frequency": {
+        "name": "Compressorfrequentie (laatst gemeld)"
       },
       "hc_actual_supply_temp": {
         "name": "{circuit} aanvoertemperatuur"
@@ -742,7 +781,11 @@
           "passive_defrost": "Passief ontdooien",
           "shutoff": "Uitgeschakeld",
           "alarm": "Alarm",
-          "test_mode": "Testmodus"
+          "test_mode": "Testmodus",
+          "off": "Uit",
+          "dhw": "Warm water",
+          "pool": "Zwembad",
+          "pool_heat": "Zwembadverwarming"
         }
       },
       "local_supply_setpoint": {
@@ -782,9 +825,19 @@
           "ems2_0": "EMS 2.0",
           "detecting": "Detecteren"
         }
+      },
+      "local_silent_mode_status": {
+        "name": "Stille-modusstatus",
+        "state": {
+          "active": "Actief",
+          "inactive": "Inactief"
+        }
       }
     },
     "binary_sensor": {
+      "local_primary_flow_low": {
+        "name": "Debiet warmtebron onder meetbereik"
+      },
       "wb_network": {
         "name": "Wallbox Netwerk"
       },

@@ -195,6 +195,20 @@ MAX_CLOUD_FAILURES_WITH_LOCAL: Final = 5
 # back to /heatSources/hs1/pumpVolumeFlow on gateways that do not have it.
 HC1_PUMP_VOLUME_FLOW: Final = "/signals/SRC.HC1.FlowCtrl.PumpVolumeFlow"
 
+# Heat source circuit resources. homecom_alt polls all of them (the last three
+# since 1.9.3). Flow through the heat source's own pump (PC0, outdoor unit <->
+# buffer or heating system). Below the sensor's measuring range the
+# gateway reports its LOW_FLOW marker instead of a number.
+PRIMARY_PUMP_VOLUME_FLOW: Final = "/heatSources/hs1/pumpVolumeFlow"
+HEAT_CARRIER_PUMP_SPEED: Final = "/heatSources/hs1/refrigerant/heatCarrierPumpSpeed"
+# Undocumented signal in kW. It tracks the gateway's lifetime heat counter
+# (emon outputProduced), so it is the heat output the appliance calculates,
+# not a measurement of a heat meter.
+HEAT_OUTPUT: Final = "/signals/SRC.CUHP.HP1.CompressorPower"
+# Supply temperature setpoint of heating circuit 1 (heating curve result).
+# OFF_HEAT (0) and OFF_COOL (90) are markers, not setpoints.
+HC1_FLOW_TEMP_SETPOINT: Final = "/signals/SC.HC1.FlowTempSetp"
+
 # How many consecutive failed cloud refreshes to ride out on the last good data
 # before the entities go unavailable, on every device type. The Bosch cloud
 # times out a single /bulk call roughly once an hour (#193), and each blip took
@@ -402,6 +416,17 @@ LOCAL_DHW_CIRCUIT = "/dhwCircuits/dhw1"
 # hardware, so it is read at setup and then once a day, while local access
 # works. It names the appliance for the device registry's model.
 LOCAL_MODULES_POLL_INTERVAL = timedelta(hours=24)
+# Static identity of the gateway. The brand names every module's manufacturer,
+# the hardware version and MACs belong on the gateway's own module device. The
+# inventory can list the K40RF more than once (a CS5800iAW gateway on 15.00.01
+# lists it at 15.00 and 15.00.01); the entry running the gateway's firmware is
+# the gateway itself, the others get no device. Brand and firmware come with
+# homecom_alt's local poll; the rest is read along with the module inventory.
+LOCAL_GATEWAY_BRAND = "/gateway/brand"
+LOCAL_GATEWAY_FIRMWARE = "/gateway/versionFirmware"
+LOCAL_GATEWAY_HW_VERSION = "/gateway/versionHardware"
+LOCAL_GATEWAY_MACS = ("/gateway/eth/mac", "/gateway/wifi/mac")
+LOCAL_GATEWAY_HARDWARE = (LOCAL_GATEWAY_HW_VERSION, *LOCAL_GATEWAY_MACS)
 LOCAL_HC_CIRCUIT = "/heatingCircuits/hc1"
 
 
@@ -415,6 +440,12 @@ BACON_RECONNECT_MARGIN = timedelta(minutes=10)
 # Never schedule a reconnect closer than this, so a short-lived or already
 # expiring token cannot spin up a tight reconnect loop.
 BACON_RECONNECT_MIN_DELAY = timedelta(minutes=1)
+
+# How often a bacon AC's energy totals and extended readings are read from the
+# history service (#202). The device writes them every 30 minutes
+# (dataLake*PublishInterval 1800 s), so a quarter hour keeps a value at most
+# ~45 minutes old without asking twice for the same row.
+BACON_HISTORY_INTERVAL = timedelta(minutes=15)
 
 # Shadow fields whose change makes the cached topics/meta describe the wrong
 # mode: the device republishes meta with new ``ro`` flags after either moves.

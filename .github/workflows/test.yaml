@@ -26,8 +26,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
+        # tox 4.67.14 removed tox.config.of_type._PLACE_HOLDER, which
+        # tox-gh-actions 3.5.0 imports; lift the pin once it is fixed.
         run: |
-          pip install uv tox tox-gh-actions tox-uv
+          pip install uv "tox<4.67.14" tox-gh-actions tox-uv
 
       - name: Test with tox
         run: tox

@@ -609,6 +609,18 @@
       "local_pump_volume_flow": {
         "name": "Pumpen-Volumenstrom"
       },
+      "local_primary_pump_volume_flow": {
+        "name": "Volumenstrom Wärmeerzeugerpumpe"
+      },
+      "local_heat_carrier_pump_speed": {
+        "name": "Drehzahl Wärmeerzeugerpumpe"
+      },
+      "local_heat_output": {
+        "name": "Wärmeleistung (Bosch-Berechnung)"
+      },
+      "local_hc1_flow_temp_setpoint": {
+        "name": "Vorlaufsollwert HK1"
+      },
       "local_starts_ch": {
         "name": "Starts Heizung"
       },
@@ -641,6 +653,33 @@
       },
       "bacon_humidity": {
         "name": "Luftfeuchtigkeit (zuletzt gemeldet)"
+      },
+      "bacon_energy_heat": {
+        "name": "Energieverbrauch Heizen"
+      },
+      "bacon_energy_cool": {
+        "name": "Energieverbrauch Kühlen"
+      },
+      "bacon_energy_dry": {
+        "name": "Energieverbrauch Entfeuchten"
+      },
+      "bacon_energy_fan": {
+        "name": "Energieverbrauch Lüften"
+      },
+      "bacon_thermal_energy_heat": {
+        "name": "Wärmeabgabe Heizen"
+      },
+      "bacon_thermal_energy_cool": {
+        "name": "Wärmeabgabe Kühlen"
+      },
+      "bacon_power": {
+        "name": "Leistung (zuletzt gemeldet)"
+      },
+      "bacon_outdoor_temperature": {
+        "name": "Außentemperatur (zuletzt gemeldet)"
+      },
+      "bacon_compressor_frequency": {
+        "name": "Verdichterfrequenz (zuletzt gemeldet)"
       },
       "hc_actual_supply_temp": {
         "name": "{circuit} Vorlauftemperatur"
@@ -744,7 +783,11 @@
           "passive_defrost": "Passives Abtauen",
           "shutoff": "Abgeschaltet",
           "alarm": "Alarm",
-          "test_mode": "Testbetrieb"
+          "test_mode": "Testbetrieb",
+          "off": "Aus",
+          "dhw": "Warmwasser",
+          "pool": "Pool",
+          "pool_heat": "Poolheizung"
         }
       },
       "local_supply_setpoint": {
@@ -784,9 +827,19 @@
           "ems2_0": "EMS 2.0",
           "detecting": "Erkennung läuft"
         }
+      },
+      "local_silent_mode_status": {
+        "name": "Leisemodus-Status",
+        "state": {
+          "active": "Aktiv",
+          "inactive": "Inaktiv"
+        }
       }
     },
     "binary_sensor": {
+      "local_primary_flow_low": {
+        "name": "Volumenstrom Wärmeerzeuger unter Messbereich"
+      },
       "wb_network": {
         "name": "Wallbox Netzwerk"
       },

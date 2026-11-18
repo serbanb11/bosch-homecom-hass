@@ -56,12 +56,14 @@ All entities:
 - Implement `_handle_coordinator_update()` -> `self.set_attr()` + `self.async_write_ha_state()`
 - Control methods call `self.coordinator.bhc.async_*()` then `self.coordinator.async_request_refresh()`
 - Bacon devices are discovered as bare serials typed `bacon_rac` (entry keys stay `{serial}_bacon_rac`); `__init__.py` resolves the real type after the MQTT connect via `async_classify_bacon_device` (topics/info appliance type → `$package` → state fields) and picks the facade. Shared helpers for bacon entities live in `bacon.py`
+- Bacon ACs also read energy totals and the newest extended record from the history service (GraphQL, `homecom_alt.async_get_rac_history`) in a background task every `BACON_HISTORY_INTERVAL`, with the token the MQTT session uses. That read is best effort and must never trigger a token refresh or reauth (#202)
 - Sensors whose data may be absent at setup use the pending pattern in `sensor.py` (`_add_or_defer`, `_add_pending_sensors_later`): built when their data is present, otherwise added by a coordinator listener on the first update that carries it
 
 ### Services (registered in `async_setup`)
 
 - `set_dhw_tempreture` — Set DHW temperature for a level
 - `set_dhw_extrahot_water` — Control extra hot water charge mode/duration
+- `set_date_time` — Write the gateway clock (`/gateway/DateTime`), HA local time by default
 - `get_custom_path_service` — Query arbitrary API paths (returns response)
 
 ## Key Files
@@ -114,7 +116,7 @@ pip install pytest pytest-cov pytest-homeassistant-custom-component coverage ruf
 
 ### Dependencies
 
-- Runtime: `homecom_alt>=1.9.2`
+- Runtime: `homecom_alt>=1.9.4`
 - Test: `pytest`, `pytest-cov`, `pytest-homeassistant-custom-component`, `coverage`, `ruff`, `black`, `isort`
 
 ### Running Tests

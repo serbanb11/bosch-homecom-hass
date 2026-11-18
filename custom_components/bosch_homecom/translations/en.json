@@ -607,6 +607,18 @@
       "local_pump_volume_flow": {
         "name": "Pump volume flow"
       },
+      "local_primary_pump_volume_flow": {
+        "name": "Heat source pump volume flow"
+      },
+      "local_heat_carrier_pump_speed": {
+        "name": "Heat source pump speed"
+      },
+      "local_heat_output": {
+        "name": "Heat output (appliance calculation)"
+      },
+      "local_hc1_flow_temp_setpoint": {
+        "name": "HC1 supply temperature setpoint"
+      },
       "local_starts_ch": {
         "name": "Heating starts"
       },
@@ -639,6 +651,33 @@
       },
       "bacon_humidity": {
         "name": "Humidity (last reported)"
+      },
+      "bacon_energy_heat": {
+        "name": "Energy consumption heating"
+      },
+      "bacon_energy_cool": {
+        "name": "Energy consumption cooling"
+      },
+      "bacon_energy_dry": {
+        "name": "Energy consumption dehumidifying"
+      },
+      "bacon_energy_fan": {
+        "name": "Energy consumption fan"
+      },
+      "bacon_thermal_energy_heat": {
+        "name": "Heat output heating"
+      },
+      "bacon_thermal_energy_cool": {
+        "name": "Heat output cooling"
+      },
+      "bacon_power": {
+        "name": "Power (last reported)"
+      },
+      "bacon_outdoor_temperature": {
+        "name": "Outdoor temperature (last reported)"
+      },
+      "bacon_compressor_frequency": {
+        "name": "Compressor frequency (last reported)"
       },
       "hc_actual_supply_temp": {
         "name": "{circuit} supply temperature"
@@ -742,7 +781,11 @@
           "passive_defrost": "Passive defrost",
           "shutoff": "Shut off",
           "alarm": "Alarm",
-          "test_mode": "Test mode"
+          "test_mode": "Test mode",
+          "off": "Off",
+          "dhw": "Hot water",
+          "pool": "Pool",
+          "pool_heat": "Pool heating"
         }
       },
       "local_supply_setpoint": {
@@ -782,9 +825,19 @@
           "ems2_0": "EMS 2.0",
           "detecting": "Detecting"
         }
+      },
+      "local_silent_mode_status": {
+        "name": "Silent mode status",
+        "state": {
+          "active": "Active",
+          "inactive": "Inactive"
+        }
       }
     },
     "binary_sensor": {
+      "local_primary_flow_low": {
+        "name": "Heat source flow below measuring range"
+      },
       "wb_network": {
         "name": "Wallbox Network"
       },

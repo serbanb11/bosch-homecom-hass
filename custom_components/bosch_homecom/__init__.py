@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
+import re
 from typing import Any
 
 from aiohttp.client_exceptions import ClientConnectorError, ClientError
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_DEVICES, CONF_TOKEN, Platform
 from homeassistant.core import (
@@ -21,7 +23,10 @@ from homeassistant.core import (
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
+    HomeAssistantError,
     ServiceValidationError,
+    Unauthorized,
+    UnknownUser,
 )
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
@@ -83,6 +88,8 @@ from .coordinator import (
     BoschComModuleCoordinatorRrc2,
     BoschComModuleCoordinatorWddw2,
 )
+from .diagnostics import TO_REDACT_RAW, _mask_serial, _redact_raw_snapshot
+from .statistics import zero_only_store
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -119,6 +126,18 @@ SET_DHW_EXTRAHOT_WATER_SCHEMA = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
+SET_DATE_TIME_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_ids,
+        vol.Optional("date_time"): cv.datetime,
+    },
+    extra=vol.ALLOW_EXTRA,
+)
+
+# The gateway keeps its clock as local time without an offset; after a power
+# cut it can come back with a wrong date and time and raise alarms until set.
+GATEWAY_DATE_TIME_PATH = "/resource/gateway/DateTime"
+GATEWAY_DATE_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
 def _local_only_devices(entry: ConfigEntry) -> list[dict[str, str]]:
@@ -272,11 +291,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     local_conf[CONF_LOCAL_TOKEN],
                     device_id=device_id,
                 )
-                _LOGGER.debug(
-                    "Device_Id: %s, local API enabled at %s",
-                    device_id,
-                    local_conf[CONF_LOCAL_HOST],
-                )
+                # The host identifies the home network; diagnostics redacts it.
+                _LOGGER.debug("Device_Id: %s, local API enabled", device_id)
             coordinators.append(
                 BoschComModuleCoordinatorK40(
                     hass,
@@ -447,7 +463,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.warning(
             "Device %s is not responding and was skipped; it is set up "
             "automatically once it answers again: %s",
-            coordinator.unique_id,
+            getattr(coordinator, "log_id", coordinator.unique_id),
             result,
         )
         _async_reload_when_back(hass, entry, coordinator)
@@ -472,6 +488,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             model=MODEL.get(c.device["deviceType"], c.device["deviceType"]),
             sw_version=c.firmware,
         )
+    # Module sub-devices hang off the appliance's device, which exists only now.
+    for c in coordinators:
+        if hasattr(c, "async_sync_module_devices"):
+            c.async_sync_module_devices()
 
     entry.runtime_data = coordinators
     # Forward the setup to the sensor platform.
@@ -524,6 +544,34 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the user delete a gateway module device the gateway no longer lists.
+
+    Appliances and the modules of the latest inventory stay: setup would only
+    register them again.
+    """
+    for coordinator in getattr(entry, "runtime_data", None) or []:
+        if not hasattr(coordinator, "module_device_removable"):
+            continue
+        removable = coordinator.module_device_removable(device_entry)
+        if removable is not None:
+            return removable
+    # A module device of an appliance that is no longer part of this entry.
+    return any(
+        domain == DOMAIN and "-module-" in identifier
+        for domain, identifier in device_entry.identifiers
+    )
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the zero-only counters the statistics import stored per device."""
+    for key in entry.data.get(CONF_DEVICES) or {}:
+        device_id = key.rpartition("_")[0]
+        await zero_only_store(hass, entry.entry_id, device_id).async_remove()
+
+
 def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
     """Find the coordinator that owns a Bosch device ID."""
     for entry in hass.config_entries.async_entries(DOMAIN):
@@ -536,22 +584,18 @@ def _find_coordinator_by_device_id(hass: HomeAssistant, device_id: str):
 _DHW_CIRCUIT_RE = re.compile(r"dhw\d+")
 
 
-def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
-    """Return ``(coordinator, dhw_id)`` for a DHW-related entity.
+def _resolve_target(hass: HomeAssistant, entity_id: str):
+    """Return ``(coordinator, registry_entry)`` for an entity of this integration.
 
     Resolved through the registries, never from the entity id: the id is
     whatever the user renamed the device or entity to, so splitting it on
     underscores only ever worked for the auto-generated name (#200). The
-    device comes from the entity's device identifiers. The circuit is the
-    ``dhwN`` token of the unique id (wddw2 water heaters, DHW sensors); a K40
-    water heater has none, so its coordinator's single circuit is used, the
-    same way the entity itself writes.
+    device comes from the entity's device identifiers.
     """
     registry_entry = er.async_get(hass).async_get(entity_id)
     if registry_entry is None or registry_entry.platform != DOMAIN:
         raise ServiceValidationError(f"{entity_id} is not a {DOMAIN} entity")
 
-    coordinator = None
     device = (
         dr.async_get(hass).async_get(registry_entry.device_id)
         if registry_entry.device_id
@@ -561,11 +605,18 @@ def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
         if domain == DOMAIN:
             coordinator = _find_coordinator_by_device_id(hass, device_id)
             if coordinator is not None:
-                break
-    if coordinator is None:
-        raise ServiceValidationError(
-            f"No Bosch HomeCom device is set up for {entity_id}"
-        )
+                return coordinator, registry_entry
+    raise ServiceValidationError(f"No Bosch HomeCom device is set up for {entity_id}")
+
+
+def _resolve_dhw_target(hass: HomeAssistant, entity_id: str):
+    """Return ``(coordinator, dhw_id)`` for a DHW-related entity.
+
+    The circuit is the ``dhwN`` token of the unique id (wddw2 water heaters,
+    DHW sensors); a K40 water heater has none, so its coordinator's single
+    circuit is used, the same way the entity itself writes.
+    """
+    coordinator, registry_entry = _resolve_target(hass, entity_id)
 
     for token in (registry_entry.unique_id or "").split("-"):
         if _DHW_CIRCUIT_RE.fullmatch(token):
@@ -596,7 +647,7 @@ async def _async_bacon_device_type(client: BaconMqttClient, serial: str) -> str:
         _LOGGER.warning(
             "Could not tell whether bacon device %s is an AC or an air purifier, "
             "assuming AC: %s",
-            serial,
+            _mask_serial(serial),
             err,
         )
         return BACON_RAC_TYPE
@@ -642,6 +693,30 @@ def _find_bacon_client(hass: HomeAssistant) -> BaconMqttClient | None:
             if isinstance(client, BaconMqttClient):
                 return client
     return None
+
+
+def _admin_only(
+    hass: HomeAssistant,
+    handler: Callable[[ServiceCall], Awaitable[ServiceResponse]],
+) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
+    """Restrict a debug service to admin users.
+
+    The debug services return raw cloud and MQTT payloads, so a non-admin user
+    must not be able to read them. HA's async_register_admin_service has no
+    supports_response, so this mirrors its check: calls without a user (scripts,
+    automations) run, a user that is not an admin is refused.
+    """
+
+    async def _checked(call: ServiceCall) -> ServiceResponse:
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None:
+                raise UnknownUser(context=call.context)
+            if not user.is_admin:
+                raise Unauthorized(context=call.context)
+        return await handler(call)
+
+    return _checked
 
 
 async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -694,6 +769,47 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         schema=SET_DHW_EXTRAHOT_WATER_SCHEMA,
     )
 
+    async def set_date_time_service(call: ServiceCall) -> None:
+        """Service to set the gateway's date and time.
+
+        Writes Home Assistant's local time unless a date and time is given.
+        The gateway stores local time without an offset, so an aware value is
+        converted to Home Assistant's time zone and written as wall-clock time.
+        """
+        value = call.data.get("date_time") or dt_util.now()
+        if value.tzinfo is not None:
+            value = dt_util.as_local(value)
+        written = value.strftime(GATEWAY_DATE_TIME_FORMAT)
+        # Resolve every target first, so a bad one writes nothing, and write
+        # each device once however many of its entities were targeted.
+        targets: dict[str, tuple[Any, str]] = {}
+        for entity_id in call.data["entity_id"]:
+            coordinator, _ = _resolve_target(hass, entity_id)
+            if coordinator.device["deviceType"] in BACON_DEVICE_TYPES:
+                # Matter devices have no pointt gateway, so no clock to set.
+                raise ServiceValidationError(
+                    f"{entity_id} belongs to a Matter device, which does not "
+                    "support setting the date and time"
+                )
+            targets.setdefault(coordinator.unique_id, (coordinator, entity_id))
+        for coordinator, entity_id in targets.values():
+            try:
+                await coordinator.bhc.async_action_universal_put(
+                    coordinator.unique_id, GATEWAY_DATE_TIME_PATH, written
+                )
+            except ApiError as err:
+                raise HomeAssistantError(
+                    f"Could not set the date and time on {entity_id}: {err}"
+                ) from err
+
+    # Register our service with Home Assistant.
+    hass.services.async_register(
+        DOMAIN,
+        "set_date_time",
+        set_date_time_service,
+        schema=SET_DATE_TIME_SCHEMA,
+    )
+
     async def get_custom_path_service(call: ServiceCall) -> ServiceResponse:
         """Service to query any endpoint."""
         device_id = str(call.data.get("device_id"))
@@ -711,7 +827,7 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(
         DOMAIN,
         "get_custom_path_service",
-        get_custom_path_service,
+        _admin_only(hass, get_custom_path_service),
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -743,7 +859,7 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(
         DOMAIN,
         "get_recordings_service",
-        get_recordings_service,
+        _admin_only(hass, get_recordings_service),
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -758,22 +874,28 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         device_id = str(call.data.get("device_id"))
         coordinator = _find_coordinator_by_device_id(hass, device_id)
         if coordinator is None:
-            _LOGGER.error("Coordinator not found for device %s", device_id)
+            _LOGGER.error(
+                "Coordinator not found for device %s", _mask_serial(device_id)
+            )
             return {}
         if coordinator.device.get("deviceType") not in BACON_DEVICE_TYPES:
             _LOGGER.error("Device %s is not a Matter/bacon device", device_id)
             return {}
         data = coordinator.data
+        # The shadow comes off the same MQTT account as capture_raw_service and
+        # may carry the same pairing and network fields.
         return {
-            "reported": getattr(data, "reported", None),
-            "desired": getattr(data, "desired", None),
+            "reported": async_redact_data(
+                getattr(data, "reported", None), TO_REDACT_RAW
+            ),
+            "desired": async_redact_data(getattr(data, "desired", None), TO_REDACT_RAW),
         }
 
     # Register our service with Home Assistant.
     hass.services.async_register(
         DOMAIN,
         "get_shadow_service",
-        get_shadow_service,
+        _admin_only(hass, get_shadow_service),
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -815,17 +937,20 @@ async def async_setup(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         finally:
             client.remove_raw_listener(_record)
 
+        # The subscription covers the whole account, so the capture carries Matter
+        # pairing secrets, MAC/SSID and serials: redact as diagnostics does.
+        redacted = _redact_raw_snapshot(captured)
         return {
             "window_seconds": seconds,
-            "device_id": serial,
-            "topics_seen": sorted(captured),
-            "captured": captured,
+            "device_id": _mask_serial(serial) if serial else None,
+            "topics_seen": sorted(redacted),
+            "captured": redacted,
         }
 
     hass.services.async_register(
         DOMAIN,
         "capture_raw_service",
-        capture_raw_service,
+        _admin_only(hass, capture_raw_service),
         supports_response=SupportsResponse.ONLY,
     )
 
