@@ -98,6 +98,7 @@ from .const import (
     RECORDING_PATHS,
     RECORDINGS_POLL_INTERVAL,
     RECORDINGS_PREVIOUS_DAY_TRIES,
+    REJECTED_REFRESH_RETRY_INTERVAL,
     WDDW2_HEALTH_STATUS_PATH,
     WDDW2_RECORDINGS_POLL_INTERVAL,
     WDDW2_WATER_TODAY_KEY,
@@ -148,6 +149,16 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
         # Consecutive failed refreshes served from the last good data, see
         # _hold_last_data.
         self._held_failures = 0
+        # The token pair this instance last read from or wrote to the entry.
+        # The entry is the source of truth: a reauth, or another setup of this
+        # entry during a reload, may store newer tokens there at any time.
+        self._synced_tokens: tuple[str | None, str | None] = (
+            getattr(bhc, "token", None),
+            getattr(bhc, "refresh_token", None),
+        )
+        # The refresh token SingleKey last rejected, and when, so the dead token
+        # is not sent again on every poll (REJECTED_REFRESH_RETRY_INTERVAL).
+        self._rejected_refresh: tuple[str, datetime] | None = None
 
         self.device_info = DeviceInfo(
             serial_number=self.unique_id,
@@ -206,31 +217,81 @@ class BoschComModuleCoordinatorBase(DataUpdateCoordinator[T]):
         """
         if not self.auth_provider:
             return
+        self._async_adopt_stored_tokens()
+        rejected = self._rejected_refresh
+        if (
+            rejected is not None
+            and rejected[0] == self.bhc.refresh_token
+            and dt_util.utcnow() - rejected[1] < REJECTED_REFRESH_RETRY_INTERVAL
+        ):
+            raise UpdateFailed("Re-authentication required")
         try:
             await self.bhc.get_token()
         except AuthFailedError:
+            if self.bhc.refresh_token:
+                self._rejected_refresh = (self.bhc.refresh_token, dt_util.utcnow())
             self.entry.async_start_reauth(self.hass)
             raise UpdateFailed("Re-authentication required") from None
         except (ApiError, NotRespondingError, RetryError, TimeoutError) as error:
-            # The token endpoint was unreachable or answered with a server error
-            # (e.g. a DNS timeout or a 5xx), so the refresh token was not spent. A normal failed refresh, retried on
-            # the next poll -- not an "unexpected error" with a traceback.
+            # The token endpoint was unreachable or answered with a server
+            # error, a normal failed refresh retried on the next poll -- not an
+            # "unexpected error" with a traceback. A timeout does not prove the
+            # refresh token unspent: SingleKey may have rotated it before the
+            # answer was lost.
             raise UpdateFailed(f"Token refresh failed: {error}") from error
+        self._rejected_refresh = None
         self._async_persist_tokens()
+
+    def _stored_tokens(self) -> tuple[str | None, str | None]:
+        """The token pair currently stored on the config entry."""
+        return self.entry.data.get(CONF_TOKEN), self.entry.data.get(CONF_REFRESH)
+
+    @callback
+    def _async_adopt_stored_tokens(self) -> None:
+        """Take over tokens another writer stored since this instance last synced.
+
+        Refreshing with the pair in memory after a reauth or a reload stored a
+        newer one would spend a token the entry no longer holds, or one another
+        instance already spent, and SingleKey would reject it.
+        """
+        stored = self._stored_tokens()
+        if stored == self._synced_tokens or not stored[1]:
+            return
+        _LOGGER.debug(
+            "Device_Id: %s, adopting the tokens stored on the entry by another "
+            "writer (reauth or another setup)",
+            self.unique_id,
+        )
+        self.bhc.token, self.bhc.refresh_token = stored
+        self._synced_tokens = stored
 
     @callback
     def _async_persist_tokens(self) -> None:
-        """Store a rotated token pair on the entry."""
-        if self.bhc.token != self.entry.data.get(
-            CONF_TOKEN
-        ) or self.bhc.refresh_token != self.entry.data.get(CONF_REFRESH):
-            new_data = dict(self.entry.data)
-            new_data[CONF_TOKEN] = self.bhc.token
-            new_data[CONF_REFRESH] = self.bhc.refresh_token
-            self.hass.config_entries.async_update_entry(self.entry, data=new_data)
-            _LOGGER.debug(
-                "Device_Id: %s, persisted refreshed auth tokens", self.unique_id
+        """Save a rotation this instance made, never older tokens over newer ones.
+
+        Only tokens that changed in memory since the last sync are written, and
+        only while the entry still holds that synced pair. If the entry changed
+        too, someone else stored a newer pair (a reauth, which reloads the entry
+        next, or another setup); that pair wins and is adopted.
+        """
+        if not self.auth_provider:
+            return
+        current = (self.bhc.token, self.bhc.refresh_token)
+        if current == self._synced_tokens:
+            return
+        if self._stored_tokens() != self._synced_tokens:
+            _LOGGER.warning(
+                "Device_Id: %s, not saving the tokens this instance rotated: the "
+                "entry received newer ones meanwhile",
+                self.unique_id,
             )
+            self._async_adopt_stored_tokens()
+            return
+        new_data = dict(self.entry.data)
+        new_data[CONF_TOKEN], new_data[CONF_REFRESH] = current
+        self.hass.config_entries.async_update_entry(self.entry, data=new_data)
+        self._synced_tokens = current
+        _LOGGER.debug("Device_Id: %s, persisted refreshed auth tokens", self.unique_id)
 
     @abstractmethod
     def _build_device_data(self, data: T) -> T:
@@ -1016,6 +1077,7 @@ class BoschComModuleCoordinatorK40(
             )
         if provider is None:
             return False
+        provider._async_adopt_stored_tokens()
         try:
             await provider.bhc.get_token(force=True)
         except AuthFailedError:
