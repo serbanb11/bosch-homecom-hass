@@ -1625,3 +1625,119 @@ async def test_bacon_versions_from_topics_info_update_the_device(hass, entry, fi
     coordinator._sync_versions({"gateway": {}})
     assert coordinator.device_info["sw_version"] == "1.0.1"
     await coordinator.async_shutdown()
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure"])
+async def test_reauth_during_poll_is_not_overwritten_by_old_tokens(
+    hass, entry, bhc, device, firmware, outcome
+):
+    """A reauth storing new tokens mid-poll wins over the poll's old pair."""
+    entry.add_to_hass(hass)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    bhc.get_token = AsyncMock()
+
+    async def update(_device_id):
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_TOKEN: "reauth_token", CONF_REFRESH: "reauth"},
+        )
+        if outcome == "failure":
+            raise ApiError("request failed")
+        return _make_rac_data(device, firmware)
+
+    bhc.async_update = AsyncMock(side_effect=update)
+    if outcome == "success":
+        await coordinator._async_update_data()
+    else:
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+    assert entry.data[CONF_TOKEN] == "reauth_token"
+    assert entry.data[CONF_REFRESH] == "reauth"
+
+
+async def test_refresh_uses_tokens_another_writer_stored(
+    hass, entry, bhc, device, firmware
+):
+    """After a reload or reauth stored a newer pair, that pair is refreshed."""
+    entry.add_to_hass(hass)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_TOKEN: "newer_token", CONF_REFRESH: "newer"}
+    )
+    used = []
+
+    async def refresh():
+        used.append(bhc.refresh_token)
+        bhc.token = "rotated_token"
+        bhc.refresh_token = "rotated_refresh"
+
+    bhc.get_token = AsyncMock(side_effect=refresh)
+    bhc.async_update = AsyncMock(return_value=_make_rac_data(device, firmware))
+
+    await coordinator._async_update_data()
+
+    assert used == ["newer"]
+    assert entry.data[CONF_REFRESH] == "rotated_refresh"
+
+
+async def test_stored_tokens_win_when_both_sides_rotated(
+    hass, entry, bhc, device, firmware, caplog
+):
+    """A rotation racing a reauth keeps the reauth's tokens and says so."""
+    entry.add_to_hass(hass)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+
+    async def refresh():
+        # The reauth stores its pair while this refresh is still in flight.
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_TOKEN: "reauth_token", CONF_REFRESH: "reauth"},
+        )
+        bhc.token = "late_token"
+        bhc.refresh_token = "late_refresh"
+
+    bhc.get_token = AsyncMock(side_effect=refresh)
+    bhc.async_update = AsyncMock(return_value=_make_rac_data(device, firmware))
+    await coordinator._async_update_data()
+
+    assert entry.data[CONF_REFRESH] == "reauth"
+    assert bhc.refresh_token == "reauth"
+    assert "not saving the tokens this instance rotated" in caplog.text
+
+
+async def test_rejected_refresh_token_is_not_resent_every_poll(
+    hass, entry, bhc, device, firmware, freezer
+):
+    """A dead refresh token waits an hour; a reauth's new one is used at once."""
+    entry.add_to_hass(hass)
+    bhc.token = "mock_token"
+    bhc.refresh_token = "mock_refresh"
+    coordinator = BoschComModuleCoordinatorRac(hass, bhc, device, firmware, entry, True)
+    entry.async_start_reauth = Mock()
+    bhc.get_token = AsyncMock(side_effect=AuthFailedError("Failed to refresh"))
+
+    for _ in range(5):
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+    assert bhc.get_token.await_count == 1
+
+    freezer.tick(timedelta(minutes=61))
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    assert bhc.get_token.await_count == 2
+
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_TOKEN: "reauth_token", CONF_REFRESH: "reauth"}
+    )
+    bhc.get_token = AsyncMock()
+    bhc.async_update = AsyncMock(return_value=_make_rac_data(device, firmware))
+    await coordinator._async_update_data()
+    bhc.get_token.assert_awaited_once()
+    assert bhc.refresh_token == "reauth"

@@ -110,6 +110,7 @@ def entry():
         data={
             CONF_USERNAME: "user",
             CONF_TOKEN: "cloud-token",
+            CONF_REFRESH: "cloud-refresh",
             CONF_DEVICES: {f"{GATEWAY}_k40": True, "999_rac": True},
         },
     )

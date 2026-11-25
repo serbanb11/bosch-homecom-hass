@@ -227,6 +227,11 @@ MAX_CLOUD_FAILURES_HELD: Final = 2
 # is a cloud outage, not a login problem. The gateway readings stay live
 # throughout.
 CLOUD_AUTH_FAILURES_BEFORE_REFRESH: Final = 3
+# A refresh token SingleKey rejected is not sent again on every poll: each
+# attempt is another doomed request (about 60 an hour at the default interval).
+# It is retried this often in case the rejection was transient; new tokens from
+# a reauth or another setup are used at once.
+REJECTED_REFRESH_RETRY_INTERVAL: Final = timedelta(hours=1)
 
 
 # --- Coordinator: extra cloud endpoints and recordings ---------------------
